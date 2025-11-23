@@ -5,7 +5,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
-import ThemeProviderWrapper from "./components/theme-provider/theme-provider";
+import { ThemeProvider } from "./components/theme-provider/theme-provider";
 
 export function Layout({
   children,
@@ -25,9 +25,9 @@ export function Layout({
         <Links />
       </head>
       <body>
-        <ThemeProviderWrapper>
+        <ThemeProvider>
             {children}
-        </ThemeProviderWrapper>
+        </ThemeProvider>
         <ScrollRestoration />
         <Scripts />
       </body>

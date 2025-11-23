@@ -1,9 +1,10 @@
-import { ThemeProvider } from "@emotion/react";
+import { ThemeProvider } from "@mui/material/styles";
 import { CssBaseline } from "@mui/material";
 import { createTheme } from "@styles/theme/create-theme";
 
-export default function ThemeProviderWrapper({ children }: { children: React.ReactNode }) {
+function ThemeProviderWrapper({ children }: { children: React.ReactNode }) {
     const theme = createTheme();
+    console.log("Applied theme:", theme);
   return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
@@ -11,3 +12,5 @@ export default function ThemeProviderWrapper({ children }: { children: React.Rea
         </ThemeProvider>
     );
 }
+
+export { ThemeProviderWrapper as ThemeProvider };

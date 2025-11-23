@@ -1,5 +1,5 @@
 import { createTheme } from "@mui/material";
-
+import { colorSchemes } from "./color-schemes";
 
 function customCreateTheme() {
     // Custom theme creation logic here
@@ -10,6 +10,7 @@ function customCreateTheme() {
             },
         direction: "ltr",
         shape: { borderRadius: 8 },
+        colorSchemes,
 });
     return theme;
 }

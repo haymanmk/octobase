@@ -1,12 +1,13 @@
+import { Box } from '@mui/material';
 import * as React from 'react';
 
 
 function Whiteboard({}): React.ReactElement {
   return (
-    <div>
-      <h2>Whiteboard</h2>
-      <p>This is the whiteboard area where users can draw and collaborate.</p>
-    </div>
+    <Box sx={{ width: '100%', height: '100%', padding: 2, display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
+      {/* Whiteboard content goes here */}
+      
+    </Box>
   );
 }
 
