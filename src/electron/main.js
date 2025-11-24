@@ -47,7 +47,7 @@ const createWindow = () => {
 
 const createSplitView = () => {
   // Parent window
-  const parentWin = new BaseWindow({
+  const parentWin = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
@@ -58,11 +58,13 @@ const createSplitView = () => {
     }
   })
 
-  // Create two WebContentsViews
+  // Create WebContentsViews
+  const searchBarView = new WebContentsView()
   const leftView = new WebContentsView()
   const rightView = new WebContentsView()
 
   // Add views to the parent window
+  parentWin.contentView.addChildView(searchBarView)
   parentWin.contentView.addChildView(leftView)
   parentWin.contentView.addChildView(rightView)
 
