@@ -1,5 +1,8 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-contextBridge.exposeInMainWorld('myAPI', {
+contextBridge.exposeInMainWorld('electronAPI', {
   // Expose APIs here if needed
+  sendTextSelection: (data) => {
+    ipcRenderer.send('text-selection', data);
+  }
 });

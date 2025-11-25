@@ -6,7 +6,7 @@
   "description": "A note-taking App built for your brain",
   "main": "src/electron/main.js",
   "scripts": {
-    "electron-dev": "tsc -b && vite build && electron .",
+    "electron-dev": "tsc -b && vite build && electron --trace-warnings .",
     "dev": "react-router dev",
     "vite-dev": "vite",
     "build": "tsc -b && vite build",
