@@ -80,7 +80,7 @@ const createSplitView = () => {
   parentWin.on('resize', updateViewBounds);
 
   // Open devtools for debugging
-  // leftView.webContents.openDevTools();
+  leftView.webContents.openDevTools();
   rightView.webContents.openDevTools();
 };
 
