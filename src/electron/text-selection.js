@@ -15,6 +15,12 @@ export function getSelectedText(view) {
         console.log('Selected Text:', selectedText);
         console.log('Bounding Rect:', rect);
 
+        // Highlight selected text (optional)
+        // TODO: Fails if selection spans non-text nodes
+        const highlightSpan = document.createElement('span');
+        highlightSpan.style.backgroundColor = 'yellow';
+        range.surroundContents(highlightSpan);
+
         // Send selected data to main process
         if (window.electronAPI) {
           window.electronAPI.sendTextSelection({
