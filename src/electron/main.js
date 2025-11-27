@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getSelectedText } from './text-selection.js';
 
@@ -43,7 +44,20 @@ const createSplitView = () => {
     // Here you can implement logic to show a popup or context menu based on selection
   });
   // Inject text selection monitoring script
-  rightView.webContents.on('did-finish-load', () => getSelectedText(rightView));
+  rightView.webContents.on('did-finish-load', () => {
+    // Inject CSS
+    // rightView.webContents.insertCSS(
+    //   fs.readFileSync(path.join(__dirname, '../../dist/inject/inject.css'), 'utf8')
+    // ).catch(err => console.error('CSS injection failed:', err));
+
+    // Inject JavaScript bundle
+    rightView.webContents.executeJavaScript(
+      fs.readFileSync(path.join(__dirname, '../../dist/inject/highlighter.js'), 'utf8')
+    ).catch(err => console.error('JS injection failed:', err));
+    
+    // Also inject text selection monitoring
+    getSelectedText(rightView);
+  });
 
   // Function to update view bounds based on window size
   const updateViewBounds = () => {
