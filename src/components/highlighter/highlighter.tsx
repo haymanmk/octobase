@@ -51,8 +51,33 @@ function InjectableWidget() {
   );
 }
 
+const handleSelection = (text: string, rect: DOMRect) => {
+  console.log('Selected text:', text);
+  console.log('Selection position:', rect);
+  // You can add more logic here to show a context menu or widget near the selection
+}
+
+// Monitor text selection
+const monitorTextSelection = () => {
+  // Monitor text selection
+  document.addEventListener('mouseup', () => {
+    const selection = window.getSelection();
+    const selectedText = selection ? selection.toString() : '';
+
+    if (selectedText.length > 0 && selection) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      // Handle the selected text and its position
+      handleSelection(selectedText, rect);
+    }
+  });
+};
+
 // Auto-inject when loaded
 (function() {
+  // Start monitoring text selection
+  monitorTextSelection();
   // Create container for our widget
   const container = document.createElement('div');
   container.id = 'octobase-widget-root';

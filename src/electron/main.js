@@ -44,16 +44,18 @@ const createSplitView = () => {
     // Here you can implement logic to show a popup or context menu based on selection
   });
   // Inject text selection monitoring script
+  // Read inject script
+  // Inject CSS
+  const highlighterScript = fs.readFileSync(path.join(__dirname, '../../dist/highlighter/highlighter.iife.js'), 'utf8');
+  console.log('Highlighter Script Loaded:');
+  console.log(highlighterScript);
   rightView.webContents.on('did-finish-load', () => {
-    // Inject CSS
     // rightView.webContents.insertCSS(
     //   fs.readFileSync(path.join(__dirname, '../../dist/inject/inject.css'), 'utf8')
     // ).catch(err => console.error('CSS injection failed:', err));
 
     // Inject JavaScript bundle
-    rightView.webContents.executeJavaScript(
-      fs.readFileSync(path.join(__dirname, '../../dist/inject/highlighter.js'), 'utf8')
-    ).catch(err => console.error('JS injection failed:', err));
+    rightView.webContents.executeJavaScript(highlighterScript).catch(err => console.error('JS injection failed:', err));
     
     // Also inject text selection monitoring
     getSelectedText(rightView);
