@@ -1,8 +1,11 @@
+/**
+ * Main process code (Entry point) for Electron app
+ */
+
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getSelectedText } from './text-selection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,20 +48,12 @@ const createSplitView = () => {
   });
   // Inject text selection monitoring script
   // Read inject script
-  // Inject CSS
   const highlighterScript = fs.readFileSync(path.join(__dirname, '../../dist/highlighter/highlighter.iife.js'), 'utf8');
-  console.log('Highlighter Script Loaded:');
-  console.log(highlighterScript);
+  // console.log('Highlighter Script Loaded:');
+  // console.log(highlighterScript);
   rightView.webContents.on('did-finish-load', () => {
-    // rightView.webContents.insertCSS(
-    //   fs.readFileSync(path.join(__dirname, '../../dist/inject/inject.css'), 'utf8')
-    // ).catch(err => console.error('CSS injection failed:', err));
-
     // Inject JavaScript bundle
     rightView.webContents.executeJavaScript(highlighterScript).catch(err => console.error('JS injection failed:', err));
-    
-    // Also inject text selection monitoring
-    getSelectedText(rightView);
   });
 
   // Function to update view bounds based on window size

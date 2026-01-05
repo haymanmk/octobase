@@ -22,7 +22,7 @@ export default defineConfig({
   build: {
     outDir: 'dist/highlighter',
     lib: {
-      entry: path.resolve(__dirname, 'src/components/highlighter/highlighter.tsx'),
+      entry: path.resolve(__dirname, 'src/components/highlighter/highlighter.ts'),
       name: 'Highlighter',
       formats: ['iife'], // Immediately Invoked Function Expression
       fileName: 'highlighter',
