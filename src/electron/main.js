@@ -28,24 +28,34 @@ const createSplitView = () => {
   // Create WebContentsViews
   const leftView = new WebContentsView();
   const searchBarView = new WebContentsView();
-  const rightView = new WebContentsView();
+  const rightView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    }
+  });
+  const overlayView = new WebContentsView({
+    webPreferences: {
+      transparent: true,
+      frame: false,
+    }
+  }); // For drag-and-drop overlays, if needed
+  overlayView.setBackgroundColor('#00000000'); // Transparent background
 
   // Add views to the parent window
   parentWin.contentView.addChildView(leftView);
   parentWin.contentView.addChildView(searchBarView);
   parentWin.contentView.addChildView(rightView);
+  // parentWin.contentView.addChildView(overlayView);
 
   // Load content into each view
   leftView.webContents.loadFile(path.join(__dirname, '../../dist/index.html'));
   searchBarView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/searchbar/searchbar.html'));
   rightView.webContents.loadURL(defaultURL);
+  overlayView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/overlay-canva/overlay-canva.html'));
 
-  // Monitor text selection in the right view
-  ipcMain.on('text-selection', (event, data) => {
-    console.log('Selected Text:', data.text);
-    console.log('Bounding Rect:', data.rect);
-    // Here you can implement logic to show a popup or context menu based on selection
-  });
+
   // Inject text selection monitoring script
   // Read inject script
   const highlighterScript = fs.readFileSync(path.join(__dirname, '../../dist/highlighter/highlighter.iife.js'), 'utf8');
@@ -82,6 +92,12 @@ const createSplitView = () => {
       width: Math.floor(width / 2),
       height: height - searchBarHeight
     });
+    overlayView.setBounds({ 
+      x: 0, 
+      y: 0, 
+      width: width, 
+      height: height 
+    });
   };
 
   // Initial bounds
@@ -93,11 +109,26 @@ const createSplitView = () => {
   // Open devtools for debugging
   leftView.webContents.openDevTools();
   rightView.webContents.openDevTools();
+  // overlayView.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {
   // createWindow()
   createSplitView();
+
+  // Monitor text selection in the right view
+  ipcMain.on('text-selection', (event, data) => {
+    console.log('Selected Text:', data.text);
+    console.log('Bounding Rect:', data.rect);
+    // Here you can implement logic to show a popup or context menu based on selection
+  });
+
+  ipcMain.on('drag-drop-text-selection', (event, data) => {
+    console.log('Drag-Drop Selected Text:', data);
+    // Here you can implement logic to handle drag-and-drop text selection
+    // add overlay to parent window
+    parentWin.contentView.addChildView(overlayView);
+  });
 });
 
 app.on('window-all-closed', () => {

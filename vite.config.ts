@@ -18,6 +18,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         searchbar: path.resolve(__dirname, 'src/components/searchbar/searchbar.html'),
+        overlayCanva: path.resolve(__dirname, 'src/components/overlay-canva/overlay-canva.html'),
       },
     },
   },

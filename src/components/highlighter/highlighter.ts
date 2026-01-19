@@ -11,14 +11,10 @@ import rangy from 'rangy';
 // Declare the electron API
 declare global {
   interface Window {
-    // rangy: {
-    //   createHighlighter: (
-    //         doc?: Document | Window | HTMLIFrameElement,
-    //         type?: "textContent" | "textRange",
-    //   ): RangyHighlighter;
-    // };
     electronAPI?: {
       sendTextSelection: (data: { text: string; action: string }) => void;
+      sendDragText: (data: { text: string; }) => void;
+      sendDragPosition: (data: { x: number; y: number }) => void;
     };
   }
 }
@@ -100,6 +96,54 @@ export class HighlighterWidget extends LitElement {
     // Wrap the selected text with highlighter component
     const highlighter =rangy.createHighlighter();
     console.log(highlighter);
+    const applier = rangy.createClassApplier('highlighted-text', {
+      onElementCreate: (el) => {
+        el.addEventListener('mousedown', (event) => {
+          const downEvent = event as MouseEvent;
+          if (downEvent.button !== 0) return; // Only left click
+
+          const startX = downEvent.clientX;
+          const startY = downEvent.clientY;
+          let isDragging = false;
+          const dragThreshold = 5; // pixels to move before considering it a drag
+
+          const onMouseMove = (moveEvent: MouseEvent) => {
+            const deltaX = Math.abs(moveEvent.clientX - startX);
+            const deltaY = Math.abs(moveEvent.clientY - startY);
+
+            if (!isDragging && (deltaX > dragThreshold || deltaY > dragThreshold)) {
+              isDragging = true;
+              console.log('Drag started for text:', el.textContent);
+              // Trigger your IPC to show the proxy in the overlay canva here
+              console.log("window.electronAPI", window.electronAPI);
+              window.electronAPI?.sendDragText({ text: el.textContent || '' });
+            }
+
+            if (isDragging) {
+              // Periodically update coordinates via IPC
+              // window.electronAPI.sendDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+            }
+          };
+
+          const onMouseUp = () => {
+            if (isDragging) {
+              console.log('Drag finished');
+              // Trigger drop logic here
+            }
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+          };
+
+          window.addEventListener('mousemove', onMouseMove);
+          window.addEventListener('mouseup', onMouseUp);
+        });
+      }
+    });
+    highlighter.addClassApplier(applier);
+    highlighter.highlightSelection('highlighted-text');
+
+    // Clear selection after highlighting
+    rangy.getSelection().removeAllRanges();
   }
 
   render() {
@@ -112,19 +156,10 @@ export class HighlighterWidget extends LitElement {
   }
 }
 
-// const createHighlighter = () => {
-//   const selection = window.getSelection();
-//   if (selection && selection.rangeCount > 0) {
-//     const range = selection.getRangeAt(0);
-//     const highlighter = new HighlighterComponent();
-//     range.surroundContents(highlighter);
-//     // Clear selection after highlighting
-//     selection.removeAllRanges();
-//   }
-// }
-
 // Function to handle text selection
-const handleTextSelection = async () => {
+const handleTextSelection = async (event: MouseEvent) => {
+  if (event.button !== 0 && event.type !== 'mousedown') return;
+
   // Delay to ensure selection is registered
   await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -141,8 +176,8 @@ const handleTextSelection = async () => {
     highlighterWidget.show();
 
     // Handle the selected text and its position
-    console.log('Selected Text:', selectedText);
-    console.log('Selection Position:', rect);
+    // console.log('Selected Text:', selectedText);
+    // console.log('Selection Position:', rect);
   }
   else {
     // Hide the widget if no text is selected
@@ -160,10 +195,14 @@ const monitorTextSelection = () => {
 const addStylesToBody = () => {
   const style = document.createElement('style');
   style.innerHTML = `
-    highlighter-component {
+    .highlighted-text {
       background-color: yellow;
       color: black;
       border-radius: 5px;
+      cursor: pointer;
+    }
+    .highlighted-text:hover {
+      background-color: orange;
     }
   `;
   document.body.appendChild(style);

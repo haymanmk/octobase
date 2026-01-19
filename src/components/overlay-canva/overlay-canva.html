@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Overlay Canva</title>
+    <style>
+      html,
+      body,
+      #overlay-canva-app {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: transparent;
+        overflow: hidden;
+        z-index: 998; /* Below other interactive elements */
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay-canva-app"></div>
+    <script type="module" src="overlay-canva.ts"></script>
+  </body>
+</html>
