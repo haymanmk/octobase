@@ -13,8 +13,9 @@ declare global {
   interface Window {
     electronAPI?: {
       sendTextSelection: (data: { text: string; action: string }) => void;
-      sendDragText: (data: { text: string; }) => void;
+      sendDragText: (data: { text: string; sourceUrl: string; cursorX: number; cursorY: number; highlightId: string }) => void;
       sendDragPosition: (data: { x: number; y: number }) => void;
+      sendDragEnd: (data: { x: number; y: number }) => void;
     };
   }
 }
@@ -98,44 +99,83 @@ export class HighlighterWidget extends LitElement {
     console.log(highlighter);
     const applier = rangy.createClassApplier('highlighted-text', {
       onElementCreate: (el) => {
-        el.addEventListener('mousedown', (event) => {
-          const downEvent = event as MouseEvent;
+        const htmlEl = el as HTMLElement;
+        htmlEl.addEventListener('pointerdown', (downEvent) => {
           if (downEvent.button !== 0) return; // Only left click
 
+          const holdDuration = 250; // ms to hold before drag intent
+          const moveCancel = 5; // px movement cancels the hold
           const startX = downEvent.clientX;
           const startY = downEvent.clientY;
-          let isDragging = false;
-          const dragThreshold = 5; // pixels to move before considering it a drag
 
-          const onMouseMove = (moveEvent: MouseEvent) => {
+          // Capture pointer so move/up events don't leak to window listeners
+          htmlEl.setPointerCapture(downEvent.pointerId);
+          isDraggingHighlight = true;
+
+          const cleanup = () => {
+            clearTimeout(holdTimer);
+            htmlEl.removeEventListener('pointermove', onPointerMove);
+            htmlEl.removeEventListener('pointerup', onPointerUp);
+            try { htmlEl.releasePointerCapture(downEvent.pointerId); } catch { /* already released */ }
+            console.log('Cleanup completed');
+          };
+
+          const triggerDrag = () => {
+            console.log('Hold-drag started for text:', htmlEl.textContent);
+            if (!htmlEl.textContent || htmlEl.textContent.length === 0) { cleanup(); return; }
+            const highlightId = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            window.electronAPI?.sendDragText({ text: htmlEl.textContent || '', sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId });
+            window.postMessage({
+              type: 'drag-drop-text-selection',
+              data: { text: htmlEl.textContent || '', sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId }
+            }, '*');
+            // Release capture so the overlay can track the pointer
+            cleanup();
+
+            // Force grabbing cursor on entire page during drag
+            const cursorStyle = document.createElement('style');
+            cursorStyle.id = 'octobase-drag-cursor';
+            cursorStyle.textContent = '* { cursor: grabbing !important; }';
+            document.head.appendChild(cursorStyle);
+
+            // Continue tracking mouse in this view and relay via IPC
+            const onDragMove = (e: MouseEvent) => {
+              window.electronAPI?.sendDragPosition({ x: e.clientX, y: e.clientY });
+            };
+            const onDragEnd = (e: MouseEvent) => {
+              cursorStyle.remove();
+              window.electronAPI?.sendDragEnd({ x: e.clientX, y: e.clientY });
+              window.removeEventListener('mousemove', onDragMove);
+              window.removeEventListener('mouseup', onDragEnd);
+            };
+            window.addEventListener('mousemove', onDragMove);
+            window.addEventListener('mouseup', onDragEnd);
+
+            // Reset flag after a tick to let any queued events pass
+            requestAnimationFrame(() => { isDraggingHighlight = false; });
+          };
+
+          // Start hold timer — if it fires, user intends to drag
+          const holdTimer = setTimeout(triggerDrag, holdDuration);
+
+          // If user moves too far during the hold, cancel (they're selecting text)
+          const onPointerMove = (moveEvent: PointerEvent) => {
             const deltaX = Math.abs(moveEvent.clientX - startX);
             const deltaY = Math.abs(moveEvent.clientY - startY);
-
-            if (!isDragging && (deltaX > dragThreshold || deltaY > dragThreshold)) {
-              isDragging = true;
-              console.log('Drag started for text:', el.textContent);
-              // Trigger your IPC to show the proxy in the overlay canva here
-              console.log("window.electronAPI", window.electronAPI);
-              window.electronAPI?.sendDragText({ text: el.textContent || '' });
-            }
-
-            if (isDragging) {
-              // Periodically update coordinates via IPC
-              // window.electronAPI.sendDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+            if (deltaX > moveCancel || deltaY > moveCancel) {
+              cleanup();
+              isDraggingHighlight = false;
             }
           };
 
-          const onMouseUp = () => {
-            if (isDragging) {
-              console.log('Drag finished');
-              // Trigger drop logic here
-            }
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
+          // If user lifts before timer, it's a click — cancel
+          const onPointerUp = () => {
+            cleanup();
+            isDraggingHighlight = false;
           };
 
-          window.addEventListener('mousemove', onMouseMove);
-          window.addEventListener('mouseup', onMouseUp);
+          htmlEl.addEventListener('pointermove', onPointerMove);
+          htmlEl.addEventListener('pointerup', onPointerUp);
         });
       }
     });
@@ -156,8 +196,12 @@ export class HighlighterWidget extends LitElement {
   }
 }
 
+// Module-level flag to prevent handleTextSelection from firing during drag
+let isDraggingHighlight = false;
+
 // Function to handle text selection
 const handleTextSelection = async (event: MouseEvent) => {
+  if (isDraggingHighlight) return;
   if (event.button !== 0 && event.type !== 'mousedown') return;
 
   // Delay to ensure selection is registered
@@ -200,6 +244,8 @@ const addStylesToBody = () => {
       color: black;
       border-radius: 5px;
       cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .highlighted-text:hover {
       background-color: orange;

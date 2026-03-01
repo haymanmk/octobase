@@ -11,10 +11,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const defaultURL = "https://www.electronjs.org/docs/latest/api/web-contents#contentsexecutejavascriptcode-usergesture";
+let parentWin = null;
+let overlayView = null;
+let leftView = null;
+let rightView = null;
 
 const createSplitView = () => {
   // Parent window
-  const parentWin = new BrowserWindow({
+  parentWin = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
@@ -26,19 +30,28 @@ const createSplitView = () => {
   });
 
   // Create WebContentsViews
-  const leftView = new WebContentsView();
-  const searchBarView = new WebContentsView();
-  const rightView = new WebContentsView({
+  leftView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     }
   });
-  const overlayView = new WebContentsView({
+  const searchBarView = new WebContentsView();
+  rightView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-highlighter.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    }
+  });
+  overlayView = new WebContentsView({
     webPreferences: {
       transparent: true,
       frame: false,
+      preload: path.join(__dirname, 'preload-overlay.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
     }
   }); // For drag-and-drop overlays, if needed
   overlayView.setBackgroundColor('#00000000'); // Transparent background
@@ -54,7 +67,6 @@ const createSplitView = () => {
   searchBarView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/searchbar/searchbar.html'));
   rightView.webContents.loadURL(defaultURL);
   overlayView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/overlay-canva/overlay-canva.html'));
-
 
   // Inject text selection monitoring script
   // Read inject script
@@ -109,7 +121,7 @@ const createSplitView = () => {
   // Open devtools for debugging
   leftView.webContents.openDevTools();
   rightView.webContents.openDevTools();
-  // overlayView.webContents.openDevTools();
+  overlayView.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {
@@ -125,9 +137,65 @@ app.whenReady().then(() => {
 
   ipcMain.on('drag-drop-text-selection', (event, data) => {
     console.log('Drag-Drop Selected Text:', data);
-    // Here you can implement logic to handle drag-and-drop text selection
+    if (data === '' || !data) return;
     // add overlay to parent window
     parentWin.contentView.addChildView(overlayView);
+    // Translate cursor position from right-view-local to window-global coordinates
+    const rightBounds = rightView.getBounds();
+    const adjustedData = {
+      ...data,
+      cursorX: (data.cursorX || 0) + rightBounds.x,
+      cursorY: (data.cursorY || 0) + rightBounds.y,
+    };
+    // Send text data to overlay view
+    overlayView.webContents.send('drag-drop-text-selection', adjustedData);
+  });
+
+  // Relay mouse position from right view to overlay (translated to window coords)
+  ipcMain.on('drag-drop-text-position', (event, data) => {
+    const rightBounds = rightView.getBounds();
+    overlayView.webContents.send('drag-position-update', {
+      x: (data.x || 0) + rightBounds.x,
+      y: (data.y || 0) + rightBounds.y,
+    });
+  });
+
+  // Right view signals drag ended — tell overlay to finalize
+  ipcMain.on('drag-drop-text-end', (event, data) => {
+    overlayView.webContents.send('drag-end');
+  });
+
+  ipcMain.on('highlight-dropped', (event, data) => {
+    console.log('Highlight Dropped:', data);
+    // Remove overlay from parent window
+    try {
+      parentWin.contentView.removeChildView(overlayView);
+    } catch (e) {
+      console.warn('Failed to remove overlay view:', e);
+    }
+
+    if (!data || !leftView) return;
+
+    // Get leftView bounds to check if drop is within the whiteboard
+    const leftBounds = leftView.getBounds();
+    const dropX = data.x;
+    const dropY = data.y;
+
+    if (dropX >= leftBounds.x && dropX <= leftBounds.x + leftBounds.width &&
+        dropY >= leftBounds.y && dropY <= leftBounds.y + leftBounds.height) {
+      // Translate to left view's local coordinates
+      const adjustedData = {
+        text: data.text,
+        sourceUrl: data.sourceUrl,
+        highlightId: data.highlightId,
+        x: dropX - leftBounds.x,
+        y: dropY - leftBounds.y,
+      };
+      console.log('Forwarding to whiteboard:', adjustedData);
+      leftView.webContents.send('highlight-dropped', adjustedData);
+    } else {
+      console.log('Drop outside whiteboard, discarding.');
+    }
   });
 });
 

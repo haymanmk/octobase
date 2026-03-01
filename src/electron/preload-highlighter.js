@@ -1,6 +1,8 @@
+// import { contextBridge, ipcRenderer } from 'electron';
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Expose APIs here if needed
   sendTextSelection: (data) => {
     ipcRenderer.send('text-selection', data);
   },
@@ -11,13 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendDragPosition: (data) => {
     ipcRenderer.send('drag-drop-text-position', data);
   },
-  onHighlightDropped: (callback) => {
-    ipcRenderer.on('highlight-dropped', (_event, data) => {
-      callback(data);
-    });
-  },
-  removeHighlightDroppedListener: () => {
-    ipcRenderer.removeAllListeners('highlight-dropped');
+  sendDragEnd: (data) => {
+    ipcRenderer.send('drag-drop-text-end', data);
   },
 });
 
