@@ -16,6 +16,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Decorators */
+    "experimentalDecorators": false,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -33,7 +36,8 @@
       "@assets/*": ["src/assets/*"],
       "@utils/*": ["src/utils/*"],
       "@styles/*": ["src/styles/*"],
-      "@theme/*": ["src/styles/theme/*"]
+      "@theme/*": ["src/styles/theme/*"],
+      "@dist/*": ["dist/*"]
     }
   },
   "include": ["src"]
