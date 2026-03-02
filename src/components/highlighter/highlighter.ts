@@ -98,7 +98,7 @@ export class HighlighterWidget extends LitElement {
     const highlighter =rangy.createHighlighter();
     console.log(highlighter);
     const applier = rangy.createClassApplier('highlighted-text', {
-      onElementCreate: (el) => {
+      onElementCreate: (el: HTMLElement) => {
         const htmlEl = el as HTMLElement;
         htmlEl.addEventListener('pointerdown', (downEvent) => {
           if (downEvent.button !== 0) return; // Only left click
