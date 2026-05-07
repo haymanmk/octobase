@@ -110,8 +110,10 @@ export class DragTextProxy extends LitElement {
       const overlayCanva = document.querySelector('#overlay-canva-app');
       
       if (overlayCanva) {
-        // Show grabbing cursor on the overlay during drag
-        (overlayCanva as HTMLElement).style.cursor = 'grabbing';
+        // Make overlay non-transparent so it becomes the hit-test target for cursor
+        const el = overlayCanva as HTMLElement;
+        el.style.backgroundColor = 'rgba(0, 0, 0, 0.01)';
+        el.style.cursor = 'grabbing';
 
         const dragProxy = document.createElement('drag-text-proxy') as DragTextProxy;
         console.log('Created drag-text-proxy:', dragProxy);
@@ -142,6 +144,7 @@ export class DragTextProxy extends LitElement {
             y: lastY,
             highlightId: data.highlightId,
           });
+          (overlayCanva as HTMLElement).style.backgroundColor = 'transparent';
           (overlayCanva as HTMLElement).style.cursor = '';
           if (dragProxy.parentNode === overlayCanva) {
             overlayCanva.removeChild(dragProxy);

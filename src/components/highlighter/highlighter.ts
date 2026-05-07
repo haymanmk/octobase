@@ -98,7 +98,7 @@ export class HighlighterWidget extends LitElement {
     const highlighter =rangy.createHighlighter();
     console.log(highlighter);
     const applier = rangy.createClassApplier('highlighted-text', {
-      onElementCreate: (el: HTMLElement) => {
+      onElementCreate: (el: Element) => {
         const htmlEl = el as HTMLElement;
         htmlEl.addEventListener('pointerdown', (downEvent) => {
           if (downEvent.button !== 0) return; // Only left click
@@ -132,18 +132,11 @@ export class HighlighterWidget extends LitElement {
             // Release capture so the overlay can track the pointer
             cleanup();
 
-            // Force grabbing cursor on entire page during drag
-            const cursorStyle = document.createElement('style');
-            cursorStyle.id = 'octobase-drag-cursor';
-            cursorStyle.textContent = '* { cursor: grabbing !important; }';
-            document.head.appendChild(cursorStyle);
-
             // Continue tracking mouse in this view and relay via IPC
             const onDragMove = (e: MouseEvent) => {
               window.electronAPI?.sendDragPosition({ x: e.clientX, y: e.clientY });
             };
             const onDragEnd = (e: MouseEvent) => {
-              cursorStyle.remove();
               window.electronAPI?.sendDragEnd({ x: e.clientX, y: e.clientY });
               window.removeEventListener('mousemove', onDragMove);
               window.removeEventListener('mouseup', onDragEnd);

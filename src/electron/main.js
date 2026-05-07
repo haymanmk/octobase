@@ -47,14 +47,11 @@ const createSplitView = () => {
   });
   overlayView = new WebContentsView({
     webPreferences: {
-      transparent: true,
-      frame: false,
       preload: path.join(__dirname, 'preload-overlay.js'),
       nodeIntegration: false,
       contextIsolation: true,
     }
   }); // For drag-and-drop overlays, if needed
-  overlayView.setBackgroundColor('#00000000'); // Transparent background
 
   // Add views to the parent window
   parentWin.contentView.addChildView(leftView);
@@ -140,6 +137,9 @@ app.whenReady().then(() => {
     if (data === '' || !data) return;
     // add overlay to parent window
     parentWin.contentView.addChildView(overlayView);
+    // Make overlay non-transparent at native level so it captures cursor hit-testing
+    // Format is #RRGGBBAA — alpha is the last two hex digits
+    overlayView.setBackgroundColor('#00000001');
     // Translate cursor position from right-view-local to window-global coordinates
     const rightBounds = rightView.getBounds();
     const adjustedData = {
@@ -167,6 +167,8 @@ app.whenReady().then(() => {
 
   ipcMain.on('highlight-dropped', (event, data) => {
     console.log('Highlight Dropped:', data);
+    // Restore overlay to fully transparent
+    overlayView.setBackgroundColor('#00000000');
     // Remove overlay from parent window
     try {
       parentWin.contentView.removeChildView(overlayView);
