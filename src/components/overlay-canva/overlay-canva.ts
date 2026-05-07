@@ -78,11 +78,9 @@ export class DragTextProxy extends LitElement {
   }
 
   updated(changedProperties: Map<string, any>) {
-    console.log('DragTextProxy updated:', changedProperties);
     if (changedProperties.has('x') || changedProperties.has('y')) {
       this.style.left = `${this.x}px`;
       this.style.top = `${this.y}px`;
-      console.log(`DragTextProxy moved to (${this.x}, ${this.y})`);
     }
   }
 
@@ -105,7 +103,6 @@ export class DragTextProxy extends LitElement {
   // Listen for drag-drop-text-selection event
   const startListening = () => {
     window.overlayAPI?.onDragText((data: { text: string; sourceUrl: string; cursorX: number; cursorY: number; highlightId: string }) => {
-      console.log('OverlayCanva received drag text:', data);
       // Create and append the drag-text-proxy component
       const overlayCanva = document.querySelector('#overlay-canva-app');
       
@@ -116,7 +113,6 @@ export class DragTextProxy extends LitElement {
         el.style.cursor = 'grabbing';
 
         const dragProxy = document.createElement('drag-text-proxy') as DragTextProxy;
-        console.log('Created drag-text-proxy:', dragProxy);
         dragProxy.text = data.text;
         dragProxy.sourceUrl = data.sourceUrl || '';
         overlayCanva.appendChild(dragProxy);
@@ -156,8 +152,6 @@ export class DragTextProxy extends LitElement {
 
   // Wait for the DOM to be fully loaded
   document.addEventListener('DOMContentLoaded', () => {
-    console.log('OverlayCanva DOM fully loaded');
-    console.log('window.overlayAPI', window.overlayAPI);
     startListening();
   });
 })();
