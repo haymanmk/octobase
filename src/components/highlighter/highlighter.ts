@@ -7,6 +7,10 @@ import { customElement } from 'lit/decorators.js';
 import 'rangy/lib/rangy-classapplier';
 import 'rangy/lib/rangy-highlighter';
 import rangy from 'rangy';
+import { HIGHLIGHT_COLORS, type HighlightColor } from '../../types/highlight';
+import { classNameFor } from './colors';
+import { getHighlightDragPayload } from './highlight-id';
+import { injectGlobalStyles } from './widget-styles';
 
 // Declare the electron API
 declare global {
@@ -36,6 +40,98 @@ if (!hostElement) {
 
 // Create Shadow DOM for isolation
 const shadowRoot = hostElement.shadowRoot || hostElement.attachShadow({ mode: 'open' });
+
+// Module-level flag to prevent handleTextSelection from firing during drag
+let isDraggingHighlight = false;
+
+// Attaches hold-to-drag behavior to a single highlight fragment element.
+function attachFragmentBehavior(htmlEl: HTMLElement) {
+  htmlEl.addEventListener('pointerdown', (downEvent) => {
+    if (downEvent.button !== 0) return; // Only left click
+
+    const holdDuration = 250; // ms to hold before drag intent
+    const moveCancel = 5; // px movement cancels the hold
+    const startX = downEvent.clientX;
+    const startY = downEvent.clientY;
+
+    // Capture pointer so move/up events don't leak to window listeners
+    htmlEl.setPointerCapture(downEvent.pointerId);
+    isDraggingHighlight = true;
+
+    const cleanup = () => {
+      clearTimeout(holdTimer);
+      htmlEl.removeEventListener('pointermove', onPointerMove);
+      htmlEl.removeEventListener('pointerup', onPointerUp);
+      try { htmlEl.releasePointerCapture(downEvent.pointerId); } catch { /* already released */ }
+    };
+
+    const triggerDrag = () => {
+      const { text, highlightId } = getHighlightDragPayload(htmlEl);
+      if (text.length === 0) { cleanup(); return; }
+      window.electronAPI?.sendDragText({ text, sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId });
+      window.postMessage({
+        type: 'drag-drop-text-selection',
+        data: { text, sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId }
+      }, '*');
+      // Release capture so the overlay can track the pointer
+      cleanup();
+
+      // Disable pointer events on the right view's body so Chromium yields cursor control to overlay
+      document.body.style.pointerEvents = 'none';
+
+      // Continue tracking mouse in this view and relay via IPC
+      const onDragMove = (e: MouseEvent) => {
+        window.electronAPI?.sendDragPosition({ x: e.clientX, y: e.clientY });
+      };
+      const onDragEnd = (e: MouseEvent) => {
+        window.electronAPI?.sendDragEnd({ x: e.clientX, y: e.clientY });
+        // Restore pointer events to right view
+        document.body.style.pointerEvents = '';
+        window.removeEventListener('mousemove', onDragMove);
+        window.removeEventListener('mouseup', onDragEnd);
+        // Force input focus back to this view so it can listen to mouse again
+        htmlEl.focus();
+      };
+      window.addEventListener('mousemove', onDragMove);
+      window.addEventListener('mouseup', onDragEnd);
+
+      // Reset flag after a tick to let any queued events pass
+      requestAnimationFrame(() => { isDraggingHighlight = false; });
+    };
+
+    // Start hold timer — if it fires, user intends to drag
+    const holdTimer = setTimeout(triggerDrag, holdDuration);
+
+    // If user moves too far during the hold, cancel (they're selecting text)
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = Math.abs(moveEvent.clientX - startX);
+      const deltaY = Math.abs(moveEvent.clientY - startY);
+      if (deltaX > moveCancel || deltaY > moveCancel) {
+        cleanup();
+        isDraggingHighlight = false;
+      }
+    };
+
+    // If user lifts before timer, it's a click — cancel
+    const onPointerUp = () => {
+      cleanup();
+      isDraggingHighlight = false;
+    };
+
+    htmlEl.addEventListener('pointermove', onPointerMove);
+    htmlEl.addEventListener('pointerup', onPointerUp);
+  });
+}
+
+function makeApplier(color: HighlightColor) {
+  return rangy.createClassApplier(classNameFor(color), {
+    onElementCreate: (el: Element) => attachFragmentBehavior(el as HTMLElement),
+  });
+}
+
+const appliers: Record<HighlightColor, ReturnType<typeof rangy.createClassApplier>> = Object.fromEntries(
+  HIGHLIGHT_COLORS.map((c) => [c, makeApplier(c)]),
+) as Record<HighlightColor, ReturnType<typeof rangy.createClassApplier>>;
 
 // highlighter component which wrpaps around the selected text or even elements
 @customElement('highlighter-component')
@@ -87,110 +183,27 @@ export class HighlighterWidget extends LitElement {
     this.visible = true;
     this.requestUpdate();
   }
-  
+
   hide() {
     this.visible = false;
     this.requestUpdate();
   }
 
-  handleHighlightClick() {
-    // Wrap the selected text with highlighter component
-    const highlighter =rangy.createHighlighter();
-    console.log(highlighter);
-    const applier = rangy.createClassApplier('highlighted-text', {
-      onElementCreate: (el: Element) => {
-        const htmlEl = el as HTMLElement;
-        htmlEl.addEventListener('pointerdown', (downEvent) => {
-          if (downEvent.button !== 0) return; // Only left click
-
-          const holdDuration = 250; // ms to hold before drag intent
-          const moveCancel = 5; // px movement cancels the hold
-          const startX = downEvent.clientX;
-          const startY = downEvent.clientY;
-
-          // Capture pointer so move/up events don't leak to window listeners
-          htmlEl.setPointerCapture(downEvent.pointerId);
-          isDraggingHighlight = true;
-
-          const cleanup = () => {
-            clearTimeout(holdTimer);
-            htmlEl.removeEventListener('pointermove', onPointerMove);
-            htmlEl.removeEventListener('pointerup', onPointerUp);
-            try { htmlEl.releasePointerCapture(downEvent.pointerId); } catch { /* already released */ }
-            console.log('Cleanup completed');
-          };
-
-          const triggerDrag = () => {
-            console.log('Hold-drag started for text:', htmlEl.textContent);
-            if (!htmlEl.textContent || htmlEl.textContent.length === 0) { cleanup(); return; }
-            const highlightId = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-            window.electronAPI?.sendDragText({ text: htmlEl.textContent || '', sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId });
-            window.postMessage({
-              type: 'drag-drop-text-selection',
-              data: { text: htmlEl.textContent || '', sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId }
-            }, '*');
-            // Release capture so the overlay can track the pointer
-            cleanup();
-
-            // Continue tracking mouse in this view and relay via IPC
-            const onDragMove = (e: MouseEvent) => {
-              window.electronAPI?.sendDragPosition({ x: e.clientX, y: e.clientY });
-            };
-            const onDragEnd = (e: MouseEvent) => {
-              window.electronAPI?.sendDragEnd({ x: e.clientX, y: e.clientY });
-              window.removeEventListener('mousemove', onDragMove);
-              window.removeEventListener('mouseup', onDragEnd);
-            };
-            window.addEventListener('mousemove', onDragMove);
-            window.addEventListener('mouseup', onDragEnd);
-
-            // Reset flag after a tick to let any queued events pass
-            requestAnimationFrame(() => { isDraggingHighlight = false; });
-          };
-
-          // Start hold timer — if it fires, user intends to drag
-          const holdTimer = setTimeout(triggerDrag, holdDuration);
-
-          // If user moves too far during the hold, cancel (they're selecting text)
-          const onPointerMove = (moveEvent: PointerEvent) => {
-            const deltaX = Math.abs(moveEvent.clientX - startX);
-            const deltaY = Math.abs(moveEvent.clientY - startY);
-            if (deltaX > moveCancel || deltaY > moveCancel) {
-              cleanup();
-              isDraggingHighlight = false;
-            }
-          };
-
-          // If user lifts before timer, it's a click — cancel
-          const onPointerUp = () => {
-            cleanup();
-            isDraggingHighlight = false;
-          };
-
-          htmlEl.addEventListener('pointermove', onPointerMove);
-          htmlEl.addEventListener('pointerup', onPointerUp);
-        });
-      }
-    });
-    highlighter.addClassApplier(applier);
-    highlighter.highlightSelection('highlighted-text');
-
-    // Clear selection after highlighting
+  handleHighlightClick(color: HighlightColor) {
+    const highlighter = rangy.createHighlighter();
+    highlighter.addClassApplier(appliers[color]);
+    highlighter.highlightSelection(classNameFor(color));
     rangy.getSelection().removeAllRanges();
   }
 
   render() {
     return this.visible
      ? html`<div class="base-style">
-     <p>Highlighter Widget Loaded</p>
-     <button @click=${this.handleHighlightClick}>Highlight</button>
+       ${HIGHLIGHT_COLORS.map(c => html`<button @click=${() => this.handleHighlightClick(c)}>${c}</button>`)}
      </div>`
      : html``;
   }
 }
-
-// Module-level flag to prevent handleTextSelection from firing during drag
-let isDraggingHighlight = false;
 
 // Function to handle text selection
 const handleTextSelection = async (event: MouseEvent) => {
@@ -211,15 +224,10 @@ const handleTextSelection = async (event: MouseEvent) => {
     highlighterWidget.updateWidgetPosition(rect);
     // Set widget visibility
     highlighterWidget.show();
-
-    // Handle the selected text and its position
-    // console.log('Selected Text:', selectedText);
-    // console.log('Selection Position:', rect);
   }
   else {
     // Hide the widget if no text is selected
     highlighterWidget.hide();
-    console.log('No text selected.');
   }
 }
 
@@ -229,32 +237,14 @@ const monitorTextSelection = () => {
   document.addEventListener('mousedown', handleTextSelection);
 }
 
-const addStylesToBody = () => {
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .highlighted-text {
-      background-color: yellow;
-      color: black;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    .highlighted-text:hover {
-      background-color: orange;
-    }
-  `;
-  document.body.appendChild(style);
-}
-
 // IIFE, Auto-inject when loaded
 // Instantiate the highlighter widget
 const highlighterWidget = new HighlighterWidget();
 (() => {
   // Handle text selection monitoring
   monitorTextSelection();
-  // Add necessary styles to the body
-  addStylesToBody();
+  // Inject palette styles into the host document
+  injectGlobalStyles();
   // Inject the highlighter widget into shadow DOM
   shadowRoot.appendChild(highlighterWidget);
 })();
