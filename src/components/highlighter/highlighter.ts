@@ -63,8 +63,76 @@ window.addEventListener('mouseup', () => {
 }, true);
 
 
+// === Hover-revealed menu button ===
+// One reusable button shared across all highlight fragments. Repositioned
+// each time the cursor enters a fragment, hidden after a short grace
+// timeout so the cursor can travel onto the button without flicker.
+let menuButton: HTMLButtonElement | null = null;
+let menuButtonHideTimer: number | null = null;
+let menuButtonTargetId: string | null = null;
+
+function ensureMenuButton(): HTMLButtonElement {
+  if (menuButton) return menuButton;
+  const btn = document.createElement('button');
+  btn.className = 'octo-hl-menubtn';
+  btn.textContent = '⋯';
+  btn.style.position = 'absolute';
+  btn.style.display = 'none';
+  btn.style.zIndex = '9998';
+  btn.style.width = '22px';
+  btn.style.height = '22px';
+  btn.style.borderRadius = '50%';
+  btn.style.border = '1px solid #ddd';
+  btn.style.background = 'white';
+  btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)';
+  btn.style.fontSize = '11px';
+  btn.style.color = '#666';
+  btn.style.cursor = 'pointer';
+  btn.style.padding = '0';
+  btn.style.lineHeight = '1';
+  // Stop pointerdown so it doesn't trigger the hold-to-drag on the highlight.
+  btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menuButtonTargetId) openEditPanel(menuButtonTargetId, btn.getBoundingClientRect());
+  });
+  // Keep the button visible while the cursor is over it.
+  btn.addEventListener('mouseenter', () => {
+    if (menuButtonHideTimer) { clearTimeout(menuButtonHideTimer); menuButtonHideTimer = null; }
+  });
+  btn.addEventListener('mouseleave', scheduleMenuButtonHide);
+  document.body.appendChild(btn);
+  menuButton = btn;
+  return btn;
+}
+
+function showMenuButton(target: HTMLElement) {
+  const btn = ensureMenuButton();
+  if (menuButtonHideTimer) { clearTimeout(menuButtonHideTimer); menuButtonHideTimer = null; }
+  const rect = target.getBoundingClientRect();
+  btn.style.top = `${rect.top + window.scrollY - 6}px`;
+  btn.style.left = `${rect.right + window.scrollX - 12}px`;
+  btn.style.display = 'inline-block';
+  menuButtonTargetId = target.dataset.octobaseHighlightId ?? null;
+}
+
+function scheduleMenuButtonHide() {
+  if (menuButtonHideTimer) clearTimeout(menuButtonHideTimer);
+  menuButtonHideTimer = window.setTimeout(() => {
+    if (menuButton) menuButton.style.display = 'none';
+    menuButtonTargetId = null;
+  }, 250);
+}
+
+// Stub. Full edit panel lands in Task 13.
+function openEditPanel(highlightId: string, anchorRect: DOMRect): void {
+  console.log('[octobase-highlighter] openEditPanel', highlightId, anchorRect);
+}
+
 // Attaches hold-to-drag behavior to a single highlight fragment element.
 function attachFragmentBehavior(htmlEl: HTMLElement) {
+  htmlEl.addEventListener('mouseenter', () => showMenuButton(htmlEl));
+  htmlEl.addEventListener('mouseleave', scheduleMenuButtonHide);
   htmlEl.addEventListener('pointerdown', (downEvent) => {
     if (downEvent.button !== 0) return; // Only left click
 
