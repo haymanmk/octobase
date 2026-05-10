@@ -9,9 +9,10 @@ import 'rangy/lib/rangy-highlighter';
 import 'rangy/lib/rangy-serializer';
 import rangy from 'rangy';
 import { HIGHLIGHT_COLORS, type HighlightColor, type Highlight } from '../../types/highlight';
-import { classNameFor } from './colors';
+import { classNameFor, PALETTE } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
+import './edit-form';
 
 // Declare the electron API
 declare global {
@@ -139,6 +140,55 @@ const appliers: Record<HighlightColor, ReturnType<typeof rangy.createClassApplie
   HIGHLIGHT_COLORS.map((c) => [c, makeApplier(c)]),
 ) as Record<HighlightColor, ReturnType<typeof rangy.createClassApplier>>;
 
+async function applyHighlightFromSelection(color: HighlightColor): Promise<string | null> {
+  const sel = rangy.getSelection();
+  if (sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  const text = sel.toString();
+  if (!text.trim()) return null;
+  const serialized = rangy.serializeRange(range, true, document.body);
+  const id = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const highlighter = rangy.createHighlighter();
+  highlighter.addClassApplier(appliers[color]);
+  highlighter.highlightSelection(classNameFor(color));
+
+  const fragments = Array.from(
+    document.querySelectorAll(`.${classNameFor(color)}:not([data-octobase-highlight-id])`),
+  ) as HTMLElement[];
+  if (fragments.length > 0) {
+    stampHighlightGroup(fragments, text, () => id);
+  }
+  sel.removeAllRanges();
+
+  const now = Date.now();
+  await window.electronAPI?.saveHighlight({
+    id, text, sourceUrl: window.location.href, color,
+    tags: [], notes: '',
+    anchor: { serialized },
+    createdAt: now, updatedAt: now,
+  });
+  return id;
+}
+
+async function changeHighlightColor(id: string, color: HighlightColor): Promise<void> {
+  const fragments = Array.from(document.querySelectorAll(`[data-octobase-highlight-id="${id}"]`)) as HTMLElement[];
+  if (fragments.length === 0) return;
+  for (const el of fragments) {
+    for (const c of HIGHLIGHT_COLORS) el.classList.remove(classNameFor(c));
+    el.classList.add(classNameFor(color));
+  }
+  const record = await loadHighlightById(id);
+  if (record) {
+    await window.electronAPI?.saveHighlight({ ...record, color, updatedAt: Date.now() });
+  }
+}
+
+async function loadHighlightById(id: string): Promise<Highlight | null> {
+  const all = await window.electronAPI?.loadHighlights(window.location.href);
+  return all?.find((h) => h.id === id) ?? null;
+}
+
 // highlighter component which wrpaps around the selected text or even elements
 @customElement('highlighter-component')
 export class HighlighterComponent extends LitElement {
@@ -164,29 +214,52 @@ export class HighlighterComponent extends LitElement {
 // Define the highlighter widget
 @customElement('highlighter-widget')
 export class HighlighterWidget extends LitElement {
-  visible: boolean = false;
-
   static styles = css`
-    .base-style {
-      background-color: #eeefed;
-      box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
-      color: black;
-      padding: 10px;
-      border-radius: 5px;
-      font-family: Arial, sans-serif;
+    :host { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 10px; background: white; border-radius: 24px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12); border: 1px solid #eee;
+    }
+    .swatch {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.06); cursor: pointer; padding: 0;
+    }
+    .divider { width: 1px; height: 20px; background: #e5e5e5; margin: 0 2px; }
+    .add-note {
+      font-size: 11px; color: #666; cursor: pointer; user-select: none;
+      background: transparent; border: none; padding: 4px;
+    }
+    .add-note:hover { color: #111; }
+    .pulse .swatch { animation: pulse 0.6s ease 2; }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
     }
   `;
 
-  // Update HighlighterWidget position based on selection rect
-  updateWidgetPosition = (rect: DOMRect) => {
-    highlighterWidget!.style.position = 'absolute';
-    highlighterWidget!.style.top = `${rect.bottom + window.scrollY + 10}px`;
-    highlighterWidget!.style.left = `${rect.left + window.scrollX}px`;
-    highlighterWidget!.style.zIndex = '9999';
+  // Plain class fields rather than @property/@state — Vite library mode parses
+  // the entry file with Rollup's acorn parser, which does not yet recognise the
+  // standard-decorator `accessor` keyword. Mutations call requestUpdate().
+  visible: boolean = false;
+  mode: 'pill' | 'expanded' = 'pill';
+  private pulseColors = false;
+  private currentId: string | null = null;
+  private currentColor: HighlightColor | null = null;
+  private currentTags: string[] = [];
+  private currentNotes: string = '';
+  private suggestions: string[] = [];
+
+  updateWidgetPosition(rect: DOMRect) {
+    this.style.position = 'absolute';
+    this.style.top = `${rect.bottom + window.scrollY + 10}px`;
+    this.style.left = `${rect.left + window.scrollX}px`;
+    this.style.zIndex = '9999';
   }
 
   show() {
     this.visible = true;
+    this.mode = 'pill';
     this.requestUpdate();
   }
 
@@ -195,54 +268,93 @@ export class HighlighterWidget extends LitElement {
     this.requestUpdate();
   }
 
-  async handleHighlightClick(color: HighlightColor) {
-    const selection = rangy.getSelection();
-    if (selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
-    const text = selection.toString();
-    if (text.length === 0) return;
+  reset() {
+    this.currentId = null;
+    this.currentColor = null;
+    this.currentTags = [];
+    this.currentNotes = '';
+    this.mode = 'pill';
+    this.requestUpdate();
+  }
 
-    const serialized = rangy.serializeRange(range, true, document.body);
-    const id = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-    const highlighter = rangy.createHighlighter();
-    highlighter.addClassApplier(appliers[color]);
-    highlighter.highlightSelection(classNameFor(color));
-
-    // Stamp every fragment Rangy just produced with the chosen id + the full
-    // selected text. Each fragment's drag payload reads these data attributes
-    // so dropping any fragment carries the entire selection.
-    const className = classNameFor(color);
-    const fragments = Array.from(
-      document.querySelectorAll(`.${className}:not([data-octobase-highlight-id])`),
-    ) as HTMLElement[];
-    if (fragments.length > 0) {
-      stampHighlightGroup(fragments, text, () => id);
+  private async onSwatch(color: HighlightColor) {
+    if (!this.currentId) {
+      const id = await applyHighlightFromSelection(color);
+      if (!id) return;
+      this.currentId = id;
+      this.currentColor = color;
+      this.currentTags = [];
+      this.currentNotes = '';
+      this.suggestions = (await window.electronAPI?.listTags()) ?? [];
+      this.mode = 'expanded';
+      this.requestUpdate();
+    } else {
+      await changeHighlightColor(this.currentId, color);
+      this.currentColor = color;
+      this.requestUpdate();
     }
+  }
 
-    selection.removeAllRanges();
+  private onAddNote() {
+    if (this.currentId) { this.mode = 'expanded'; this.requestUpdate(); return; }
+    this.pulseColors = true;
+    this.requestUpdate();
+    setTimeout(() => { this.pulseColors = false; this.requestUpdate(); }, 1300);
+  }
 
-    const now = Date.now();
-    const record: Highlight = {
-      id,
-      text,
-      sourceUrl: window.location.href,
-      color,
-      tags: [],
-      notes: '',
-      anchor: { serialized },
-      createdAt: now,
-      updatedAt: now,
-    };
-    await window.electronAPI?.saveHighlight(record);
+  private async onTagsChanged(e: CustomEvent) {
+    this.currentTags = e.detail.tags;
+    this.requestUpdate();
+    await this.persist();
+  }
+
+  private async onNotesChanged(e: CustomEvent) {
+    this.currentNotes = e.detail.notes;
+    this.requestUpdate();
+    await this.persist();
+  }
+
+  private async onColorChangedFromForm(e: CustomEvent) {
+    const c = e.detail.color as HighlightColor;
+    if (this.currentId) {
+      await changeHighlightColor(this.currentId, c);
+      this.currentColor = c;
+      this.requestUpdate();
+    }
+  }
+
+  private async persist() {
+    if (!this.currentId || !this.currentColor) return;
+    const record = await loadHighlightById(this.currentId);
+    if (!record) return;
+    const updated = { ...record, color: this.currentColor, tags: this.currentTags, notes: this.currentNotes, updatedAt: Date.now() };
+    await window.electronAPI?.saveHighlight(updated);
   }
 
   render() {
-    return this.visible
-     ? html`<div class="base-style">
-       ${HIGHLIGHT_COLORS.map(c => html`<button @click=${() => this.handleHighlightClick(c)}>${c}</button>`)}
-     </div>`
-     : html``;
+    if (!this.visible) return html``;
+    if (this.mode === 'expanded') {
+      return html`<octo-edit-form
+        .color=${this.currentColor}
+        .tags=${this.currentTags}
+        .notes=${this.currentNotes}
+        .suggestions=${this.suggestions}
+        .pulseColors=${this.pulseColors}
+        @color-changed=${this.onColorChangedFromForm}
+        @tags-changed=${this.onTagsChanged}
+        @notes-changed=${this.onNotesChanged}
+      ></octo-edit-form>`;
+    }
+    return html`
+      <div class="pill ${this.pulseColors ? 'pulse' : ''}">
+        ${HIGHLIGHT_COLORS.map((c) => html`
+          <button class="swatch" style="background:${PALETTE[c].fill}" title=${c}
+                  @click=${() => this.onSwatch(c)}></button>
+        `)}
+        <div class="divider"></div>
+        <button class="add-note" @click=${this.onAddNote}>+ note</button>
+      </div>
+    `;
   }
 }
 
@@ -288,6 +400,28 @@ const highlighterWidget = new HighlighterWidget();
   injectGlobalStyles();
   // Inject the highlighter widget into shadow DOM
   shadowRoot.appendChild(highlighterWidget);
+
+  // Click outside the widget host while expanded → close + reset.
+  document.addEventListener('mousedown', (e) => {
+    const target = e.target as Node;
+    if (
+      hostElement &&
+      !hostElement.contains(target) &&
+      highlighterWidget.visible &&
+      highlighterWidget.mode === 'expanded'
+    ) {
+      highlighterWidget.reset();
+      highlighterWidget.hide();
+    }
+  }, true);
+
+  // Escape closes regardless of mode.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && highlighterWidget.visible) {
+      highlighterWidget.reset();
+      highlighterWidget.hide();
+    }
+  });
 })();
 
 // Re-apply persisted highlights for this URL once the page is settled.
