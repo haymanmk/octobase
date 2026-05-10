@@ -6,8 +6,9 @@ import {LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import 'rangy/lib/rangy-classapplier';
 import 'rangy/lib/rangy-highlighter';
+import 'rangy/lib/rangy-serializer';
 import rangy from 'rangy';
-import { HIGHLIGHT_COLORS, type HighlightColor } from '../../types/highlight';
+import { HIGHLIGHT_COLORS, type HighlightColor, type Highlight } from '../../types/highlight';
 import { classNameFor } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
@@ -16,10 +17,15 @@ import { injectGlobalStyles } from './widget-styles';
 declare global {
   interface Window {
     electronAPI?: {
-      sendTextSelection: (data: { text: string; action: string }) => void;
       sendDragText: (data: { text: string; sourceUrl: string; cursorX: number; cursorY: number; highlightId: string }) => void;
       sendDragPosition: (data: { x: number; y: number }) => void;
       sendDragEnd: (data: { x: number; y: number }) => void;
+      loadHighlights: (url: string) => Promise<Highlight[]>;
+      saveHighlight: (highlight: Highlight) => Promise<{ ok: true }>;
+      deleteHighlight: (id: string) => Promise<{ ok: true }>;
+      listTags: () => Promise<string[]>;
+      onHighlightUpdated: (callback: (h: Highlight) => void) => void;
+      onHighlightDeleted: (callback: (data: { id: string }) => void) => void;
     };
   }
 }
@@ -189,29 +195,46 @@ export class HighlighterWidget extends LitElement {
     this.requestUpdate();
   }
 
-  handleHighlightClick(color: HighlightColor) {
+  async handleHighlightClick(color: HighlightColor) {
     const selection = rangy.getSelection();
     if (selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
     const text = selection.toString();
     if (text.length === 0) return;
+
+    const serialized = rangy.serializeRange(range, true, document.body);
+    const id = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     const highlighter = rangy.createHighlighter();
     highlighter.addClassApplier(appliers[color]);
     highlighter.highlightSelection(classNameFor(color));
 
-    // Stamp every fragment Rangy just produced with a shared id + the full
+    // Stamp every fragment Rangy just produced with the chosen id + the full
     // selected text. Each fragment's drag payload reads these data attributes
-    // so dropping any fragment carries the entire selection, not just the
-    // characters inside that one element.
+    // so dropping any fragment carries the entire selection.
     const className = classNameFor(color);
     const fragments = Array.from(
       document.querySelectorAll(`.${className}:not([data-octobase-highlight-id])`),
     ) as HTMLElement[];
     if (fragments.length > 0) {
-      stampHighlightGroup(fragments, text);
+      stampHighlightGroup(fragments, text, () => id);
     }
 
     selection.removeAllRanges();
+
+    const now = Date.now();
+    const record: Highlight = {
+      id,
+      text,
+      sourceUrl: window.location.href,
+      color,
+      tags: [],
+      notes: '',
+      anchor: { serialized },
+      createdAt: now,
+      updatedAt: now,
+    };
+    await window.electronAPI?.saveHighlight(record);
   }
 
   render() {
@@ -266,3 +289,31 @@ const highlighterWidget = new HighlighterWidget();
   // Inject the highlighter widget into shadow DOM
   shadowRoot.appendChild(highlighterWidget);
 })();
+
+// Re-apply persisted highlights for this URL once the page is settled.
+async function reapplyOnLoad() {
+  const records = (await window.electronAPI?.loadHighlights(window.location.href)) ?? [];
+  for (const r of records) {
+    try {
+      const range = rangy.deserializeRange(r.anchor.serialized, document.body);
+      const sel = rangy.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const highlighter = rangy.createHighlighter();
+      highlighter.addClassApplier(appliers[r.color]);
+      highlighter.highlightSelection(classNameFor(r.color));
+      sel.removeAllRanges();
+
+      // Stamp re-applied fragments with the persisted id + text.
+      const fragments = Array.from(
+        document.querySelectorAll(`.${classNameFor(r.color)}:not([data-octobase-highlight-id])`),
+      ) as HTMLElement[];
+      if (fragments.length > 0) {
+        stampHighlightGroup(fragments, r.text, () => r.id);
+      }
+    } catch (err) {
+      console.warn('Failed to re-apply highlight', r.id, err);
+    }
+  }
+}
+reapplyOnLoad();
