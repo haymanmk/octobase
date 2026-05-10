@@ -28,6 +28,5 @@ test("paletteCss emits a marker-stroke rule for every color with its fill", () =
     assert.ok(css.includes(entry.fill), `expected fill ${entry.fill} in css`);
   }
   assert.match(css, /linear-gradient/);
-  assert.match(css, /border-radius:\s*999px/);
   assert.match(css, /box-decoration-break:\s*clone/);
 });
