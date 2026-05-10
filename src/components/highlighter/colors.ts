@@ -24,6 +24,7 @@ export function paletteCss(): string {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  mix-blend-mode: multiply;
 }
 .${classNameFor(color)}:hover { filter: brightness(0.97); }`,
     )
