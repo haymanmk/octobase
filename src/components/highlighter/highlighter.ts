@@ -14,6 +14,11 @@ import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
 
+console.log('[octobase-highlighter] module loaded; octo-edit-form registered =',
+  !!customElements.get('octo-edit-form'),
+  'octo-tag-input registered =',
+  !!customElements.get('octo-tag-input'));
+
 // Declare the electron API
 declare global {
   interface Window {
@@ -50,6 +55,17 @@ const shadowRoot = hostElement.shadowRoot || hostElement.attachShadow({ mode: 'o
 
 // Module-level flag to prevent handleTextSelection from firing during drag
 let isDraggingHighlight = false;
+
+// Defensive cleanup: if a previous drag flow disabled body pointer events
+// and didn't restore them (e.g., onDragEnd missed the mouseup), we'd block
+// every click on the page. Restore on every global mouseup we observe while
+// not actively dragging.
+window.addEventListener('mouseup', () => {
+  if (!isDraggingHighlight && document.body.style.pointerEvents === 'none') {
+    document.body.style.pointerEvents = '';
+    console.warn('[octobase-highlighter] restored stuck body.pointer-events:none');
+  }
+}, true);
 
 // Attaches hold-to-drag behavior to a single highlight fragment element.
 function attachFragmentBehavior(htmlEl: HTMLElement) {
@@ -215,11 +231,16 @@ export class HighlighterComponent extends LitElement {
 @customElement('highlighter-widget')
 export class HighlighterWidget extends LitElement {
   static styles = css`
-    :host { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    :host {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      pointer-events: auto;
+      isolation: isolate;
+    }
     .pill {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 8px 10px; background: white; border-radius: 24px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.12); border: 1px solid #eee;
+      pointer-events: auto;
     }
     .swatch {
       width: 22px; height: 22px; border-radius: 50%;
@@ -254,7 +275,8 @@ export class HighlighterWidget extends LitElement {
     this.style.position = 'absolute';
     this.style.top = `${rect.bottom + window.scrollY + 10}px`;
     this.style.left = `${rect.left + window.scrollX}px`;
-    this.style.zIndex = '9999';
+    this.style.zIndex = '2147483647';
+    this.style.pointerEvents = 'auto';
   }
 
   show() {
@@ -278,8 +300,10 @@ export class HighlighterWidget extends LitElement {
   }
 
   private async onSwatch(color: HighlightColor) {
+    console.log('[octobase-highlighter] onSwatch', color, 'currentId=', this.currentId);
     if (!this.currentId) {
       const id = await applyHighlightFromSelection(color);
+      console.log('[octobase-highlighter] applyHighlightFromSelection returned id=', id);
       if (!id) return;
       this.currentId = id;
       this.currentColor = color;
@@ -346,7 +370,9 @@ export class HighlighterWidget extends LitElement {
       ></octo-edit-form>`;
     }
     return html`
-      <div class="pill ${this.pulseColors ? 'pulse' : ''}">
+      <div class="pill ${this.pulseColors ? 'pulse' : ''}"
+           @pointerdown=${(e: PointerEvent) => { e.stopPropagation(); }}
+           @mousedown=${(e: MouseEvent) => { e.stopPropagation(); }}>
         ${HIGHLIGHT_COLORS.map((c) => html`
           <button class="swatch" style="background:${PALETTE[c].fill}" title=${c}
                   @click=${() => this.onSwatch(c)}></button>
@@ -365,6 +391,13 @@ const handleTextSelection = async (event: MouseEvent) => {
 
   // Delay to ensure selection is registered
   await new Promise(resolve => setTimeout(resolve, 10));
+
+  // Once the widget has expanded into the edit form, the user has committed
+  // to a highlight and we no longer drive visibility from the document
+  // selection — clicking a swatch clears the selection as a side effect of
+  // applying the highlight, and re-running this handler on the same click
+  // would otherwise hide the form.
+  if (highlighterWidget.mode === 'expanded') return;
 
   const selection = window.getSelection();
   const selectedText = selection ? selection.toString() : '';
