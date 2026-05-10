@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, Chip, TextField } from '@mui/material';
+import { Box, Paper, Typography, Chip, TextField, Snackbar, Button } from '@mui/material';
 import * as React from 'react';
 import { PALETTE } from '../components/highlighter/colors';
 import type { Card } from '../types/highlight';
@@ -230,6 +230,7 @@ function CardView({ card, onMove, onDelete, onUpdate }: {
 
 export default function Whiteboard(): React.ReactElement {
   const [cards, setCards] = React.useState<Card[]>([]);
+  const [pendingDelete, setPendingDelete] = React.useState<Card | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -264,9 +265,24 @@ export default function Whiteboard(): React.ReactElement {
   }, []);
 
   const handleDelete = React.useCallback(async (id: string) => {
-    setCards(prev => prev.filter(c => c.id !== id));
+    let removed: Card | undefined;
+    setCards(prev => {
+      removed = prev.find(c => c.id === id);
+      return prev.filter(c => c.id !== id);
+    });
+    if (removed) setPendingDelete(removed);
     await getElectronAPI()?.deleteCard?.(id);
   }, []);
+
+  const handleUndoDelete = React.useCallback(async () => {
+    const restoring = pendingDelete;
+    if (!restoring) return;
+    setPendingDelete(null);
+    const refreshed: Card = { ...restoring, updatedAt: Date.now() };
+    // saveCard's broadcast (card:updated) re-adds the card to state via the
+    // onCardUpdated listener; no need to setCards here.
+    await getElectronAPI()?.saveCard?.(refreshed);
+  }, [pendingDelete]);
 
   const handleUpdate = React.useCallback(async (id: string, patch: Partial<Pick<Card, 'notes'>>) => {
     let updated: Card | undefined;
@@ -285,6 +301,21 @@ export default function Whiteboard(): React.ReactElement {
   return (
     <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       {cards.map(c => <CardView key={c.id} card={c} onMove={handleMove} onDelete={handleDelete} onUpdate={handleUpdate} />)}
+      <Snackbar
+        open={!!pendingDelete}
+        autoHideDuration={5000}
+        onClose={(_e, reason) => {
+          if (reason === 'clickaway') return;
+          setPendingDelete(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message="Card deleted"
+        action={
+          <Button color="inherit" size="small" onClick={handleUndoDelete} sx={{ textDecoration: 'underline' }}>
+            Undo
+          </Button>
+        }
+      />
     </Box>
   );
 }
