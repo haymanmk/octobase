@@ -9,7 +9,7 @@ import 'rangy/lib/rangy-highlighter';
 import rangy from 'rangy';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../../types/highlight';
 import { classNameFor } from './colors';
-import { getHighlightDragPayload } from './highlight-id';
+import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
 
 // Declare the electron API
@@ -190,10 +190,28 @@ export class HighlighterWidget extends LitElement {
   }
 
   handleHighlightClick(color: HighlightColor) {
+    const selection = rangy.getSelection();
+    if (selection.rangeCount === 0) return;
+    const text = selection.toString();
+    if (text.length === 0) return;
+
     const highlighter = rangy.createHighlighter();
     highlighter.addClassApplier(appliers[color]);
     highlighter.highlightSelection(classNameFor(color));
-    rangy.getSelection().removeAllRanges();
+
+    // Stamp every fragment Rangy just produced with a shared id + the full
+    // selected text. Each fragment's drag payload reads these data attributes
+    // so dropping any fragment carries the entire selection, not just the
+    // characters inside that one element.
+    const className = classNameFor(color);
+    const fragments = Array.from(
+      document.querySelectorAll(`.${className}:not([data-octobase-highlight-id])`),
+    ) as HTMLElement[];
+    if (fragments.length > 0) {
+      stampHighlightGroup(fragments, text);
+    }
+
+    selection.removeAllRanges();
   }
 
   render() {
