@@ -6,9 +6,10 @@
   "description": "A note-taking App built for your brain",
   "main": "src/electron/main.js",
   "scripts": {
-    "electron-dev": "npm run build && electron --trace-warnings .",
-    "dev": "react-router dev",
+    "dev": "npm run build && electron --trace-warnings .",
+    "dev-react": "react-router dev",
     "vite-dev": "vite",
+    "test": "node --test test/**/*.test.ts",
     "build": "tsc -b && vite build && npm run build:highlighter",
     "build:highlighter": "vite build --config vite.highlighter.config.ts",
     "lint": "eslint .",

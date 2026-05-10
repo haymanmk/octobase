@@ -6,6 +6,7 @@ import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createStore } from './highlights-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,14 +48,11 @@ const createSplitView = () => {
   });
   overlayView = new WebContentsView({
     webPreferences: {
-      transparent: true,
-      frame: false,
       preload: path.join(__dirname, 'preload-overlay.js'),
       nodeIntegration: false,
       contextIsolation: true,
     }
   }); // For drag-and-drop overlays, if needed
-  overlayView.setBackgroundColor('#00000000'); // Transparent background
 
   // Add views to the parent window
   parentWin.contentView.addChildView(leftView);
@@ -71,8 +69,6 @@ const createSplitView = () => {
   // Inject text selection monitoring script
   // Read inject script
   const highlighterScript = fs.readFileSync(path.join(__dirname, '../../dist/highlighter/highlighter.iife.js'), 'utf8');
-  // console.log('Highlighter Script Loaded:');
-  // console.log(highlighterScript);
   rightView.webContents.on('did-finish-load', () => {
     // Inject JavaScript bundle
     rightView.webContents.executeJavaScript(highlighterScript).catch(err => console.error('JS injection failed:', err));
@@ -128,18 +124,63 @@ app.whenReady().then(() => {
   // createWindow()
   createSplitView();
 
+  const store = createStore(app.getPath('userData'));
+
+  // Highlights persistence (right view ↔ main)
+  ipcMain.handle('highlights:load', async (_event, { url }) => {
+    return await store.loadHighlightsForUrl(url);
+  });
+
+  ipcMain.handle('highlights:save', async (_event, highlight) => {
+    await store.saveHighlight(highlight);
+    rightView?.webContents.send('highlight:updated', highlight);
+    const card = await store.syncCardFromHighlight(highlight);
+    if (card) leftView?.webContents.send('card:updated', card);
+    return { ok: true };
+  });
+
+  ipcMain.handle('highlights:delete', async (_event, { id }) => {
+    await store.deleteHighlight(id);
+    rightView?.webContents.send('highlight:deleted', { id });
+    return { ok: true };
+  });
+
+  ipcMain.handle('tags:list', async () => await store.listTags());
+
+  // Cards persistence (left view ↔ main)
+  ipcMain.handle('cards:load', async () => await store.loadCards());
+
+  ipcMain.handle('cards:save', async (_event, card) => {
+    await store.saveCard(card);
+    leftView?.webContents.send('card:updated', card);
+    // Bidirectional sync: propagate content edits (color/tags/notes) from
+    // the card side back into the matching highlight, and broadcast so the
+    // right view can re-apply the highlight color if it changed.
+    const updatedHighlight = await store.syncHighlightFromCard(card);
+    if (updatedHighlight) {
+      rightView?.webContents.send('highlight:updated', updatedHighlight);
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('cards:delete', async (_event, { id }) => {
+    await store.deleteCard(id);
+    leftView?.webContents.send('card:deleted', { id });
+    return { ok: true };
+  });
+
   // Monitor text selection in the right view
   ipcMain.on('text-selection', (event, data) => {
-    console.log('Selected Text:', data.text);
-    console.log('Bounding Rect:', data.rect);
     // Here you can implement logic to show a popup or context menu based on selection
   });
 
   ipcMain.on('drag-drop-text-selection', (event, data) => {
-    console.log('Drag-Drop Selected Text:', data);
     if (data === '' || !data) return;
     // add overlay to parent window
     parentWin.contentView.addChildView(overlayView);
+    // Make overlay non-transparent at native level so it captures cursor hit-testing
+    // Format is #RRGGBBAA — alpha is the last two hex digits
+    overlayView.setBackgroundColor('#00000001');
     // Translate cursor position from right-view-local to window-global coordinates
     const rightBounds = rightView.getBounds();
     const adjustedData = {
@@ -165,8 +206,9 @@ app.whenReady().then(() => {
     overlayView.webContents.send('drag-end');
   });
 
-  ipcMain.on('highlight-dropped', (event, data) => {
-    console.log('Highlight Dropped:', data);
+  ipcMain.on('highlight-dropped', async (event, data) => {
+    // Restore overlay to fully transparent
+    overlayView.setBackgroundColor('#00000000');
     // Remove overlay from parent window
     try {
       parentWin.contentView.removeChildView(overlayView);
@@ -181,21 +223,45 @@ app.whenReady().then(() => {
     const dropX = data.x;
     const dropY = data.y;
 
-    if (dropX >= leftBounds.x && dropX <= leftBounds.x + leftBounds.width &&
-        dropY >= leftBounds.y && dropY <= leftBounds.y + leftBounds.height) {
-      // Translate to left view's local coordinates
-      const adjustedData = {
-        text: data.text,
-        sourceUrl: data.sourceUrl,
-        highlightId: data.highlightId,
-        x: dropX - leftBounds.x,
-        y: dropY - leftBounds.y,
-      };
-      console.log('Forwarding to whiteboard:', adjustedData);
-      leftView.webContents.send('highlight-dropped', adjustedData);
-    } else {
-      console.log('Drop outside whiteboard, discarding.');
+    if (
+      dropX < leftBounds.x || dropX > leftBounds.x + leftBounds.width ||
+      dropY < leftBounds.y || dropY > leftBounds.y + leftBounds.height
+    ) {
+      console.debug('Drop outside whiteboard, discarding.');
+      return;
     }
+
+    const localX = dropX - leftBounds.x;
+    const localY = dropY - leftBounds.y;
+
+    // Look up the originating highlight to copy color/tags/notes onto the card.
+    const allHighlights = await store.loadAllHighlights();
+    const highlight = allHighlights.find((h) => h.id === data.highlightId);
+    const now = Date.now();
+
+    const card = {
+      id: data.highlightId,
+      text: highlight?.text ?? data.text,
+      sourceUrl: highlight?.sourceUrl ?? data.sourceUrl,
+      color: highlight?.color ?? 'yellow',
+      tags: highlight?.tags ?? [],
+      notes: highlight?.notes ?? '',
+      x: localX,
+      y: localY,
+      updatedAt: now,
+    };
+    await store.saveCard(card);
+
+    // Legacy channel for whiteboard.tsx pre-rewrite; remove once whiteboard
+    // listens on `card:updated`.
+    leftView.webContents.send('highlight-dropped', {
+      text: card.text,
+      sourceUrl: card.sourceUrl,
+      highlightId: card.id,
+      x: card.x,
+      y: card.y,
+    });
+    leftView.webContents.send('card:updated', card);
   });
 });
 

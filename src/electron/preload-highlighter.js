@@ -1,21 +1,26 @@
-// import { contextBridge, ipcRenderer } from 'electron';
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Expose APIs here if needed
-  sendTextSelection: (data) => {
-    ipcRenderer.send('text-selection', data);
+  // existing drag APIs
+  sendDragText: (data) => ipcRenderer.send('drag-drop-text-selection', data),
+  sendDragPosition: (data) => ipcRenderer.send('drag-drop-text-position', data),
+  sendDragEnd: (data) => ipcRenderer.send('drag-drop-text-end', data),
+
+  // new persistence APIs
+  loadHighlights: (url) => ipcRenderer.invoke('highlights:load', { url }),
+  saveHighlight: (highlight) => ipcRenderer.invoke('highlights:save', highlight),
+  deleteHighlight: (id) => ipcRenderer.invoke('highlights:delete', { id }),
+  listTags: () => ipcRenderer.invoke('tags:list'),
+
+  // broadcast listeners
+  onHighlightUpdated: (callback) => {
+    ipcRenderer.removeAllListeners('highlight:updated');
+    ipcRenderer.on('highlight:updated', (_event, data) => callback(data));
   },
-  sendDragText: (data) => {
-    ipcRenderer.send('drag-drop-text-selection', data);
-    console.log('Sent drag-drop text selection:', data);
-  },
-  sendDragPosition: (data) => {
-    ipcRenderer.send('drag-drop-text-position', data);
-  },
-  sendDragEnd: (data) => {
-    ipcRenderer.send('drag-drop-text-end', data);
+  onHighlightDeleted: (callback) => {
+    ipcRenderer.removeAllListeners('highlight:deleted');
+    ipcRenderer.on('highlight:deleted', (_event, data) => callback(data));
   },
 });
 
-console.log('Preload script loaded');
+console.log('Preload-highlighter script loaded');

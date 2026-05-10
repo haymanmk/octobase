@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -14,7 +13,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * increases bundle size.
  */
 export default defineConfig({
-  plugins: [tsconfigPaths(), react()],
+  plugins: [tsconfigPaths()],
+  esbuild: {
+    target: 'es2022',
+    include: /\.(m?[jt]s|[jt]sx)$/,
+  },
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
     'process.env': JSON.stringify({})

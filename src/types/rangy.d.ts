@@ -12,6 +12,7 @@
  */
 import 'rangy/lib/rangy-highlighter';
 import 'rangy/lib/rangy-classapplier';
+import 'rangy/lib/rangy-serializer';
 
 declare module 'rangy' {
   function createHighlighter(
@@ -24,4 +25,22 @@ declare module 'rangy' {
     options?: globalThis.rangy.RangyClassApplierOptions,
     tagNames?: string[] | string,
   ): globalThis.rangy.RangyClassApplier;
+
+  function serializeRange(
+    range: globalThis.rangy.RangyRange,
+    omitChecksum?: boolean,
+    root?: Node,
+  ): string;
+
+  function deserializeRange(
+    serializedRange: string,
+    root?: Node,
+    doc?: Document,
+  ): globalThis.rangy.RangyRange;
+
+  function canDeserializeRange(
+    serializedRange: string,
+    root?: Node,
+    doc?: Document,
+  ): boolean;
 }

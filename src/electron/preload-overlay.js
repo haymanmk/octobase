@@ -25,5 +25,3 @@ contextBridge.exposeInMainWorld('overlayAPI', {
     ipcRenderer.send('highlight-dropped', data);
   },
 });
-
-console.log('Preload overlay script loaded');
