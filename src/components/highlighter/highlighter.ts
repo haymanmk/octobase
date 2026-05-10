@@ -14,11 +14,6 @@ import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
 
-console.log('[octobase-highlighter] module loaded; octo-edit-form registered =',
-  !!customElements.get('octo-edit-form'),
-  'octo-tag-input registered =',
-  !!customElements.get('octo-tag-input'));
-
 // Declare the electron API
 declare global {
   interface Window {
@@ -66,6 +61,7 @@ window.addEventListener('mouseup', () => {
     console.warn('[octobase-highlighter] restored stuck body.pointer-events:none');
   }
 }, true);
+
 
 // Attaches hold-to-drag behavior to a single highlight fragment element.
 function attachFragmentBehavior(htmlEl: HTMLElement) {
@@ -300,10 +296,8 @@ export class HighlighterWidget extends LitElement {
   }
 
   private async onSwatch(color: HighlightColor) {
-    console.log('[octobase-highlighter] onSwatch', color, 'currentId=', this.currentId);
     if (!this.currentId) {
       const id = await applyHighlightFromSelection(color);
-      console.log('[octobase-highlighter] applyHighlightFromSelection returned id=', id);
       if (!id) return;
       this.currentId = id;
       this.currentColor = color;
