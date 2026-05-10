@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, Chip } from '@mui/material';
+import { Box, Paper, Typography, Chip, TextField } from '@mui/material';
 import * as React from 'react';
 import { PALETTE } from '../components/highlighter/colors';
 import type { Card } from '../types/highlight';
@@ -17,7 +17,12 @@ function getElectronAPI(): WhiteboardElectronAPI | undefined {
   return (window as any).electronAPI;
 }
 
-function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string, x: number, y: number) => void; onDelete: (id: string) => void }) {
+function CardView({ card, onMove, onDelete, onUpdate }: {
+  card: Card;
+  onMove: (id: string, x: number, y: number) => void;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<Pick<Card, 'notes'>>) => void;
+}) {
   const ref = React.useRef<HTMLDivElement>(null);
   const buttonRef = React.useRef<HTMLDivElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -25,6 +30,21 @@ function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string,
   const offset = React.useRef({ x: 0, y: 0 });
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [notesExpanded, setNotesExpanded] = React.useState(false);
+  const [editingNotes, setEditingNotes] = React.useState(false);
+  const [notesDraft, setNotesDraft] = React.useState(card.notes);
+
+  React.useEffect(() => {
+    if (editingNotes) setNotesDraft(card.notes);
+  }, [editingNotes, card.notes]);
+
+  const commitNotes = () => {
+    if (notesDraft !== card.notes) onUpdate(card.id, { notes: notesDraft });
+    setEditingNotes(false);
+  };
+  const cancelNotes = () => {
+    setNotesDraft(card.notes);
+    setEditingNotes(false);
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
     dragging.current = true;
@@ -121,6 +141,15 @@ function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string,
           }}
         >
           <Box
+            onClick={() => { setMenuOpen(false); setEditingNotes(true); setNotesExpanded(true); }}
+            sx={{
+              px: 1.5, py: 0.75,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              '&:hover': { background: 'rgba(0,0,0,0.05)' },
+            }}
+          >Edit notes</Box>
+          <Box
             onClick={() => { setMenuOpen(false); onDelete(card.id); }}
             sx={{
               px: 1.5, py: 0.75,
@@ -143,7 +172,33 @@ function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string,
           ))}
         </Box>
       )}
-      {card.notes && (
+      {editingNotes ? (
+        <TextField
+          autoFocus
+          multiline
+          minRows={2}
+          maxRows={6}
+          placeholder="Notes…"
+          value={notesDraft}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => setNotesDraft(e.target.value)}
+          onBlur={commitNotes}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.stopPropagation(); cancelNotes(); }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitNotes(); }
+          }}
+          variant="outlined"
+          size="small"
+          sx={{
+            '& .MuiInputBase-root': {
+              fontSize: '0.7rem',
+              padding: 0.75,
+              background: 'rgba(255,255,255,0.6)',
+            },
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0,0,0,0.12)' },
+          }}
+        />
+      ) : card.notes ? (
         <Typography
           variant="caption"
           onPointerDown={(e) => e.stopPropagation()}
@@ -161,7 +216,7 @@ function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string,
         >
           {card.notes}
         </Typography>
-      )}
+      ) : null}
       {hostname && (
         <Chip label={hostname} size="small" variant="outlined" sx={{ fontSize: '0.6rem', maxWidth: 180, alignSelf: 'flex-start', mt: 'auto', bgcolor: 'rgba(255,255,255,0.5)' }} />
       )}
@@ -209,9 +264,23 @@ export default function Whiteboard(): React.ReactElement {
     await getElectronAPI()?.deleteCard?.(id);
   }, []);
 
+  const handleUpdate = React.useCallback(async (id: string, patch: Partial<Pick<Card, 'notes'>>) => {
+    let updated: Card | undefined;
+    setCards(prev => {
+      const next = prev.map(c => {
+        if (c.id !== id) return c;
+        const merged = { ...c, ...patch, updatedAt: Date.now() };
+        updated = merged;
+        return merged;
+      });
+      return next;
+    });
+    if (updated) await getElectronAPI()?.saveCard?.(updated);
+  }, []);
+
   return (
     <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-      {cards.map(c => <CardView key={c.id} card={c} onMove={handleMove} onDelete={handleDelete} />)}
+      {cards.map(c => <CardView key={c.id} card={c} onMove={handleMove} onDelete={handleDelete} onUpdate={handleUpdate} />)}
     </Box>
   );
 }
