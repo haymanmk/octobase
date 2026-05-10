@@ -19,14 +19,15 @@ test("classNameFor returns the expected class per color", () => {
   assert.equal(classNameFor("orange"), "octo-hl-orange");
 });
 
-test("paletteCss includes a rounded-end marker rule for every color with its fill", () => {
+test("paletteCss emits a marker-stroke rule for every color with its fill", () => {
   const css = paletteCss();
   for (const color of Object.keys(PALETTE)) {
     assert.match(css, new RegExp(`\\.octo-hl-${color}\\b`));
-    assert.match(css, new RegExp(`\\.octo-hl-${color}::before`));
   }
   for (const entry of Object.values(PALETTE)) {
     assert.ok(css.includes(entry.fill), `expected fill ${entry.fill} in css`);
   }
+  assert.match(css, /linear-gradient/);
   assert.match(css, /border-radius:\s*999px/);
+  assert.match(css, /box-decoration-break:\s*clone/);
 });

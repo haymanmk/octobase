@@ -17,22 +17,16 @@ export function paletteCss(): string {
   return (Object.entries(PALETTE) as Array<[HighlightColor, { fill: string; underline: string }]>)
     .map(
       ([color, { fill }]) => `.${classNameFor(color)} {
-  position: relative;
-  z-index: 0;
-  padding: 0 4px;
+  background-image: linear-gradient(transparent 20%, ${fill} 20%, ${fill} 80%, transparent 80%);
+  border-radius: 999px;
+  padding: 0 0.4em;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
-.${classNameFor(color)}::before {
-  content: "";
-  position: absolute;
-  inset: 20% 0;
-  background: ${fill};
-  border-radius: 999px;
-  z-index: -1;
-}
-.${classNameFor(color)}:hover::before { filter: brightness(0.97); }`,
+.${classNameFor(color)}:hover { filter: brightness(0.97); }`,
     )
     .join("\n");
 }
