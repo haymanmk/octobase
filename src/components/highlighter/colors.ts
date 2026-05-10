@@ -16,17 +16,23 @@ export function classNameFor(color: HighlightColor): string {
 export function paletteCss(): string {
   return (Object.entries(PALETTE) as Array<[HighlightColor, { fill: string; underline: string }]>)
     .map(
-      ([color, { fill, underline }]) => `.${classNameFor(color)} {
-  background-color: ${fill};
-  border-bottom: 3px solid ${underline};
-  border-radius: 3px;
-  padding: 2px 4px;
+      ([color, { fill }]) => `.${classNameFor(color)} {
+  position: relative;
+  z-index: 0;
+  padding: 0 4px;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  mix-blend-mode: multiply;
 }
-.${classNameFor(color)}:hover { filter: brightness(0.97); }`,
+.${classNameFor(color)}::before {
+  content: "";
+  position: absolute;
+  inset: 20% 0;
+  background: ${fill};
+  border-radius: 999px;
+  z-index: -1;
+}
+.${classNameFor(color)}:hover::before { filter: brightness(0.97); }`,
     )
     .join("\n");
 }
