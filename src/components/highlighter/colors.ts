@@ -19,7 +19,7 @@ export function paletteCss(): string {
       ([color, { fill }]) => `.${classNameFor(color)} {
   background-image: linear-gradient(transparent 20%, ${fill} 20%, ${fill} 80%, transparent 80%);
   border-radius: 999px;
-  padding: 0 0.4em;
+  padding: 0;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
