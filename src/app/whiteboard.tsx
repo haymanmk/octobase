@@ -311,7 +311,7 @@ export default function Whiteboard(): React.ReactElement {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         message="Card deleted"
         action={
-          <Button color="inherit" size="small" onClick={handleUndoDelete} sx={{ textDecoration: 'underline' }}>
+          <Button color="inherit" size="small" onClick={handleUndoDelete} sx={{ textDecoration: 'underline', textTransform: 'none' }}>
             Undo
           </Button>
         }
