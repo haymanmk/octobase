@@ -93,6 +93,31 @@ export function createStore(dataDir) {
     return updated;
   }
 
+  async function syncHighlightFromCard(card) {
+    const all = await loadAllHighlights();
+    const idx = all.findIndex((h) => h.id === card.id);
+    if (idx < 0) return null;
+    const prev = all[idx];
+    const sameTags =
+      Array.isArray(prev.tags) &&
+      Array.isArray(card.tags) &&
+      prev.tags.length === card.tags.length &&
+      prev.tags.every((t, i) => t === card.tags[i]);
+    if (prev.color === card.color && prev.notes === card.notes && sameTags) {
+      return null;
+    }
+    const updated = {
+      ...prev,
+      color: card.color,
+      tags: card.tags,
+      notes: card.notes,
+      updatedAt: card.updatedAt,
+    };
+    all[idx] = updated;
+    await writeJson(highlightsPath, all);
+    return updated;
+  }
+
   return {
     loadAllHighlights,
     loadHighlightsForUrl,
@@ -103,5 +128,6 @@ export function createStore(dataDir) {
     saveCard,
     deleteCard,
     syncCardFromHighlight,
+    syncHighlightFromCard,
   };
 }

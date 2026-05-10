@@ -92,7 +92,11 @@ function CardView({ card, onMove, onDelete, onUpdate }: {
         transform: 'translate(-50%, -50%)',
         width: 240, maxHeight: 260, p: 1.5,
         borderRadius: 2,
-        cursor: 'grab', userSelect: 'none', overflow: 'hidden',
+        cursor: 'grab', userSelect: 'none',
+        // No overflow:hidden — the menu popup is positioned absolute inside
+        // the Paper, and on short cards it must extend past the bottom of
+        // the card without being clipped. Child text/notes have their own
+        // overflow rules.
         '&:active': { cursor: 'grabbing' },
         display: 'flex', flexDirection: 'column', gap: 0.75,
         backgroundColor: palette.fill,

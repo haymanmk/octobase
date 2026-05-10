@@ -153,6 +153,13 @@ app.whenReady().then(() => {
   ipcMain.handle('cards:save', async (_event, card) => {
     await store.saveCard(card);
     leftView?.webContents.send('card:updated', card);
+    // Bidirectional sync: propagate content edits (color/tags/notes) from
+    // the card side back into the matching highlight, and broadcast so the
+    // right view can re-apply the highlight color if it changed.
+    const updatedHighlight = await store.syncHighlightFromCard(card);
+    if (updatedHighlight) {
+      rightView?.webContents.send('highlight:updated', updatedHighlight);
+    }
     return { ok: true };
   });
 

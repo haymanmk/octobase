@@ -136,3 +136,48 @@ test("syncCardFromHighlight returns null when no matching card exists", async ()
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("syncHighlightFromCard updates content fields and returns the new highlight", async () => {
+  const dir = freshDir();
+  try {
+    const store = createStore(dir);
+    await store.saveHighlight(sampleHighlight({ id: "hl-1", color: "yellow", notes: "old", tags: ["a"] }));
+    const updated = await store.syncHighlightFromCard(
+      sampleCard({ id: "hl-1", color: "blue", notes: "new", tags: ["a", "b"], updatedAt: 5000 }),
+    );
+    assert.ok(updated);
+    assert.equal(updated!.color, "blue");
+    assert.equal(updated!.notes, "new");
+    assert.deepEqual(updated!.tags, ["a", "b"]);
+    assert.equal(updated!.updatedAt, 5000);
+    // text and anchor are NOT updated from the card side.
+    assert.equal(updated!.text, "selected text");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("syncHighlightFromCard returns null when nothing of substance changed", async () => {
+  const dir = freshDir();
+  try {
+    const store = createStore(dir);
+    await store.saveHighlight(sampleHighlight({ id: "hl-1", color: "yellow", notes: "x", tags: ["a"] }));
+    const result = await store.syncHighlightFromCard(
+      sampleCard({ id: "hl-1", color: "yellow", notes: "x", tags: ["a"], updatedAt: 9999 }),
+    );
+    assert.equal(result, null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("syncHighlightFromCard returns null when no matching highlight exists", async () => {
+  const dir = freshDir();
+  try {
+    const store = createStore(dir);
+    const result = await store.syncHighlightFromCard(sampleCard({ id: "hl-missing" }));
+    assert.equal(result, null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

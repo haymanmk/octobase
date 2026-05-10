@@ -650,6 +650,28 @@ const highlighterWidget = new HighlighterWidget();
   });
 })();
 
+// React to highlight updates broadcast by main (e.g. card-side edits that
+// propagated back via syncHighlightFromCard). The id is shared across every
+// rendered fragment, so we swap the class on each one.
+window.electronAPI?.onHighlightUpdated?.((h) => {
+  const fragments = Array.from(
+    document.querySelectorAll(`[data-octobase-highlight-id="${h.id}"]`),
+  ) as HTMLElement[];
+  if (fragments.length === 0) return;
+  for (const el of fragments) {
+    let needsClassSwap = true;
+    for (const c of HIGHLIGHT_COLORS) {
+      if (c === h.color) {
+        if (el.classList.contains(classNameFor(c))) needsClassSwap = false;
+      } else {
+        el.classList.remove(classNameFor(c));
+      }
+    }
+    if (needsClassSwap) el.classList.add(classNameFor(h.color));
+    if (typeof h.text === 'string') el.dataset.octobaseHighlightText = h.text;
+  }
+});
+
 // Re-apply persisted highlights for this URL once the page is settled.
 async function reapplyOnLoad() {
   const url = window.location.href;
