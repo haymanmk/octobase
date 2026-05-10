@@ -17,10 +17,14 @@ function getElectronAPI(): WhiteboardElectronAPI | undefined {
   return (window as any).electronAPI;
 }
 
-function CardView({ card, onMove }: { card: Card; onMove: (id: string, x: number, y: number) => void; onDelete: (id: string) => void }) {
+function CardView({ card, onMove, onDelete }: { card: Card; onMove: (id: string, x: number, y: number) => void; onDelete: (id: string) => void }) {
   const ref = React.useRef<HTMLDivElement>(null);
+  const buttonRef = React.useRef<HTMLDivElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
   const dragging = React.useRef(false);
   const offset = React.useRef({ x: 0, y: 0 });
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [notesExpanded, setNotesExpanded] = React.useState(false);
 
   const onPointerDown = (e: React.PointerEvent) => {
     dragging.current = true;
@@ -35,6 +39,20 @@ function CardView({ card, onMove }: { card: Card; onMove: (id: string, x: number
     dragging.current = false;
     ref.current?.releasePointerCapture(e.pointerId);
   };
+
+  // Close the menu when the user clicks anywhere outside the menu and the
+  // button that toggles it.
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (buttonRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [menuOpen]);
 
   let hostname = '';
   try { hostname = new URL(card.sourceUrl).hostname; } catch { hostname = card.sourceUrl; }
@@ -61,8 +79,59 @@ function CardView({ card, onMove }: { card: Card; onMove: (id: string, x: number
         borderBottom: `4px solid ${palette.underline}`,
         transition: 'box-shadow 0.2s',
         '&:hover': { boxShadow: '0 6px 20px rgba(0,0,0,0.18)' },
+        '&:hover .card-menu-btn': { opacity: 1 },
       }}
     >
+      <Box
+        ref={buttonRef}
+        className="card-menu-btn"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+        sx={{
+          position: 'absolute',
+          top: 4, right: 4,
+          width: 22, height: 22,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.9)',
+          border: '1px solid rgba(0,0,0,0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, lineHeight: 1, color: 'rgba(0,0,0,0.6)',
+          cursor: 'pointer',
+          opacity: menuOpen ? 1 : 0,
+          transition: 'opacity 0.15s',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          '&:hover': { color: 'rgba(0,0,0,0.9)' },
+        }}
+      >⋯</Box>
+      {menuOpen && (
+        <Box
+          ref={menuRef}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            position: 'absolute',
+            top: 30, right: 4,
+            background: 'white',
+            border: '1px solid #e5e5e5',
+            borderRadius: 1,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+            py: 0.5,
+            minWidth: 110,
+            zIndex: 10,
+          }}
+        >
+          <Box
+            onClick={() => { setMenuOpen(false); onDelete(card.id); }}
+            sx={{
+              px: 1.5, py: 0.75,
+              fontSize: '0.8rem',
+              color: '#ef4444',
+              cursor: 'pointer',
+              '&:hover': { background: 'rgba(239,68,68,0.08)' },
+            }}
+          >Delete</Box>
+        </Box>
+      )}
       <Typography
         variant="body2"
         sx={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', lineHeight: 1.5, fontSize: '0.8rem' }}
@@ -75,7 +144,21 @@ function CardView({ card, onMove }: { card: Card; onMove: (id: string, x: number
         </Box>
       )}
       {card.notes && (
-        <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.7)', whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>
+        <Typography
+          variant="caption"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setNotesExpanded((p) => !p); }}
+          title={notesExpanded ? 'Click to collapse' : 'Click to expand'}
+          sx={{
+            fontSize: '0.7rem',
+            color: 'rgba(0,0,0,0.7)',
+            cursor: 'pointer',
+            ...(notesExpanded
+              ? { whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto' }
+              : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }
+            ),
+          }}
+        >
           {card.notes}
         </Typography>
       )}
