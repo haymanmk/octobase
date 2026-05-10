@@ -292,9 +292,15 @@ const highlighterWidget = new HighlighterWidget();
 
 // Re-apply persisted highlights for this URL once the page is settled.
 async function reapplyOnLoad() {
-  const records = (await window.electronAPI?.loadHighlights(window.location.href)) ?? [];
+  const url = window.location.href;
+  const records = (await window.electronAPI?.loadHighlights(url)) ?? [];
+  console.log(`[octobase-highlighter] reapplyOnLoad: ${records.length} records for ${url}`);
   for (const r of records) {
     try {
+      if (!rangy.canDeserializeRange(r.anchor.serialized, document.body)) {
+        console.warn('[octobase-highlighter] cannot deserialize range', r.id, r.anchor.serialized);
+        continue;
+      }
       const range = rangy.deserializeRange(r.anchor.serialized, document.body);
       const sel = rangy.getSelection();
       sel.removeAllRanges();
@@ -312,8 +318,15 @@ async function reapplyOnLoad() {
         stampHighlightGroup(fragments, r.text, () => r.id);
       }
     } catch (err) {
-      console.warn('Failed to re-apply highlight', r.id, err);
+      console.warn('[octobase-highlighter] failed to re-apply highlight', r.id, err);
     }
   }
 }
-reapplyOnLoad();
+
+// Run after the page DOM has been parsed; the serialized Rangy anchors
+// reference nodes inside the page content, which don't exist at preload time.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { reapplyOnLoad(); });
+} else {
+  reapplyOnLoad();
+}
