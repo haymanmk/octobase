@@ -190,14 +190,19 @@ function closeEditPanel(): void {
 }
 
 async function persistEdit(): Promise<void> {
-  if (!editPanelTargetId || !editPanelLocal) return;
-  const record = await loadHighlightById(editPanelTargetId);
+  // Snapshot before any await — the panel may close (and clear these globals)
+  // while loadHighlightById is in flight, e.g. when the same click that blurs
+  // the notes textarea also lands outside the panel.
+  const id = editPanelTargetId;
+  const local = editPanelLocal;
+  if (!id || !local) return;
+  const record = await loadHighlightById(id);
   if (!record) return;
   await window.electronAPI?.saveHighlight({
     ...record,
-    color: editPanelLocal.color ?? record.color,
-    tags: editPanelLocal.tags,
-    notes: editPanelLocal.notes,
+    color: local.color ?? record.color,
+    tags: local.tags,
+    notes: local.notes,
     updatedAt: Date.now(),
   });
 }
