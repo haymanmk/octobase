@@ -13,6 +13,7 @@ import { classNameFor, PALETTE } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
+import './undo-toast';
 
 // Declare the electron API
 declare global {
@@ -124,10 +125,135 @@ function scheduleMenuButtonHide() {
   }, 250);
 }
 
-// Stub. Full edit panel lands in Task 13.
-function openEditPanel(highlightId: string, anchorRect: DOMRect): void {
-  console.log('[octobase-highlighter] openEditPanel', highlightId, anchorRect);
+// === Edit panel (opened from the menu button on a saved highlight) ===
+let editPanelEl: HTMLElement | null = null;
+let editPanelTargetId: string | null = null;
+let editPanelLocal: { color: HighlightColor | null; tags: string[]; notes: string } | null = null;
+
+async function openEditPanel(highlightId: string, anchorRect: DOMRect): Promise<void> {
+  closeEditPanel();
+  const record = await loadHighlightById(highlightId);
+  if (!record) return;
+
+  const form = document.createElement('octo-edit-form') as HTMLElement & {
+    color: HighlightColor | null;
+    tags: string[];
+    notes: string;
+    suggestions: string[];
+    showDelete: boolean;
+  };
+  form.color = record.color;
+  form.tags = [...record.tags];
+  form.notes = record.notes;
+  form.suggestions = (await window.electronAPI?.listTags()) ?? [];
+  form.showDelete = true;
+
+  form.style.position = 'absolute';
+  form.style.top = `${anchorRect.bottom + window.scrollY + 6}px`;
+  form.style.left = `${Math.min(anchorRect.left + window.scrollX, window.scrollX + window.innerWidth - 320)}px`;
+  form.style.zIndex = '10000';
+
+  editPanelLocal = { color: record.color, tags: [...record.tags], notes: record.notes };
+  editPanelTargetId = highlightId;
+
+  form.addEventListener('color-changed', async (e: Event) => {
+    if (!editPanelTargetId || !editPanelLocal) return;
+    const c = (e as CustomEvent).detail.color as HighlightColor;
+    editPanelLocal.color = c;
+    await changeHighlightColor(editPanelTargetId, c);
+  });
+  form.addEventListener('tags-changed', async (e: Event) => {
+    if (!editPanelTargetId || !editPanelLocal) return;
+    editPanelLocal.tags = (e as CustomEvent).detail.tags;
+    await persistEdit();
+  });
+  form.addEventListener('notes-changed', async (e: Event) => {
+    if (!editPanelTargetId || !editPanelLocal) return;
+    editPanelLocal.notes = (e as CustomEvent).detail.notes;
+    await persistEdit();
+  });
+  form.addEventListener('delete-requested', async () => {
+    const id = editPanelTargetId!;
+    closeEditPanel();
+    await deleteHighlightWithUndo(id);
+  });
+
+  document.body.appendChild(form);
+  editPanelEl = form;
 }
+
+function closeEditPanel(): void {
+  if (editPanelEl && editPanelEl.parentNode) editPanelEl.parentNode.removeChild(editPanelEl);
+  editPanelEl = null;
+  editPanelTargetId = null;
+  editPanelLocal = null;
+}
+
+async function persistEdit(): Promise<void> {
+  if (!editPanelTargetId || !editPanelLocal) return;
+  const record = await loadHighlightById(editPanelTargetId);
+  if (!record) return;
+  await window.electronAPI?.saveHighlight({
+    ...record,
+    color: editPanelLocal.color ?? record.color,
+    tags: editPanelLocal.tags,
+    notes: editPanelLocal.notes,
+    updatedAt: Date.now(),
+  });
+}
+
+async function deleteHighlightWithUndo(id: string): Promise<void> {
+  const record = await loadHighlightById(id);
+  if (!record) return;
+
+  // Unwrap and remove every fragment of this highlight.
+  const fragments = Array.from(document.querySelectorAll(`[data-octobase-highlight-id="${id}"]`)) as HTMLElement[];
+  for (const el of fragments) {
+    while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
+    el.remove();
+  }
+  await window.electronAPI?.deleteHighlight(id);
+
+  // Toast with Undo.
+  const toast = document.createElement('octo-undo-toast');
+  let undone = false;
+  toast.addEventListener('undo-clicked', async () => {
+    undone = true;
+    toast.remove();
+    try {
+      const range = rangy.deserializeRange(record.anchor.serialized, document.body);
+      const sel = rangy.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const h = rangy.createHighlighter();
+      h.addClassApplier(appliers[record.color]);
+      h.highlightSelection(classNameFor(record.color));
+      sel.removeAllRanges();
+      for (const el of document.querySelectorAll(`.${classNameFor(record.color)}:not([data-octobase-highlight-id])`)) {
+        const htmlEl = el as HTMLElement;
+        htmlEl.dataset.octobaseHighlightId = record.id;
+        htmlEl.dataset.octobaseHighlightText = record.text;
+      }
+      await window.electronAPI?.saveHighlight({ ...record, updatedAt: Date.now() });
+    } catch (err) {
+      console.warn('[octobase-highlighter] undo re-apply failed', err);
+    }
+  });
+  document.body.appendChild(toast);
+  setTimeout(() => { if (!undone) toast.remove(); }, 5000);
+}
+
+// Click outside the edit panel (and not on the menu button that may have
+// triggered it) → close. Also Esc closes from anywhere.
+document.addEventListener('mousedown', (e) => {
+  if (!editPanelEl) return;
+  if (editPanelEl.contains(e.target as Node)) return;
+  if (menuButton && menuButton.contains(e.target as Node)) return;
+  closeEditPanel();
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && editPanelEl) closeEditPanel();
+});
 
 // Attaches hold-to-drag behavior to a single highlight fragment element.
 function attachFragmentBehavior(htmlEl: HTMLElement) {
