@@ -296,6 +296,10 @@ async function reapplyOnLoad() {
   const records = (await window.electronAPI?.loadHighlights(url)) ?? [];
   console.log(`[octobase-highlighter] reapplyOnLoad: ${records.length} records for ${url}`);
   for (const r of records) {
+    console.log(`[octobase-highlighter] re-applying ${r.id}`, {
+      text: r.text,
+      serialized: r.anchor.serialized,
+    });
     try {
       if (!rangy.canDeserializeRange(r.anchor.serialized, document.body)) {
         console.warn('[octobase-highlighter] cannot deserialize range', r.id, r.anchor.serialized);
@@ -323,10 +327,14 @@ async function reapplyOnLoad() {
   }
 }
 
-// Run after the page DOM has been parsed; the serialized Rangy anchors
-// reference nodes inside the page content, which don't exist at preload time.
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { reapplyOnLoad(); });
+// Run after the page is fully loaded (incl. resources) plus a short settle
+// delay so JS-driven content has a chance to render before we resolve the
+// serialized Rangy anchors.
+function scheduleReapply() {
+  setTimeout(() => { reapplyOnLoad(); }, 500);
+}
+if (document.readyState === 'complete') {
+  scheduleReapply();
 } else {
-  reapplyOnLoad();
+  window.addEventListener('load', () => { scheduleReapply(); });
 }
