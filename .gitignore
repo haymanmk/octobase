@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .react-router/
 .superpowers/
+.github/prompts/
 
 # Editor directories and files
 .vscode/*
