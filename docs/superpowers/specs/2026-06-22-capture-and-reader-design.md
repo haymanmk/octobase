@@ -1,7 +1,9 @@
 # octobase — Article Reader + Capture Extension (Phase 3 + Phase 4) Design
 
 Date: 2026-06-22
-Status: Spec only (next builds). Foundation (P1) and KB core (P2) are done.
+Status: **Implemented** (P3 reader + P4 server/extension built). Foundation (P1)
+and KB core (P2) were done first. See `docs/capture-extension.md` for how to run
+and what is verified vs. needs a desktop run.
 
 This is the concrete answer to "do we need a Chrome extension?" — **yes**, and
 here is how it plugs into what now exists.
