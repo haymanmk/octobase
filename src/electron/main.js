@@ -7,6 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './highlights-store.js';
+import { createCaptureServer } from './capture-server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +17,7 @@ let parentWin = null;
 let overlayView = null;
 let leftView = null;
 let rightView = null;
+let captureServer = null;
 
 const createSplitView = () => {
   // Parent window
@@ -147,6 +149,28 @@ app.whenReady().then(() => {
 
   ipcMain.handle('tags:list', async () => await store.listTags());
 
+  // Capture extension: localhost server forwards captures/highlights to the
+  // knowledge-base renderer (left view), which adds them as inbox cards.
+  captureServer = createCaptureServer({
+    onCapture: (data) => {
+      leftView?.webContents.send('capture:received', data);
+      return { id: null };
+    },
+    onHighlight: (data) => {
+      leftView?.webContents.send('highlight:received', data);
+      return { id: null };
+    },
+  });
+  captureServer
+    .start()
+    .then((port) => console.log(`octobase capture server listening on http://127.0.0.1:${port}`))
+    .catch((err) => console.error('capture server failed to start:', err));
+
+  ipcMain.handle('extension:info', () => ({
+    port: captureServer?.port ?? 7373,
+    token: captureServer?.token ?? '',
+  }));
+
   // Cards persistence (left view ↔ main)
   ipcMain.handle('cards:load', async () => await store.loadCards());
 
@@ -263,6 +287,10 @@ app.whenReady().then(() => {
     });
     leftView.webContents.send('card:updated', card);
   });
+});
+
+app.on('will-quit', () => {
+  captureServer?.stop();
 });
 
 app.on('window-all-closed', () => {

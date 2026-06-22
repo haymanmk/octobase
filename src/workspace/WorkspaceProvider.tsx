@@ -2,6 +2,7 @@ import * as React from "react";
 import { WorkspaceStore } from "../lib/store/workspace-store.ts";
 import { LocalStoragePersistence } from "../lib/store/persistence.ts";
 import { StoreContext } from "./store-context.ts";
+import { getCaptureBridge } from "./electron-bridge.ts";
 
 export function WorkspaceProvider({
   children,
@@ -27,6 +28,30 @@ export function WorkspaceProvider({
     return () => {
       cancelled = true;
     };
+  }, [store]);
+
+  // In Electron, captures/highlights from the Chrome extension arrive over IPC
+  // and land in the inbox.
+  React.useEffect(() => {
+    const bridge = getCaptureBridge();
+    if (!bridge) return;
+    bridge.onCapture((d) => {
+      store.createArticleCard({
+        title: d.title,
+        body: d.markdown,
+        sourceUrl: d.url,
+        siteName: d.siteName,
+        byline: d.byline,
+      });
+    });
+    bridge.onHighlight((d) => {
+      store.createHighlightCard({
+        text: d.exact ?? d.anchor.exact,
+        sourceUrl: d.url,
+        anchor: d.anchor,
+        color: d.color,
+      });
+    });
   }, [store]);
 
   if (!ready) {

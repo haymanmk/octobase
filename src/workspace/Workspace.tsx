@@ -8,6 +8,7 @@ import { Inspector } from "./Inspector.tsx";
 import { CardEditor } from "./CardEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { Reader } from "./reader/Reader.tsx";
+import { getCaptureBridge, type ExtensionInfo } from "./electron-bridge.ts";
 
 interface ContextMenuState {
   cardId: string;
@@ -32,6 +33,8 @@ function WorkspaceInner(): React.ReactElement {
   const [ctx, setCtx] = React.useState<ContextMenuState | null>(null);
   const [toast, setToast] = React.useState<ToastState | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
+  const captureBridge = getCaptureBridge();
 
   // Keep the active board valid if it gets deleted.
   const version = store.getVersion();
@@ -171,6 +174,10 @@ function WorkspaceInner(): React.ReactElement {
           >
             {inspectorOpen ? "Hide panel" : "Show panel"}
           </button>
+          {captureBridge && (
+            <button className="ws-btn" title="Pair the Chrome capture extension"
+              onClick={async () => setConnectInfo(await captureBridge.getInfo())}>🔌 Connect extension</button>
+          )}
           <button className="ws-btn" onClick={() => setCmdk({ open: true })}>⌕ Search</button>
           <button className="ws-btn primary" onClick={newCardOnBoard}>+ New card</button>
         </header>
@@ -251,6 +258,30 @@ function WorkspaceInner(): React.ReactElement {
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>⇤ Move to inbox</div>
           <div className="ws-ctx-sep" />
           <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>🗑 Delete card</div>
+        </div>
+      )}
+
+      {connectInfo && (
+        <div className="ws-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectInfo(null); }}>
+          <div className="ws-editor" style={{ width: "min(440px, 92vw)" }}>
+            <div className="ws-editor-accent" style={{ background: "var(--ws-accent)" }} />
+            <div className="ws-editor-titlebar">
+              <div className="ws-editor-title-input" style={{ fontSize: 22 }}>Connect the capture extension</div>
+            </div>
+            <div className="ws-editor-scroll" style={{ fontSize: 14, lineHeight: 1.6 }}>
+              <p style={{ marginTop: 0 }}>Load the unpacked extension from <code>dist-extension/</code>, open its
+              popup → <em>Connection settings</em>, and paste:</p>
+              <label className="ws-insp-label">Port</label>
+              <input readOnly value={connectInfo.port} className="ws-tagedit"
+                style={{ width: "100%", padding: 8, border: "1px solid var(--ws-line)", borderRadius: 8, fontFamily: "var(--ws-font-mono)" }} />
+              <label className="ws-insp-label">Pairing token</label>
+              <input readOnly value={connectInfo.token} onFocus={(e) => e.target.select()}
+                style={{ width: "100%", padding: 8, border: "1px solid var(--ws-line)", borderRadius: 8, fontFamily: "var(--ws-font-mono)", fontSize: 12 }} />
+            </div>
+            <div className="ws-editor-foot" style={{ justifyContent: "flex-end" }}>
+              <button className="ws-btn primary" onClick={() => setConnectInfo(null)}>Done</button>
+            </div>
+          </div>
         </div>
       )}
 

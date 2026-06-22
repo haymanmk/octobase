@@ -25,4 +25,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 });
 
+// Bridge for the Chrome capture extension: the localhost server runs in the
+// main process and forwards captures/highlights to this (left) renderer.
+contextBridge.exposeInMainWorld('octobaseCapture', {
+  getInfo: () => ipcRenderer.invoke('extension:info'),
+  onCapture: (callback) => {
+    ipcRenderer.removeAllListeners('capture:received');
+    ipcRenderer.on('capture:received', (_event, data) => callback(data));
+  },
+  onHighlight: (callback) => {
+    ipcRenderer.removeAllListeners('highlight:received');
+    ipcRenderer.on('highlight:received', (_event, data) => callback(data));
+  },
+});
+
 console.log('Preload script loaded');
