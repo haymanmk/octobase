@@ -105,27 +105,38 @@ function flash(text: string) {
   setTimeout(() => el.remove(), 2600);
 }
 
-document.addEventListener("mouseup", () => {
-  setTimeout(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      if (!toolbar) return;
-      removeToolbar();
-      return;
-    }
-    lastRange = sel.getRangeAt(0).cloneRange();
-    showToolbar(lastRange);
-  }, 0);
-});
-document.addEventListener("scroll", removeToolbar, true);
-
-chrome.runtime.onMessage.addListener((msg: { type: string }) => {
-  if (msg.type === "capture") void captureArticle();
-  if (msg.type === "highlight-selection") {
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+function registerListeners() {
+  document.addEventListener("mouseup", () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        if (!toolbar) return;
+        removeToolbar();
+        return;
+      }
       lastRange = sel.getRangeAt(0).cloneRange();
-      void saveHighlight("yellow");
+      showToolbar(lastRange);
+    }, 0);
+  });
+  document.addEventListener("scroll", removeToolbar, true);
+
+  chrome.runtime.onMessage.addListener((msg: { type: string }) => {
+    if (msg.type === "capture") void captureArticle();
+    if (msg.type === "highlight-selection") {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+        lastRange = sel.getRangeAt(0).cloneRange();
+        void saveHighlight("yellow");
+      }
     }
-  }
-});
+  });
+}
+
+// This file is both a declared content script AND injected on demand by the
+// popup/context-menu (so capture works on tabs that were already open before the
+// extension loaded). Guard so re-injection doesn't double-bind listeners.
+const loadFlag = window as unknown as { __octobaseContentLoaded?: boolean };
+if (!loadFlag.__octobaseContentLoaded) {
+  loadFlag.__octobaseContentLoaded = true;
+  registerListeners();
+}

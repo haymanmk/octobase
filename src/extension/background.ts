@@ -107,9 +107,22 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (!tab?.id) return;
-  if (info.menuItemId === "octo-capture") chrome.tabs.sendMessage(tab.id, { type: "capture" });
-  if (info.menuItemId === "octo-highlight") chrome.tabs.sendMessage(tab.id, { type: "highlight-selection" });
+  const tabId = tab?.id;
+  if (!tabId) return;
+  const type = info.menuItemId === "octo-capture" ? "capture" : "highlight-selection";
+  void (async () => {
+    // Make sure the content script is present (the tab may predate install).
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    } catch {
+      return; // restricted page
+    }
+    try {
+      await chrome.tabs.sendMessage(tabId, { type });
+    } catch {
+      /* page not reachable */
+    }
+  })();
 });
 
 // Periodically retry the queue.

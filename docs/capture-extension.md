@@ -59,6 +59,17 @@ Then chrome://extensions → enable Developer mode → **Load unpacked** →
 `dist-extension/`. Open the popup → Connection settings → paste the port + token
 from octobase's "Connect extension" panel.
 
+Notes:
+- The **Capture** button and the **right-click menu** inject the content script
+  on demand, so they work on any tab — including tabs that were already open
+  before you loaded the extension.
+- The **inline selection highlighter** (the color toolbar on text selection) is a
+  declared content script, so it only appears on pages loaded *after* the
+  extension was installed/reloaded. **Reload an already-open tab** to enable it
+  there.
+- The pairing **token is persisted** by the app (`<userData>/capture-token.txt`),
+  so it stays valid across restarts — pair once.
+
 ## What's verified vs. what needs a desktop run
 
 - **Verified (CI-able):** the extractor (4 tests, linkedom), the capture server

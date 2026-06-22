@@ -28,11 +28,29 @@ async function refresh() {
   queueEl.textContent = q?.size ? `${q.size} item${q.size > 1 ? "s" : ""} queued for delivery` : "";
 }
 
+async function ensureContentScript(tabId: number): Promise<boolean> {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    return true;
+  } catch {
+    // Restricted page (chrome://, web store, PDF viewer, etc.).
+    return false;
+  }
+}
+
 captureBtn.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
+  if (!tab?.id) return;
+  const injected = await ensureContentScript(tab.id);
+  if (!injected) {
+    statusText.textContent = "Can't capture this page";
+    return;
+  }
+  try {
     await chrome.tabs.sendMessage(tab.id, { type: "capture" });
     window.close();
+  } catch {
+    statusText.textContent = "Couldn't reach the page — try reloading it";
   }
 });
 

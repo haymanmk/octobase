@@ -5,6 +5,7 @@
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './highlights-store.js';
 import { createCaptureServer } from './capture-server.js';
@@ -151,7 +152,22 @@ app.whenReady().then(() => {
 
   // Capture extension: localhost server forwards captures/highlights to the
   // knowledge-base renderer (left view), which adds them as inbox cards.
+  // Persist the pairing token so it survives restarts (otherwise the user would
+  // have to re-pair the extension every launch).
+  const tokenFile = path.join(app.getPath('userData'), 'capture-token.txt');
+  let captureToken;
+  try {
+    captureToken = fs.readFileSync(tokenFile, 'utf8').trim();
+  } catch {
+    captureToken = '';
+  }
+  if (!captureToken) {
+    captureToken = randomUUID();
+    try { fs.writeFileSync(tokenFile, captureToken); } catch (e) { console.warn('could not persist capture token:', e); }
+  }
+
   captureServer = createCaptureServer({
+    token: captureToken,
     onCapture: (data) => {
       leftView?.webContents.send('capture:received', data);
       return { id: null };
