@@ -51,6 +51,10 @@ For UI-only iteration on the React side: `npm run vite-dev` or
 
 ## Where to read more
 
+- `docs/workspace-kb.md` — **the knowledge-base core** (multiple whiteboards,
+  rich-markdown note cards, wikilinks/backlinks, tags, search). `src/App.tsx`
+  now renders `src/workspace/Workspace.tsx`; the foundation lives in `src/lib/`
+  (card model, durable text anchoring, pluggable store). Start here for new work.
 - `docs/architecture.md` — multi-process / multi-view layout and IPC matrix
 - `docs/electron-main.md` — main process responsibilities, view bounds, drag flow
 - `docs/highlighter.md` — the right-view bundle (Lit + Rangy + shadow DOM)
