@@ -6,7 +6,7 @@ import { MemoryPersistence } from "../src/lib/store/persistence.ts";
 
 async function freshStore(): Promise<WorkspaceStore> {
   const store = new WorkspaceStore(new MemoryPersistence());
-  await store.init();
+  await store.init({ seed: false });
   return store;
 }
 
@@ -89,13 +89,13 @@ test("inbox holds unplaced cards only", async () => {
 test("data persists through the backend across reloads", async () => {
   const backend = new MemoryPersistence();
   const store = new WorkspaceStore(backend);
-  await store.init();
+  await store.init({ seed: false });
   const board = store.getWhiteboards()[0];
   store.createNoteOnBoard(board.id, 5, 5, { title: "Persisted" });
   // Allow the debounced save to flush.
   await new Promise((r) => setTimeout(r, 200));
 
   const reopened = new WorkspaceStore(backend);
-  await reopened.init();
+  await reopened.init({ seed: false });
   assert.ok(reopened.getCards().some((c) => c.title === "Persisted"));
 });

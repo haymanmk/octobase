@@ -36,6 +36,7 @@ export class WorkspaceStore {
   private data: WorkspaceData = emptyData();
   private listeners = new Set<Listener>();
   private loaded = false;
+  private version = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly backend: PersistenceBackend;
 
@@ -45,15 +46,77 @@ export class WorkspaceStore {
 
   // ---- lifecycle -----------------------------------------------------------
 
-  async init(): Promise<void> {
+  async init(opts: { seed?: boolean } = {}): Promise<void> {
+    const seed = opts.seed ?? true;
     const loaded = await this.backend.load();
     this.data = loaded ?? emptyData();
+    const fresh = !loaded;
     if (!this.data.whiteboards.some((w) => !w.deletedAt)) {
       // Guarantee at least one board to land on.
-      this.createWhiteboard("My first whiteboard", { silent: true });
+      const wb = this.createWhiteboard(seed ? "Welcome" : "My first whiteboard", { silent: true });
+      if (fresh && seed) this.seedWelcome(wb.id);
     }
     this.loaded = true;
+    if (fresh) void this.backend.save(this.snapshot());
     this.emit();
+  }
+
+  /** A small first-run board that demonstrates notes, links, and tags. */
+  private seedWelcome(boardId: string): void {
+    const mk = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      title: string,
+      body: string,
+      color: HighlightColor,
+      tags: string[] = [],
+    ) => {
+      const card = this.createNoteCard({ title, body, color, tags });
+      this.placeCard(boardId, card.id, x, y, w, h);
+      return card;
+    };
+    mk(
+      40,
+      40,
+      300,
+      210,
+      "Welcome to octobase",
+      "Your **local-first** knowledge base.\n\n- Double-click the canvas to write a card\n- Link cards with [[Text anchoring]]\n- Press ⌘K to search\n\nEverything lives on your machine.",
+      "yellow",
+      ["start"],
+    );
+    mk(
+      380,
+      40,
+      300,
+      200,
+      "Text anchoring",
+      "Highlights re-locate even after a page changes, using a text-quote + position strategy. Shared with the [[Web highlighter]] and the capture flow.",
+      "blue",
+      ["foundation"],
+    );
+    mk(
+      380,
+      280,
+      300,
+      180,
+      "Web highlighter",
+      "Highlight any article and drop it here as a card. See [[Welcome to octobase]] to get started.",
+      "green",
+      ["foundation", "roadmap"],
+    );
+    mk(
+      40,
+      290,
+      300,
+      170,
+      "Rich markdown",
+      "Write with headings, lists, **bold**, `code`, and tasks:\n\n- [x] Build the editor\n- [ ] Capture articles\n\nOpen this card to try the editor.",
+      "purple",
+      ["start"],
+    );
   }
 
   isLoaded(): boolean {
@@ -65,7 +128,13 @@ export class WorkspaceStore {
     return () => this.listeners.delete(fn);
   }
 
+  /** Monotonic counter; React reads this as a cheap, stable snapshot. */
+  getVersion(): number {
+    return this.version;
+  }
+
   private emit(): void {
+    this.version++;
     for (const fn of this.listeners) fn();
   }
 
