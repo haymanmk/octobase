@@ -1,12 +1,16 @@
 import type {
+  ArticleCard,
   Card,
+  HighlightCard,
   HighlightColor,
   NoteCard,
   Placement,
+  TextAnchor,
   Whiteboard,
   WorkspaceData,
 } from "../model/types.ts";
 import { ID } from "../model/ids.ts";
+import { describeAnchor } from "../anchor/text-anchor.ts";
 import { normalizeTitle, parseWikilinks } from "../model/wikilinks.ts";
 import type { PersistenceBackend } from "./persistence.ts";
 
@@ -117,6 +121,39 @@ export class WorkspaceStore {
       "purple",
       ["start"],
     );
+
+    // A captured article + two highlights, to demonstrate the reader (P3).
+    const url = "https://example.com/the-extended-mind";
+    const articleBody =
+      "Where does the mind stop and the rest of the world begin?\n\n" +
+      "We propose a view in which the boundary between mind and environment is " +
+      "not fixed. When parts of the world function as a process which, were it " +
+      "done in the head, we would count as cognitive, then that part of the " +
+      "world is part of the cognitive process.\n\n" +
+      "## Active externalism\n\n" +
+      "The notebook plays the role usually played by biological memory. The " +
+      "information in the notebook functions just like the information " +
+      "constituting an ordinary non-occurrent belief; it just happens that this " +
+      "information lies beyond the skin.";
+    const article = this.createArticleCard({
+      title: "The Extended Mind",
+      body: articleBody,
+      sourceUrl: url,
+      siteName: "example.com",
+      byline: "Andy Clark & David Chalmers",
+      color: "blue",
+    });
+    this.placeCard(boardId, article.id, 720, 40, 320, 230);
+
+    const hl = (phrase: string, color: HighlightColor, x: number, y: number) => {
+      const i = articleBody.indexOf(phrase);
+      if (i < 0) return;
+      const anchor = describeAnchor(articleBody, i, i + phrase.length);
+      const card = this.createHighlightCard({ text: phrase, sourceUrl: url, anchor, color });
+      this.placeCard(boardId, card.id, x, y, 320, 150);
+    };
+    hl("the boundary between mind and environment is not fixed", "pink", 720, 300);
+    hl("information lies beyond the skin", "orange", 720, 470);
   }
 
   isLoaded(): boolean {
@@ -227,6 +264,70 @@ export class WorkspaceStore {
     this.data.cards.push(card);
     this.touch();
     return card;
+  }
+
+  createHighlightCard(init: {
+    text: string;
+    sourceUrl: string;
+    anchor: TextAnchor;
+    color?: HighlightColor;
+    tags?: string[];
+    notes?: string;
+  }): HighlightCard {
+    const ts = now();
+    const text = init.text.trim();
+    const card: HighlightCard = {
+      id: ID.card(),
+      kind: "highlight",
+      title: text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight",
+      body: init.notes ? `> ${text}\n\n${init.notes}` : `> ${text}`,
+      tags: init.tags ?? [],
+      color: init.color ?? "yellow",
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+      sourceUrl: init.sourceUrl,
+      anchor: init.anchor,
+    };
+    this.data.cards.push(card);
+    this.touch();
+    return card;
+  }
+
+  createArticleCard(init: {
+    title: string;
+    body: string;
+    sourceUrl: string;
+    siteName?: string;
+    byline?: string;
+    tags?: string[];
+    color?: HighlightColor;
+  }): ArticleCard {
+    const ts = now();
+    const card: ArticleCard = {
+      id: ID.card(),
+      kind: "article",
+      title: init.title.trim() || "Untitled article",
+      body: init.body,
+      tags: init.tags ?? [],
+      color: init.color ?? "blue",
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+      sourceUrl: init.sourceUrl,
+      siteName: init.siteName,
+      byline: init.byline,
+    };
+    this.data.cards.push(card);
+    this.touch();
+    return card;
+  }
+
+  /** Live highlight cards whose source matches the given URL. */
+  getHighlightsForUrl(sourceUrl: string): HighlightCard[] {
+    return this.getCards().filter(
+      (c): c is HighlightCard => c.kind === "highlight" && c.sourceUrl === sourceUrl,
+    );
   }
 
   updateCard(

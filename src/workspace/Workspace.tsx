@@ -7,6 +7,7 @@ import { Canvas } from "./Canvas.tsx";
 import { Inspector } from "./Inspector.tsx";
 import { CardEditor } from "./CardEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { Reader } from "./reader/Reader.tsx";
 
 interface ContextMenuState {
   cardId: string;
@@ -25,6 +26,7 @@ function WorkspaceInner(): React.ReactElement {
   const [activeBoardId, setActiveBoardId] = React.useState<string>(() => boards[0]?.id ?? "");
   const [selectedCardId, setSelectedCardId] = React.useState<string | null>(null);
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null);
+  const [readingCardId, setReadingCardId] = React.useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = React.useState(true);
   const [cmdk, setCmdk] = React.useState<{ open: boolean; seed?: string }>({ open: false });
   const [ctx, setCtx] = React.useState<ContextMenuState | null>(null);
@@ -70,7 +72,28 @@ function WorkspaceInner(): React.ReactElement {
 
   const openCard = (cardId: string) => {
     setSelectedCardId(cardId);
-    setEditingCardId(cardId);
+    // Article cards open in the reader; everything else in the editor.
+    if (store.getCard(cardId)?.kind === "article") {
+      setReadingCardId(cardId);
+    } else {
+      setEditingCardId(cardId);
+    }
+  };
+
+  const readCard = (cardId: string) => {
+    const card = store.getCard(cardId);
+    if (!card) return;
+    // For a highlight, read its source article if we captured one.
+    if (card.kind === "highlight") {
+      const article = store
+        .getCards()
+        .find((c) => c.kind === "article" && c.sourceUrl === card.sourceUrl);
+      if (article) {
+        setReadingCardId(article.id);
+        return;
+      }
+    }
+    setReadingCardId(cardId);
   };
 
   const newCardOnBoard = () => {
@@ -183,6 +206,23 @@ function WorkspaceInner(): React.ReactElement {
         />
       )}
 
+      {readingCardId && (
+        <Reader
+          cardId={readingCardId}
+          onClose={() => setReadingCardId(null)}
+          onOpenCard={(id) => {
+            // Reader stays open; clicking a highlight selects/edits its card.
+            const c = store.getCard(id);
+            if (c && c.kind !== "article") {
+              setSelectedCardId(id);
+              setEditingCardId(id);
+            } else {
+              setReadingCardId(id);
+            }
+          }}
+        />
+      )}
+
       {cmdk.open && (
         <CommandPalette
           seed={cmdk.seed}
@@ -204,7 +244,10 @@ function WorkspaceInner(): React.ReactElement {
           style={{ left: ctx.x, top: ctx.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="ws-ctx-item" onClick={() => { openCard(ctx.cardId); setCtx(null); }}>✎ Edit</div>
+          {store.getCard(ctx.cardId)?.kind !== "note" && (
+            <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>📖 Read</div>
+          )}
+          <div className="ws-ctx-item" onClick={() => { setSelectedCardId(ctx.cardId); setEditingCardId(ctx.cardId); setCtx(null); }}>✎ Edit</div>
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>⇤ Move to inbox</div>
           <div className="ws-ctx-sep" />
           <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>🗑 Delete card</div>
