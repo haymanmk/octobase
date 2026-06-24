@@ -42,6 +42,8 @@ export function createCaptureServer(options = {}) {
     token = randomUUID(),
     onCapture,
     onHighlight,
+    onHighlightDelete,
+    onListHighlights,
   } = options;
 
   let server = null;
@@ -101,6 +103,26 @@ export function createCaptureServer(options = {}) {
       }
       const result = (await onHighlight?.(body)) ?? null;
       send(res, 200, { ok: true, id: result?.id ?? null });
+      return;
+    }
+
+    if (url.pathname === "/highlight/delete" && req.method === "POST") {
+      const body = await readJson(req);
+      if (!body || typeof body.id !== "string") {
+        send(res, 400, { error: "invalid: id required" });
+        return;
+      }
+      await onHighlightDelete?.(body.id);
+      send(res, 200, { ok: true });
+      return;
+    }
+
+    // Reverse sync: the extension fetches the app's current highlights for a URL
+    // on page load, so edits/deletes made in the app show up on the page.
+    if (url.pathname === "/highlights" && req.method === "GET") {
+      const forUrl = url.searchParams.get("url") ?? "";
+      const items = (await onListHighlights?.(forUrl)) ?? [];
+      send(res, 200, { ok: true, highlights: items });
       return;
     }
 

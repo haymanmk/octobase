@@ -37,6 +37,18 @@ contextBridge.exposeInMainWorld('octobaseCapture', {
     ipcRenderer.removeAllListeners('highlight:received');
     ipcRenderer.on('highlight:received', (_event, data) => callback(data));
   },
+  onHighlightRemove: (callback) => {
+    ipcRenderer.removeAllListeners('capture:highlight-remove');
+    ipcRenderer.on('capture:highlight-remove', (_event, data) => callback(data));
+  },
+  // Reverse sync: main asks for highlights on a URL; renderer answers.
+  onHighlightsRequest: (callback) => {
+    ipcRenderer.removeAllListeners('capture:highlights-request');
+    ipcRenderer.on('capture:highlights-request', (_event, data) => callback(data));
+  },
+  respondHighlights: (reqId, items) => {
+    ipcRenderer.send('capture:highlights-response', { reqId, items });
+  },
 });
 
 console.log('Preload script loaded');

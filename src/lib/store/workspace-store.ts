@@ -294,6 +294,63 @@ export class WorkspaceStore {
     return card;
   }
 
+  /**
+   * Create-or-update a highlight card keyed by a stable id. The capture
+   * extension owns the id, so edits made on the web page (recolor, note,
+   * re-anchor) update the same card instead of duplicating it.
+   */
+  upsertHighlight(init: {
+    id?: string;
+    text: string;
+    sourceUrl: string;
+    anchor: TextAnchor;
+    color?: HighlightColor;
+    note?: string;
+  }): HighlightCard {
+    const text = init.text.trim();
+    const title = text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight";
+    const note = init.note?.trim();
+    const body = note ? `> ${text}\n\n${note}` : `> ${text}`;
+
+    if (init.id) {
+      const idx = this.data.cards.findIndex((c) => c.id === init.id);
+      if (idx >= 0 && this.data.cards[idx].kind === "highlight") {
+        const prev = this.data.cards[idx] as HighlightCard;
+        const updated: HighlightCard = {
+          ...prev,
+          title,
+          body,
+          color: init.color ?? prev.color,
+          anchor: init.anchor ?? prev.anchor,
+          sourceUrl: init.sourceUrl || prev.sourceUrl,
+          deletedAt: null,
+          updatedAt: now(),
+        };
+        this.data.cards[idx] = updated;
+        this.touch();
+        return updated;
+      }
+    }
+
+    const ts = now();
+    const card: HighlightCard = {
+      id: init.id ?? ID.card(),
+      kind: "highlight",
+      title,
+      body,
+      tags: [],
+      color: init.color ?? "yellow",
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+      sourceUrl: init.sourceUrl,
+      anchor: init.anchor,
+    };
+    this.data.cards.push(card);
+    this.touch();
+    return card;
+  }
+
   createArticleCard(init: {
     title: string;
     body: string;

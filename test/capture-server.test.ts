@@ -6,21 +6,26 @@ import { createCaptureServer } from "../src/electron/capture-server.js";
 async function withServer(opts, fn) {
   const captures = [];
   const highlights = [];
+  const deletes = [];
   const server = createCaptureServer({
     port: 0,
     token: "test-token",
     onCapture: (b) => { captures.push(b); return { id: "card_1" }; },
-    onHighlight: (b) => { highlights.push(b); return { id: "card_2" }; },
+    onHighlight: (b) => { highlights.push(b); return { id: b.id ?? "card_2" }; },
+    onHighlightDelete: (id) => { deletes.push(id); },
+    onListHighlights: () => [{ id: "h1", color: "yellow", anchor: { exact: "x", prefix: "", suffix: "", startHint: 0 } }],
     ...opts,
   });
   const port = await server.start();
   const base = `http://127.0.0.1:${port}`;
   try {
-    await fn({ base, captures, highlights, server });
+    await fn({ base, captures, highlights, deletes, server });
   } finally {
     await server.stop();
   }
 }
+
+const authHeaders = { "Content-Type": "application/json", "X-Octobase-Token": "test-token" };
 
 test("health needs no token", async () => {
   await withServer({}, async ({ base }) => {
@@ -85,6 +90,49 @@ test("valid highlight is parsed and forwarded", async () => {
     assert.equal(highlights.length, 1);
     assert.equal(highlights[0].anchor.exact, "hello");
     assert.equal(highlights[0].color, "yellow");
+  });
+});
+
+test("highlight carries a shared id for upsert", async () => {
+  await withServer({}, async ({ base, highlights }) => {
+    const res = await fetch(`${base}/highlight`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        id: "hl_abc",
+        url: "https://x.com/a",
+        color: "pink",
+        note: "my note",
+        anchor: { exact: "hi", prefix: "", suffix: "", startHint: 0 },
+      }),
+    });
+    assert.equal((await res.json()).id, "hl_abc");
+    assert.equal(highlights[0].id, "hl_abc");
+    assert.equal(highlights[0].note, "my note");
+  });
+});
+
+test("highlight delete forwards the id", async () => {
+  await withServer({}, async ({ base, deletes }) => {
+    const res = await fetch(`${base}/highlight/delete`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ id: "hl_abc" }),
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(deletes, ["hl_abc"]);
+  });
+});
+
+test("GET /highlights returns the app's highlights for a url", async () => {
+  await withServer({}, async ({ base }) => {
+    const res = await fetch(`${base}/highlights?url=${encodeURIComponent("https://x.com/a")}`, {
+      headers: { "X-Octobase-Token": "test-token" },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.highlights.length, 1);
+    assert.equal(body.highlights[0].id, "h1");
   });
 });
 

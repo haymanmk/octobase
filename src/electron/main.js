@@ -166,6 +166,28 @@ app.whenReady().then(() => {
     try { fs.writeFileSync(tokenFile, captureToken); } catch (e) { console.warn('could not persist capture token:', e); }
   }
 
+  // Round-trip helper: ask the renderer (which owns the store) for the
+  // highlights on a URL so the extension can reconcile on page load.
+  const pendingHighlightReqs = new Map();
+  let highlightReqSeq = 0;
+  const requestHighlights = (forUrl) =>
+    new Promise((resolve) => {
+      if (!leftView) return resolve([]);
+      const reqId = `hlreq_${++highlightReqSeq}`;
+      const timer = setTimeout(() => {
+        if (pendingHighlightReqs.has(reqId)) {
+          pendingHighlightReqs.delete(reqId);
+          resolve([]);
+        }
+      }, 1500);
+      pendingHighlightReqs.set(reqId, (items) => { clearTimeout(timer); resolve(items); });
+      leftView.webContents.send('capture:highlights-request', { reqId, url: forUrl });
+    });
+  ipcMain.on('capture:highlights-response', (_event, { reqId, items }) => {
+    const resolver = pendingHighlightReqs.get(reqId);
+    if (resolver) { pendingHighlightReqs.delete(reqId); resolver(Array.isArray(items) ? items : []); }
+  });
+
   captureServer = createCaptureServer({
     token: captureToken,
     onCapture: (data) => {
@@ -174,8 +196,12 @@ app.whenReady().then(() => {
     },
     onHighlight: (data) => {
       leftView?.webContents.send('highlight:received', data);
-      return { id: null };
+      return { id: data.id ?? null };
     },
+    onHighlightDelete: (id) => {
+      leftView?.webContents.send('capture:highlight-remove', { id });
+    },
+    onListHighlights: (forUrl) => requestHighlights(forUrl),
   });
   captureServer
     .start()

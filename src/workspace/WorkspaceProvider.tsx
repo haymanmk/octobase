@@ -45,12 +45,25 @@ export function WorkspaceProvider({
       });
     });
     bridge.onHighlight((d) => {
-      store.createHighlightCard({
+      store.upsertHighlight({
+        id: d.id,
         text: d.exact ?? d.anchor.exact,
         sourceUrl: d.url,
         anchor: d.anchor,
         color: d.color,
+        note: d.note,
       });
+    });
+    bridge.onHighlightRemove(({ id }) => store.deleteCard(id));
+    // Reverse sync: hand the page its current highlights for a URL.
+    bridge.onHighlightsRequest(({ reqId, url }) => {
+      const items = store.getHighlightsForUrl(url).map((h) => ({
+        id: h.id,
+        color: h.color,
+        anchor: h.anchor,
+        exact: h.anchor.exact,
+      }));
+      bridge.respondHighlights(reqId, items);
     });
   }, [store]);
 

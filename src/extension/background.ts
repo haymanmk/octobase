@@ -11,8 +11,10 @@ import {
 
 const QUEUE_KEY = "queue";
 
+type SendPath = "/capture" | "/highlight" | "/highlight/delete";
+
 interface QueuedItem {
-  path: "/capture" | "/highlight";
+  path: SendPath;
   body: unknown;
   at: number;
 }
@@ -37,7 +39,7 @@ async function post(path: string, body: unknown): Promise<SendResult> {
   return { ok: true, status: res.status, id: json.id ?? null };
 }
 
-async function send(path: "/capture" | "/highlight", body: unknown): Promise<SendResult> {
+async function send(path: SendPath, body: unknown): Promise<SendResult> {
   try {
     const result = await post(path, body);
     if (!result.ok && result.status !== 401 && result.status !== 400) {
@@ -52,7 +54,7 @@ async function send(path: "/capture" | "/highlight", body: unknown): Promise<Sen
   }
 }
 
-async function enqueue(path: "/capture" | "/highlight", body: unknown): Promise<void> {
+async function enqueue(path: SendPath, body: unknown): Promise<void> {
   const q = await getQueue();
   q.push({ path, body, at: Date.now() });
   await setQueue(q);
@@ -95,6 +97,18 @@ chrome.runtime.onMessage.addListener((msg: BgMessage, _sender, reply) => {
       }
     } else if (msg.type === "queueSize") {
       reply({ size: (await getQueue()).length });
+    } else if (msg.type === "listHighlights") {
+      try {
+        const settings = await getSettings();
+        const res = await fetch(
+          `${baseUrl(settings)}/highlights?url=${encodeURIComponent(msg.url)}`,
+          { headers: { "X-Octobase-Token": settings.token } },
+        );
+        const json = (await res.json().catch(() => ({}))) as { highlights?: unknown };
+        reply({ ok: res.ok, highlights: Array.isArray(json.highlights) ? json.highlights : [] });
+      } catch {
+        reply({ ok: false, highlights: [] });
+      }
     }
   })();
   return true; // async reply

@@ -26,11 +26,13 @@ either way.
 
 Loopback HTTP server (default `127.0.0.1:7373`) the extension posts to.
 
-| Method | Path | Auth | Body |
+| Method | Path | Auth | Body / Query |
 |---|---|---|---|
 | GET | `/health` | none | — |
 | POST | `/capture` | `X-Octobase-Token` | `{ url, title, markdown, byline?, siteName? }` |
-| POST | `/highlight` | `X-Octobase-Token` | `{ url, color, exact, anchor }` |
+| POST | `/highlight` | `X-Octobase-Token` | `{ id, url, color, exact, anchor, note? }` — upsert by `id` |
+| POST | `/highlight/delete` | `X-Octobase-Token` | `{ id }` |
+| GET | `/highlights?url=` | `X-Octobase-Token` | → `{ highlights: [{ id, color, anchor, exact }] }` (reverse sync) |
 
 `main.js` starts it and forwards captures/highlights to the KB renderer over IPC
 (`capture:received` / `highlight:received`); they land in the **inbox**. The
@@ -42,13 +44,20 @@ pairing token + port are shown in-app via the "Connect extension" button
 MV3. Reuses `src/lib` anchoring + extractor verbatim.
 
 - `content.ts` — selection → color toolbar → `describeAnchorFromRange` →
-  POST `/highlight` (via the worker). Each highlight is also cached in
-  `chrome.storage.local` keyed by URL and **re-painted on every page load** via
-  the shared `paintAnchors` / `locateAnchorRange` (same anchor→DOM-range logic
-  the reader uses), so highlights survive refreshes. "Capture article" runs the
-  shared extractor. (The local cache re-renders highlights made in *this*
-  browser; cross-device re-render would need a `GET /highlights?url` endpoint —
-  a future enhancement.)
+  POST `/highlight` (via the worker). Each highlight carries a stable `id`,
+  is cached in `chrome.storage.local` keyed by URL, and **re-painted on every
+  page load** via the shared `paintAnchors` / `locateAnchorRange` (the same
+  anchor→DOM-range logic the reader uses), so highlights survive refreshes.
+  **Click an existing highlight** to open an edit popover: recolor, add a note,
+  or delete — each updates the cache, re-paints, and syncs to the app card
+  (same `id`). "Capture article" runs the shared extractor.
+
+  **Two-way sync:** edits/deletes on the page upsert/delete the matching app
+  card by `id`. On page load the content script also pulls the app's current
+  highlights (`GET /highlights?url`) and reconciles: app values win for known
+  ids, app-side deletes are honored (tracked via a synced-id set so unsynced
+  local highlights are never wiped), and app-only highlights are added. Falls
+  back to the local cache when the app is unreachable.
 - `background.ts` — the only network talker: adds the token, posts, and queues
   failed sends in `chrome.storage` to retry (alarm + on next `/health` ok).
   Badge shows queued count. Context-menu entries mirror the popup.

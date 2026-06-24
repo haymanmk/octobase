@@ -48,32 +48,40 @@ interface AnchoredHighlight {
   anchor: TextAnchor;
 }
 
+/** Where a highlight landed in the current DOM (index into the input array). */
+export interface Placement {
+  index: number;
+  start: number;
+  end: number;
+}
+
 /**
  * Paint a set of anchored highlights over a live DOM subtree using the CSS
  * Custom Highlight API (no DOM mutation, multi-node ranges just work). One
- * registry per color, namespaced by `prefix`. Returns how many resolved.
+ * registry per color, namespaced by `prefix`. Returns the resolved placements
+ * so callers can hit-test clicks back to a highlight.
  */
 export function paintAnchors(
   root: HTMLElement,
   highlights: AnchoredHighlight[],
   prefix: string,
-): number {
-  if (!supportsCustomHighlight()) return 0;
+): Placement[] {
+  const placements: Placement[] = [];
+  if (!supportsCustomHighlight()) return placements;
   const highlightsApi = (CSS as unknown as { highlights: Map<string, unknown> }).highlights;
   const HighlightCtor = (globalThis as unknown as {
     Highlight: new (...ranges: Range[]) => unknown;
   }).Highlight;
 
   const rangesByColor = new Map<HighlightColor, Range[]>();
-  let painted = 0;
-  for (const hl of highlights) {
+  highlights.forEach((hl, index) => {
     const located = locateAnchorRange(root, hl.anchor);
-    if (!located) continue;
+    if (!located) return;
+    placements.push({ index, start: located.start, end: located.end });
     const list = rangesByColor.get(hl.color) ?? [];
     list.push(located.range);
     rangesByColor.set(hl.color, list);
-    painted++;
-  }
+  });
 
   for (const key of [...highlightsApi.keys()]) {
     if (key.startsWith(prefix)) highlightsApi.delete(key);
@@ -81,5 +89,44 @@ export function paintAnchors(
   for (const [color, ranges] of rangesByColor) {
     highlightsApi.set(`${prefix}${color}`, new HighlightCtor(...ranges));
   }
-  return painted;
+  return placements;
+}
+
+/** Map a viewport point to a global text offset within `root` (browser only). */
+export function offsetFromPoint(
+  root: HTMLElement,
+  clientX: number,
+  clientY: number,
+): number | null {
+  const doc = root.ownerDocument;
+  type CaretDoc = Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const cdoc = doc as CaretDoc;
+  let node: Node | null = null;
+  let offset = 0;
+  if (cdoc.caretPositionFromPoint) {
+    const pos = cdoc.caretPositionFromPoint(clientX, clientY);
+    if (!pos) return null;
+    node = pos.offsetNode;
+    offset = pos.offset;
+  } else if (cdoc.caretRangeFromPoint) {
+    const r = cdoc.caretRangeFromPoint(clientX, clientY);
+    if (!r) return null;
+    node = r.startContainer;
+    offset = r.startOffset;
+  } else {
+    return null;
+  }
+  if (!node || !root.contains(node)) return null;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let acc = 0;
+  let cur = walker.nextNode();
+  while (cur) {
+    if (cur === node) return acc + offset;
+    acc += cur.textContent?.length ?? 0;
+    cur = walker.nextNode();
+  }
+  return null;
 }

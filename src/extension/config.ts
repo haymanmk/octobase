@@ -25,9 +25,10 @@ export async function setSettings(patch: Partial<Settings>): Promise<void> {
 
 // Messages content/popup → background.
 export type BgMessage =
-  | { type: "send"; path: "/capture" | "/highlight"; body: unknown }
+  | { type: "send"; path: "/capture" | "/highlight" | "/highlight/delete"; body: unknown }
   | { type: "health" }
-  | { type: "queueSize" };
+  | { type: "queueSize" }
+  | { type: "listHighlights"; url: string };
 
 // Messages popup → content script.
 export type TabMessage = { type: "capture" };
