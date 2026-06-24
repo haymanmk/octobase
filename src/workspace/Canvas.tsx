@@ -9,6 +9,8 @@ export interface CanvasProps {
   onSelect: (cardId: string | null) => void;
   onOpen: (cardId: string) => void;
   onContextMenu: (cardId: string, x: number, y: number) => void;
+  /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
+  onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
 }
 
 interface View {
@@ -25,6 +27,7 @@ export function Canvas({
   onSelect,
   onOpen,
   onContextMenu,
+  onBackgroundContextMenu,
 }: CanvasProps): React.ReactElement {
   const store = useWorkspace();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -109,6 +112,14 @@ export function Canvas({
     onOpen(card.id);
   };
 
+  const onBgContextMenu = (e: React.MouseEvent) => {
+    // Only on empty canvas — cards stop propagation in their own handler.
+    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("ws-canvas-surface")) return;
+    e.preventDefault();
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    onBackgroundContextMenu(x, y, e.clientX, e.clientY);
+  };
+
   return (
     <div
       ref={ref}
@@ -118,6 +129,7 @@ export function Canvas({
       onPointerUp={onPointerUp}
       onWheel={onWheel}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onBgContextMenu}
     >
       <div
         className="ws-canvas-surface"

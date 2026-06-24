@@ -9,9 +9,19 @@ import { CardEditor } from "./CardEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { Reader } from "./reader/Reader.tsx";
 import { getCaptureBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { HIGHLIGHT_COLORS } from "../types/highlight.ts";
+import { PALETTE } from "../components/highlighter/colors.ts";
+import type { HighlightColor } from "../lib/model/types.ts";
 
 interface ContextMenuState {
   cardId: string;
+  x: number;
+  y: number;
+}
+/** Right-click on empty canvas. `wx/wy` are canvas coords; `x/y` screen coords. */
+interface CanvasMenuState {
+  wx: number;
+  wy: number;
   x: number;
   y: number;
 }
@@ -31,6 +41,7 @@ function WorkspaceInner(): React.ReactElement {
   const [inspectorOpen, setInspectorOpen] = React.useState(true);
   const [cmdk, setCmdk] = React.useState<{ open: boolean; seed?: string }>({ open: false });
   const [ctx, setCtx] = React.useState<ContextMenuState | null>(null);
+  const [canvasMenu, setCanvasMenu] = React.useState<CanvasMenuState | null>(null);
   const [toast, setToast] = React.useState<ToastState | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
@@ -57,13 +68,13 @@ function WorkspaceInner(): React.ReactElement {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Dismiss the context menu on any outside click.
+  // Dismiss any open context menu on an outside click.
   React.useEffect(() => {
-    if (!ctx) return;
-    const close = () => setCtx(null);
+    if (!ctx && !canvasMenu) return;
+    const close = () => { setCtx(null); setCanvasMenu(null); };
     window.addEventListener("pointerdown", close);
     return () => window.removeEventListener("pointerdown", close);
-  }, [ctx]);
+  }, [ctx, canvasMenu]);
 
   const showToast = React.useCallback((t: ToastState) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -99,11 +110,12 @@ function WorkspaceInner(): React.ReactElement {
     setReadingCardId(cardId);
   };
 
-  const newCardOnBoard = () => {
+  // Create a note at a canvas position (from double-click or the canvas menu).
+  const newNoteAt = (wx: number, wy: number, color?: HighlightColor) => {
     if (!activeBoardId) return;
-    const offset = store.getPlacements(activeBoardId).length * 24;
-    const { card } = store.createNoteOnBoard(activeBoardId, 80 + (offset % 240), 90 + (offset % 180), {
+    const { card } = store.createNoteOnBoard(activeBoardId, wx - 130, wy - 20, {
       title: "Untitled",
+      ...(color ? { color } : {}),
     });
     openCard(card.id);
   };
@@ -178,8 +190,6 @@ function WorkspaceInner(): React.ReactElement {
             <button className="ws-btn" title="Pair the Chrome capture extension"
               onClick={async () => setConnectInfo(await captureBridge.getInfo())}>🔌 Connect extension</button>
           )}
-          <button className="ws-btn" onClick={() => setCmdk({ open: true })}>⌕ Search</button>
-          <button className="ws-btn primary" onClick={newCardOnBoard}>+ New card</button>
         </header>
 
         {activeBoardId && (
@@ -189,7 +199,8 @@ function WorkspaceInner(): React.ReactElement {
             selectedCardId={selectedCardId}
             onSelect={setSelectedCardId}
             onOpen={openCard}
-            onContextMenu={(cardId, x, y) => setCtx({ cardId, x, y })}
+            onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
+            onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
           />
         )}
 
@@ -258,6 +269,28 @@ function WorkspaceInner(): React.ReactElement {
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>⇤ Move to inbox</div>
           <div className="ws-ctx-sep" />
           <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>🗑 Delete card</div>
+        </div>
+      )}
+
+      {canvasMenu && (
+        <div
+          className="ws-ctx"
+          style={{ left: canvasMenu.x, top: canvasMenu.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="ws-ctx-label">New card</div>
+          <div className="ws-ctx-item" onClick={() => { newNoteAt(canvasMenu.wx, canvasMenu.wy); setCanvasMenu(null); }}>＋ Blank note</div>
+          <div className="ws-ctx-colors">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <span
+                key={c}
+                className="ws-ctx-dot"
+                title={`New ${c} note`}
+                style={{ background: PALETTE[c].underline }}
+                onClick={() => { newNoteAt(canvasMenu.wx, canvasMenu.wy, c); setCanvasMenu(null); }}
+              />
+            ))}
+          </div>
         </div>
       )}
 

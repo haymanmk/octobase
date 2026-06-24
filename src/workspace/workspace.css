@@ -697,3 +697,20 @@
 .ws-ctx-item.danger { color: var(--ws-danger); }
 .ws-ctx-item.danger:hover { background: rgba(180, 69, 47, 0.08); }
 .ws-ctx-sep { height: 1px; background: var(--ws-line); margin: 4px 0; }
+.ws-ctx-label {
+  padding: 6px 11px 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #a89c84;
+  font-weight: 600;
+}
+.ws-ctx-colors { display: flex; gap: 7px; padding: 6px 11px 8px; }
+.ws-ctx-dot {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s;
+}
+.ws-ctx-dot:hover { transform: scale(1.18); border-color: rgba(0,0,0,0.15); }
