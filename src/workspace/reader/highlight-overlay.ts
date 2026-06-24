@@ -1,4 +1,7 @@
-import { locateAnchor } from "../../lib/anchor/text-anchor.ts";
+import {
+  locateAnchorRange,
+  supportsCustomHighlight,
+} from "../../lib/anchor/highlight-dom.ts";
 import type { HighlightColor, TextAnchor } from "../../lib/model/types.ts";
 
 export interface OverlayHighlight {
@@ -14,44 +17,6 @@ export interface PlacedHighlight extends OverlayHighlight {
 
 const HL_PREFIX = "octo-reader-";
 
-/** Find the text node + local offset for a global character offset in `container`. */
-function locateNode(
-  container: HTMLElement,
-  target: number,
-): { node: Text; offset: number } | null {
-  const walker = container.ownerDocument.createTreeWalker(
-    container,
-    NodeFilter.SHOW_TEXT,
-  );
-  let acc = 0;
-  let node = walker.nextNode() as Text | null;
-  while (node) {
-    const len = node.textContent?.length ?? 0;
-    if (acc + len >= target) return { node, offset: target - acc };
-    acc += len;
-    node = walker.nextNode() as Text | null;
-  }
-  return null;
-}
-
-function offsetRange(container: HTMLElement, start: number, end: number): Range | null {
-  const a = locateNode(container, start);
-  const b = locateNode(container, end);
-  if (!a || !b) return null;
-  const range = container.ownerDocument.createRange();
-  range.setStart(a.node, a.offset);
-  range.setEnd(b.node, b.offset);
-  return range;
-}
-
-function supportsCustomHighlight(): boolean {
-  return (
-    typeof CSS !== "undefined" &&
-    !!(CSS as unknown as { highlights?: unknown }).highlights &&
-    typeof (globalThis as { Highlight?: unknown }).Highlight !== "undefined"
-  );
-}
-
 /**
  * Paint highlights over already-rendered article content using the CSS Custom
  * Highlight API (no DOM mutation, multi-node ranges just work). Returns the
@@ -61,18 +26,15 @@ export function applyHighlights(
   container: HTMLElement,
   highlights: OverlayHighlight[],
 ): PlacedHighlight[] {
-  const text = container.textContent ?? "";
   const placed: PlacedHighlight[] = [];
   const rangesByColor = new Map<HighlightColor, Range[]>();
 
   for (const hl of highlights) {
-    const loc = locateAnchor(text, hl.anchor);
-    if (!loc) continue;
-    const range = offsetRange(container, loc.start, loc.end);
-    if (!range) continue;
-    placed.push({ ...hl, start: loc.start, end: loc.end });
+    const located = locateAnchorRange(container, hl.anchor);
+    if (!located) continue;
+    placed.push({ ...hl, start: located.start, end: located.end });
     const list = rangesByColor.get(hl.color) ?? [];
-    list.push(range);
+    list.push(located.range);
     rangesByColor.set(hl.color, list);
   }
 

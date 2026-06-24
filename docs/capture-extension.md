@@ -42,8 +42,13 @@ pairing token + port are shown in-app via the "Connect extension" button
 MV3. Reuses `src/lib` anchoring + extractor verbatim.
 
 - `content.ts` — selection → color toolbar → `describeAnchorFromRange` →
-  POST `/highlight` (via the worker), with local paint; "capture article" runs
-  the shared extractor.
+  POST `/highlight` (via the worker). Each highlight is also cached in
+  `chrome.storage.local` keyed by URL and **re-painted on every page load** via
+  the shared `paintAnchors` / `locateAnchorRange` (same anchor→DOM-range logic
+  the reader uses), so highlights survive refreshes. "Capture article" runs the
+  shared extractor. (The local cache re-renders highlights made in *this*
+  browser; cross-device re-render would need a `GET /highlights?url` endpoint —
+  a future enhancement.)
 - `background.ts` — the only network talker: adds the token, posts, and queues
   failed sends in `chrome.storage` to retry (alarm + on next `/health` ok).
   Badge shows queued count. Context-menu entries mirror the popup.
