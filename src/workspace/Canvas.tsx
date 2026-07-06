@@ -6,12 +6,29 @@ import type { Card } from "../lib/model/types.ts";
 export interface CanvasProps {
   boardId: string;
   selectedCardId: string | null;
+  /** Card being edited in place (double-click); null = none. */
+  editingCardId: string | null;
+  onEndEdit: () => void;
   onSelect: (cardId: string | null) => void;
   onOpen: (cardId: string) => void;
+  /** A card was dropped from outside the canvas (sidebar inbox drag). */
+  onDropCard: (cardId: string, wx: number, wy: number) => void;
   onContextMenu: (cardId: string, x: number, y: number) => void;
   /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
 }
+
+/** Imperative surface for callers that receive screen-space points (drops). */
+export interface CanvasHandle {
+  /** Convert renderer-local screen coords to canvas world coords. */
+  screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
+  /** Whether a renderer-local screen point is over the canvas element. */
+  containsPoint: (clientX: number, clientY: number) => boolean;
+  /** Recenter/zoom the view so every placed card is visible. */
+  zoomToFit: () => void;
+}
+
+export const CARD_DRAG_MIME = "application/x-octobase-card";
 
 interface View {
   tx: number;
@@ -21,14 +38,17 @@ interface View {
 
 const DEFAULT_VIEW: View = { tx: 60, ty: 60, scale: 1 };
 
-export function Canvas({
+export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canvas({
   boardId,
   selectedCardId,
+  editingCardId,
+  onEndEdit,
   onSelect,
   onOpen,
+  onDropCard,
   onContextMenu,
   onBackgroundContextMenu,
-}: CanvasProps): React.ReactElement {
+}: CanvasProps, handleRef): React.ReactElement {
   const store = useWorkspace();
   const ref = React.useRef<HTMLDivElement>(null);
   const [view, setView] = React.useState<View>(DEFAULT_VIEW);
@@ -64,6 +84,57 @@ export function Canvas({
     };
   };
 
+  // Recenter/zoom so the bounding box of all placements fits the viewport.
+  const zoomToFit = React.useCallback(() => {
+    const el = ref.current;
+    const pls = store.getPlacements(boardId);
+    if (!el || pls.length === 0) {
+      setView(DEFAULT_VIEW);
+      return;
+    }
+    const minX = Math.min(...pls.map((p) => p.x));
+    const minY = Math.min(...pls.map((p) => p.y));
+    const maxX = Math.max(...pls.map((p) => p.x + p.w));
+    const maxY = Math.max(...pls.map((p) => p.y + p.h));
+    const pad = 60;
+    const rect = el.getBoundingClientRect();
+    const scale = Math.min(
+      2.2,
+      Math.max(
+        0.35,
+        Math.min(
+          (rect.width - pad * 2) / Math.max(1, maxX - minX),
+          (rect.height - pad * 2) / Math.max(1, maxY - minY),
+          1.4,
+        ),
+      ),
+    );
+    setView({
+      scale,
+      tx: (rect.width - (maxX - minX) * scale) / 2 - minX * scale,
+      ty: (rect.height - (maxY - minY) * scale) / 2 - minY * scale,
+    });
+  }, [store, boardId]);
+
+  React.useImperativeHandle(
+    handleRef,
+    () => ({
+      screenToWorld: (clientX, clientY) => screenToCanvas(clientX, clientY),
+      containsPoint: (clientX, clientY) => {
+        const rect = ref.current?.getBoundingClientRect();
+        if (!rect) return false;
+        return (
+          clientX >= rect.left && clientX <= rect.right &&
+          clientY >= rect.top && clientY <= rect.bottom
+        );
+      },
+      zoomToFit,
+    }),
+    // screenToCanvas closes over `view`; refresh the handle when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view, zoomToFit],
+  );
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("ws-canvas-surface")) {
       return;
@@ -88,21 +159,19 @@ export function Canvas({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   };
 
+  // Wheel zooms, anchored at the cursor (panning is left-drag on the canvas).
+  // Trackpad pinch arrives as ctrl+wheel and zooms too, just faster.
   const onWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom anchored at the cursor.
-      const rect = ref.current!.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      setView((v) => {
-        const factor = Math.exp(-e.deltaY * 0.0015);
-        const scale = Math.min(2.2, Math.max(0.35, v.scale * factor));
-        const k = scale / v.scale;
-        return { scale, tx: px - (px - v.tx) * k, ty: py - (py - v.ty) * k };
-      });
-    } else {
-      setView((v) => ({ ...v, tx: v.tx - e.deltaX, ty: v.ty - e.deltaY }));
-    }
+    const rect = ref.current!.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const speed = e.ctrlKey || e.metaKey ? 0.008 : 0.0015;
+    setView((v) => {
+      const factor = Math.exp(-e.deltaY * speed);
+      const scale = Math.min(2.2, Math.max(0.35, v.scale * factor));
+      const k = scale / v.scale;
+      return { scale, tx: px - (px - v.tx) * k, ty: py - (py - v.ty) * k };
+    });
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
@@ -130,6 +199,16 @@ export function Canvas({
       onWheel={onWheel}
       onDoubleClick={onDoubleClick}
       onContextMenu={onBgContextMenu}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(CARD_DRAG_MIME)) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        const id = e.dataTransfer.getData(CARD_DRAG_MIME);
+        if (!id) return;
+        e.preventDefault();
+        const { x, y } = screenToCanvas(e.clientX, e.clientY);
+        onDropCard(id, x, y);
+      }}
     >
       <div
         className="ws-canvas-surface"
@@ -144,6 +223,9 @@ export function Canvas({
               card={card}
               placement={p}
               selected={card.id === selectedCardId}
+              editing={card.id === editingCardId}
+              onCommitEdit={(patch) => store.updateCard(card.id, patch)}
+              onEndEdit={onEndEdit}
               scale={view.scale}
               onSelect={(id) => { onSelect(id); store.bringToFront(p.id); }}
               onMove={(id, x, y) => store.updatePlacement(id, { x, y })}
@@ -177,4 +259,4 @@ export function Canvas({
       )}
     </div>
   );
-}
+});

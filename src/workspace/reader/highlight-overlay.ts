@@ -13,6 +13,8 @@ export interface OverlayHighlight {
 export interface PlacedHighlight extends OverlayHighlight {
   start: number;
   end: number;
+  /** The live DOM range, for scroll-into-view and hit ghosts. */
+  range: Range;
 }
 
 const HL_PREFIX = "octo-reader-";
@@ -32,7 +34,7 @@ export function applyHighlights(
   for (const hl of highlights) {
     const located = locateAnchorRange(container, hl.anchor);
     if (!located) continue;
-    placed.push({ ...hl, start: located.start, end: located.end });
+    placed.push({ ...hl, start: located.start, end: located.end, range: located.range });
     const list = rangesByColor.get(hl.color) ?? [];
     list.push(located.range);
     rangesByColor.set(hl.color, list);

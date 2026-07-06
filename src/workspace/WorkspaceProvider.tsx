@@ -36,6 +36,15 @@ export function WorkspaceProvider({
     const bridge = getCaptureBridge();
     if (!bridge) return;
     bridge.onCapture((d) => {
+      // Re-capturing a page refreshes the existing article instead of
+      // creating a duplicate card (and a duplicate reader tab with it).
+      const existing = store
+        .getCards()
+        .find((c) => c.kind === "article" && c.sourceUrl === d.url);
+      if (existing) {
+        store.updateCard(existing.id, { title: d.title, body: d.markdown });
+        return;
+      }
       store.createArticleCard({
         title: d.title,
         body: d.markdown,

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
+import { CARD_DRAG_MIME } from "./Canvas.tsx";
 
 export interface SidebarProps {
   activeBoardId: string | null;
@@ -113,7 +114,17 @@ export function Sidebar({
           <div className="ws-empty-hint">No loose cards</div>
         ) : (
           inbox.slice(0, 30).map((c) => (
-            <div key={c.id} className="ws-nav-item" onClick={() => onOpenCard(c.id)} title="Open card">
+            <div
+              key={c.id}
+              className="ws-nav-item"
+              onClick={() => onOpenCard(c.id)}
+              title="Open card · drag onto the board to place it"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(CARD_DRAG_MIME, c.id);
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+            >
               <span className="ws-ico" style={{ color: PALETTE[c.color].underline }}>●</span>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {c.title || "Untitled"}

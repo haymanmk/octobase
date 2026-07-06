@@ -3,12 +3,21 @@ import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
 import { Sidebar } from "./Sidebar.tsx";
-import { Canvas } from "./Canvas.tsx";
-import { Inspector } from "./Inspector.tsx";
-import { CardEditor } from "./CardEditor.tsx";
+import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { Reader } from "./reader/Reader.tsx";
-import { getCaptureBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { getCaptureBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { applyHighlightDrop } from "./drop-highlight.ts";
+import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
+import {
+  SIDEBAR_W,
+  DIVIDER_W,
+  BROWSER_TAB,
+  clampViewerWidth,
+  halfViewerWidth,
+  loadViewerLayout,
+  saveViewerLayout,
+  type ViewerLayout,
+} from "./viewer-layout.ts";
 import { HIGHLIGHT_COLORS } from "../types/highlight.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import type { HighlightColor } from "../lib/model/types.ts";
@@ -37,15 +46,39 @@ function WorkspaceInner(): React.ReactElement {
   const [activeBoardId, setActiveBoardId] = React.useState<string>(() => boards[0]?.id ?? "");
   const [selectedCardId, setSelectedCardId] = React.useState<string | null>(null);
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null);
-  const [readingCardId, setReadingCardId] = React.useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = React.useState(true);
   const [cmdk, setCmdk] = React.useState<{ open: boolean; seed?: string }>({ open: false });
   const [ctx, setCtx] = React.useState<ContextMenuState | null>(null);
   const [canvasMenu, setCanvasMenu] = React.useState<CanvasMenuState | null>(null);
+  const [menuOpen, setMenuOpen] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
   const captureBridge = getCaptureBridge();
+  const canvasRef = React.useRef<CanvasHandle>(null);
+
+  // Shell layout: collapsible sidebar + the tabbed viewer pane (resizable,
+  // persisted). The live-browser tab only exists in Electron, but reader tabs
+  // work everywhere.
+  const viewerAvailable = Boolean(getViewerBridge());
+  const [viewer, setViewer] = React.useState<ViewerLayout>(() => {
+    // The saved width may come from a larger window — clamp to this one.
+    const saved = loadViewerLayout((id) => Boolean(store.getCard(id)));
+    return { ...saved, width: clampViewerWidth(saved.width, window.innerWidth) };
+  });
+  const [dividerDrag, setDividerDrag] = React.useState(false);
+  const viewerOpen = viewer.open && (viewerAvailable || viewer.readerTabs.length > 0);
+  // The native browser view always paints above our DOM, so it must yield
+  // whenever a full-window overlay is up (⌘K palette, extension dialog) or
+  // the divider is mid-drag. Reading and editing are panes now — not overlays.
+  const overlayUp = Boolean(cmdk.open || connectInfo);
+  React.useEffect(() => saveViewerLayout(viewer), [viewer]);
+  // Re-clamp when the window shrinks so the pane can't squeeze out the board.
+  React.useEffect(() => {
+    const onResize = () =>
+      setViewer((v) => ({ ...v, width: clampViewerWidth(v.width, window.innerWidth) }));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Keep the active board valid if it gets deleted.
   const version = store.getVersion();
@@ -55,6 +88,18 @@ function WorkspaceInner(): React.ReactElement {
       if (first) setActiveBoardId(first.id);
     }
   }, [store, activeBoardId, version]);
+
+  // Drop reader tabs whose article was deleted.
+  React.useEffect(() => {
+    setViewer((v) => {
+      const readerTabs = v.readerTabs.filter((id) => store.getCard(id));
+      if (readerTabs.length === v.readerTabs.length) return v;
+      const activeTab = readerTabs.includes(v.activeTab) || v.activeTab === BROWSER_TAB
+        ? v.activeTab
+        : BROWSER_TAB;
+      return { ...v, readerTabs, activeTab };
+    });
+  }, [store, version]);
 
   // Global shortcuts: Cmd/Ctrl-K for search.
   React.useEffect(() => {
@@ -68,13 +113,13 @@ function WorkspaceInner(): React.ReactElement {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Dismiss any open context menu on an outside click.
+  // Dismiss menus on an outside click.
   React.useEffect(() => {
-    if (!ctx && !canvasMenu) return;
-    const close = () => { setCtx(null); setCanvasMenu(null); };
+    if (!ctx && !canvasMenu && !menuOpen) return;
+    const close = () => { setCtx(null); setCanvasMenu(null); setMenuOpen(false); };
     window.addEventListener("pointerdown", close);
     return () => window.removeEventListener("pointerdown", close);
-  }, [ctx, canvasMenu]);
+  }, [ctx, canvasMenu, menuOpen]);
 
   const showToast = React.useCallback((t: ToastState) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -82,32 +127,131 @@ function WorkspaceInner(): React.ReactElement {
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   }, []);
 
+  // Highlights dragged out of the Electron browser pane land here. On the
+  // canvas → place at the drop point; anywhere else (sidebar etc.) → inbox.
+  React.useEffect(() => {
+    const bridge = getDropBridge();
+    if (!bridge) return;
+    bridge.onHighlightDropped((d) => {
+      // Dropping back onto the viewer pane or the divider cancels the drag.
+      const under = document.elementFromPoint(d.x, d.y);
+      if (under?.closest(".ws-viewer, .ws-divider")) return;
+      const canvas = canvasRef.current;
+      if (activeBoardId && canvas?.containsPoint(d.x, d.y)) {
+        const { x, y } = canvas.screenToWorld(d.x, d.y);
+        const card = applyHighlightDrop(store, d, {
+          boardId: activeBoardId,
+          wx: x - 130,
+          wy: y - 20,
+        });
+        setSelectedCardId(card.id);
+        showToast({ message: `Added “${card.title}”` });
+      } else {
+        applyHighlightDrop(store, d, null);
+        showToast({ message: "Highlight saved to inbox" });
+      }
+    });
+    return () => bridge.removeHighlightDroppedListener();
+  }, [store, activeBoardId, showToast]);
+
   const board = store.getWhiteboard(activeBoardId);
 
-  const openCard = (cardId: string) => {
+  // ---- viewer tabs ----------------------------------------------------------
+
+  const [focusHl, setFocusHl] = React.useState<{ id: string; at: number } | null>(null);
+
+  const openReaderTab = (cardId: string) => {
+    // No duplicate tabs: if any open tab shows the same source (captured
+    // twice, or the exact card), focus that one instead of adding another.
+    const target = store.getCard(cardId);
+    const sourceUrl = target && "sourceUrl" in target ? target.sourceUrl : null;
+    setViewer((v) => {
+      const existing = v.readerTabs.find((id) => {
+        if (id === cardId) return true;
+        const c = store.getCard(id);
+        return Boolean(sourceUrl && c && "sourceUrl" in c && c.sourceUrl === sourceUrl);
+      });
+      return {
+        ...v,
+        open: true,
+        readerTabs: existing ? v.readerTabs : [...v.readerTabs, cardId],
+        activeTab: existing ?? cardId,
+      };
+    });
+  };
+
+  const closeReaderTab = (cardId: string) => {
+    setViewer((v) => {
+      const readerTabs = v.readerTabs.filter((id) => id !== cardId);
+      return {
+        ...v,
+        readerTabs,
+        activeTab: v.activeTab === cardId
+          ? (readerTabs[readerTabs.length - 1] ?? BROWSER_TAB)
+          : v.activeTab,
+      };
+    });
+  };
+
+  const readerTabInfos: ViewerTabInfo[] = viewer.readerTabs.map((id) => ({
+    cardId: id,
+    title: store.getCard(id)?.title || "Untitled",
+  }));
+
+  // ---- card opening ---------------------------------------------------------
+
+  /**
+   * Open a card: articles get a reader tab; notes/highlights are brought onto
+   * the active board (if not already there) and edited in place.
+   */
+  const openCard = (cardId: string, opts: { edit?: boolean } = {}) => {
+    const card = store.getCard(cardId);
+    if (!card) return;
     setSelectedCardId(cardId);
-    // Article cards open in the reader; everything else in the editor.
-    if (store.getCard(cardId)?.kind === "article") {
-      setReadingCardId(cardId);
-    } else {
-      setEditingCardId(cardId);
+    if (card.kind === "article") {
+      openReaderTab(cardId);
+      return;
     }
+    if (activeBoardId && !store.getPlacements(activeBoardId).some((p) => p.cardId === cardId)) {
+      store.placeCard(activeBoardId, cardId, 120, 120);
+    }
+    if (opts.edit !== false) setEditingCardId(cardId);
   };
 
   const readCard = (cardId: string) => {
     const card = store.getCard(cardId);
     if (!card) return;
-    // For a highlight, read its source article if we captured one.
+    // For a highlight, read its source article if we captured one — and
+    // scroll straight to where the highlight lives.
     if (card.kind === "highlight") {
       const article = store
         .getCards()
         .find((c) => c.kind === "article" && c.sourceUrl === card.sourceUrl);
       if (article) {
-        setReadingCardId(article.id);
+        openReaderTab(article.id);
+        setFocusHl({ id: cardId, at: Date.now() });
         return;
       }
     }
-    setReadingCardId(cardId);
+    openReaderTab(cardId);
+  };
+
+  /** A highlight hold-dragged out of the reader was released at (x, y). */
+  const dropHighlightFromReader = (hlCardId: string, x: number, y: number) => {
+    const canvas = canvasRef.current;
+    if (!activeBoardId || !canvas?.containsPoint(x, y)) return; // not a board drop
+    const { x: wx, y: wy } = canvas.screenToWorld(x, y);
+    store.placeCard(activeBoardId, hlCardId, wx - 130, wy - 20);
+    setSelectedCardId(hlCardId);
+    const title = store.getCard(hlCardId)?.title ?? "highlight";
+    showToast({ message: `Added “${title}”` });
+  };
+
+  /** A card dragged from the sidebar inbox was dropped on the canvas. */
+  const dropCardOnCanvas = (cardId: string, wx: number, wy: number) => {
+    if (!activeBoardId || !store.getCard(cardId)) return;
+    store.placeCard(activeBoardId, cardId, wx - 130, wy - 20);
+    setSelectedCardId(cardId);
   };
 
   // Create a note at a canvas position (from double-click or the canvas menu).
@@ -153,25 +297,34 @@ function WorkspaceInner(): React.ReactElement {
     });
   };
 
-  const createLinkedCard = (title: string) => {
-    if (!activeBoardId) return;
-    const { card } = store.createNoteOnBoard(activeBoardId, 120, 120, { title });
-    openCard(card.id);
-  };
-
-  const editingCard = editingCardId ? store.getCard(editingCardId) : null;
-
   return (
-    <div className="ws-root">
-      <Sidebar
-        activeBoardId={activeBoardId}
-        onSelectBoard={(id) => { setActiveBoardId(id); setSelectedCardId(null); }}
-        onOpenCard={openCard}
-        onOpenSearch={(seed) => setCmdk({ open: true, seed })}
-      />
+    <div
+      className="ws-root"
+      style={{
+        gridTemplateColumns: [
+          viewer.sidebarOpen ? `${SIDEBAR_W}px` : "",
+          "minmax(0, 1fr)",
+          viewerOpen ? `${DIVIDER_W}px ${viewer.width}px` : "",
+        ].filter(Boolean).join(" "),
+      }}
+    >
+      {viewer.sidebarOpen && (
+        <Sidebar
+          activeBoardId={activeBoardId}
+          onSelectBoard={(id) => { setActiveBoardId(id); setSelectedCardId(null); }}
+          onOpenCard={openCard}
+          onOpenSearch={(seed) => setCmdk({ open: true, seed })}
+        />
+      )}
 
       <main className="ws-main">
         <header className="ws-topbar">
+          <button
+            className="ws-icon-btn"
+            title={viewer.sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            aria-pressed={viewer.sidebarOpen}
+            onClick={() => setViewer((v) => ({ ...v, sidebarOpen: !v.sidebarOpen }))}
+          >▦</button>
           <h2 className="ws-board-title">{board?.name ?? "octobase"}</h2>
           {board && (
             <span className="ws-board-sub">
@@ -180,65 +333,100 @@ function WorkspaceInner(): React.ReactElement {
           )}
           <div className="ws-topbar-spacer" />
           <button
-            className={`ws-btn ghost`}
-            onClick={() => setInspectorOpen((o) => !o)}
-            title="Toggle inspector"
-          >
-            {inspectorOpen ? "Hide panel" : "Show panel"}
-          </button>
-          {captureBridge && (
-            <button className="ws-btn" title="Pair the Chrome capture extension"
-              onClick={async () => setConnectInfo(await captureBridge.getInfo())}>🔌 Connect extension</button>
-          )}
+            className="ws-icon-btn"
+            title="Zoom to fit"
+            onClick={() => canvasRef.current?.zoomToFit()}
+          >⌖</button>
+          <button
+            className={`ws-icon-btn${viewerOpen ? " active" : ""}`}
+            title={viewerOpen ? "Hide viewer pane" : "Show viewer pane"}
+            aria-pressed={viewerOpen}
+            onClick={() => setViewer((v) => ({ ...v, open: !viewerOpen }))}
+          >◫</button>
+          <div className="ws-menu-anchor" onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              className={`ws-icon-btn${menuOpen ? " active" : ""}`}
+              title="More"
+              onClick={() => setMenuOpen((o) => !o)}
+            >⋯</button>
+            {menuOpen && (
+              <div className="ws-dd" role="menu">
+                <div className="ws-dd-item" role="menuitem"
+                  onClick={() => { setMenuOpen(false); setCmdk({ open: true }); }}>
+                  <span className="ws-dd-ico">🔍</span> Search everything
+                  <span className="ws-dd-kbd">⌘K</span>
+                </div>
+                {captureBridge && (
+                  <>
+                    <div className="ws-dd-sep" />
+                    <div className="ws-dd-item" role="menuitem"
+                      onClick={async () => { setMenuOpen(false); setConnectInfo(await captureBridge.getInfo()); }}>
+                      <span className="ws-dd-ico">🔌</span> Connect extension
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </header>
 
         {activeBoardId && (
           <Canvas
             key={activeBoardId}
+            ref={canvasRef}
             boardId={activeBoardId}
             selectedCardId={selectedCardId}
-            onSelect={setSelectedCardId}
+            editingCardId={editingCardId}
+            onEndEdit={() => setEditingCardId(null)}
+            onSelect={(id) => {
+              setSelectedCardId(id);
+              if (editingCardId && id !== editingCardId) setEditingCardId(null);
+            }}
             onOpen={openCard}
+            onDropCard={dropCardOnCanvas}
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
           />
         )}
 
-        {inspectorOpen && selectedCardId && !editingCardId && (
-          <Inspector
-            cardId={selectedCardId}
-            onClose={() => setInspectorOpen(false)}
-            onOpenCard={(id) => { setSelectedCardId(id); }}
-            onCreateLink={createLinkedCard}
-          />
-        )}
       </main>
 
-      {editingCard && (
-        <CardEditor
-          key={editingCard.id}
-          card={editingCard}
-          onChange={(patch) => store.updateCard(editingCard.id, patch)}
-          onClose={() => setEditingCardId(null)}
-          onDelete={() => deleteCard(editingCard.id)}
-        />
-      )}
-
-      {readingCardId && (
-        <Reader
-          cardId={readingCardId}
-          onClose={() => setReadingCardId(null)}
-          onOpenCard={(id) => {
-            // Reader stays open; clicking a highlight selects/edits its card.
-            const c = store.getCard(id);
-            if (c && c.kind !== "article") {
-              setSelectedCardId(id);
-              setEditingCardId(id);
-            } else {
-              setReadingCardId(id);
+      {viewerOpen && (
+        <>
+          <div
+            className={`ws-divider${dividerDrag ? " dragging" : ""}`}
+            title="Drag to resize · double-click for 50/50"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              setDividerDrag(true);
+            }}
+            onPointerMove={(e) => {
+              if (!dividerDrag) return;
+              const width = clampViewerWidth(window.innerWidth - e.clientX, window.innerWidth);
+              setViewer((v) => ({ ...v, width }));
+            }}
+            onPointerUp={(e) => {
+              try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+              setDividerDrag(false);
+            }}
+            onDoubleClick={() =>
+              setViewer((v) => ({ ...v, width: halfViewerWidth(window.innerWidth) }))
             }
-          }}
-        />
+          />
+          <ViewerHost
+            readerTabs={readerTabInfos}
+            activeTab={viewer.activeTab}
+            onSelectTab={(id) => setViewer((v) => ({ ...v, activeTab: id }))}
+            onCloseTab={closeReaderTab}
+            onClose={() => setViewer((v) => ({ ...v, open: false }))}
+            onOpenCard={(id) => openCard(id, { edit: false })}
+            focusHighlight={focusHl}
+            onDropHighlight={dropHighlightFromReader}
+            suspended={dividerDrag || overlayUp}
+          />
+        </>
       )}
 
       {cmdk.open && (
@@ -247,10 +435,6 @@ function WorkspaceInner(): React.ReactElement {
           onClose={() => setCmdk({ open: false })}
           onPick={(card) => {
             setCmdk({ open: false });
-            // Ensure the card is on the current board so it is visible, then open.
-            if (activeBoardId && !store.getPlacements(activeBoardId).some((p) => p.cardId === card.id)) {
-              store.placeCard(activeBoardId, card.id, 120, 120);
-            }
             openCard(card.id);
           }}
         />
@@ -263,12 +447,17 @@ function WorkspaceInner(): React.ReactElement {
           onPointerDown={(e) => e.stopPropagation()}
         >
           {store.getCard(ctx.cardId)?.kind !== "note" && (
-            <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>📖 Read</div>
+            <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
+              <span className="ws-ctx-ico">📖</span> Read
+            </div>
           )}
-          <div className="ws-ctx-item" onClick={() => { setSelectedCardId(ctx.cardId); setEditingCardId(ctx.cardId); setCtx(null); }}>✎ Edit</div>
-          <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>⇤ Move to inbox</div>
+          <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>
+            <span className="ws-ctx-ico">⇤</span> Move to inbox
+          </div>
           <div className="ws-ctx-sep" />
-          <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>🗑 Delete card</div>
+          <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>
+            <span className="ws-ctx-ico">🗑</span> Delete card
+          </div>
         </div>
       )}
 
@@ -279,7 +468,9 @@ function WorkspaceInner(): React.ReactElement {
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="ws-ctx-label">New card</div>
-          <div className="ws-ctx-item" onClick={() => { newNoteAt(canvasMenu.wx, canvasMenu.wy); setCanvasMenu(null); }}>＋ Blank note</div>
+          <div className="ws-ctx-item" onClick={() => { newNoteAt(canvasMenu.wx, canvasMenu.wy); setCanvasMenu(null); }}>
+            <span className="ws-ctx-ico">＋</span> Blank note
+          </div>
           <div className="ws-ctx-colors">
             {HIGHLIGHT_COLORS.map((c) => (
               <span
