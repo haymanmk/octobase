@@ -5,6 +5,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
+import { CardEmbedNode } from "./card-embed-node.ts";
 
 export interface CardMarkdownEditorProps {
   /** Initial markdown body (the editing session owns it afterwards). */
@@ -30,6 +31,7 @@ export function CardMarkdownEditor({ value, onChange }: CardMarkdownEditorProps)
       StarterKit,
       TaskList,
       TaskItem.configure({ nested: true }),
+      CardEmbedNode,
       Placeholder.configure({ placeholder: "Write markdown…" }),
       Markdown.configure({ html: false, linkify: false, breaks: false }),
     ],

@@ -289,6 +289,41 @@ function WorkspaceInner(): React.ReactElement {
     selectOne(cardId);
   };
 
+  /** Nest a card into a note: append an ![[embed]] block to the host body. */
+  const embedIntoCard = (
+    hostCardId: string,
+    childCardId: string,
+    opts: { removePlacement: boolean },
+  ) => {
+    const host = store.getCard(hostCardId);
+    const child = store.getCard(childCardId);
+    if (!host || !child || host.kind !== "note") return;
+    const ok = store.embedCard(hostCardId, childCardId);
+    if (!ok) {
+      showToast({ message: `Already embedded in “${host.title}”` });
+      return;
+    }
+    if (opts.removePlacement) {
+      const p = store.getPlacements(activeBoardId).find((pl) => pl.cardId === childCardId);
+      if (p) store.removePlacement(p.id);
+      setSelectedCardIds((ids) => ids.filter((id) => id !== childCardId));
+    }
+    showToast({
+      message: `Embedded “${child.title}” in “${host.title}”`,
+      actionLabel: "Undo",
+      onAction: () => {
+        store.updateCard(hostCardId, { body: host.body });
+        if (opts.removePlacement) {
+          const prev = store
+            .snapshot()
+            .placements.find((pl) => pl.cardId === childCardId && pl.whiteboardId === activeBoardId);
+          if (!prev) store.placeCard(activeBoardId, childCardId, 120, 120);
+        }
+        setToast(null);
+      },
+    });
+  };
+
   // Create a note at a canvas position (from double-click or the canvas menu).
   const newNoteAt = (wx: number, wy: number, color?: HighlightColor) => {
     if (!activeBoardId) return;
@@ -432,6 +467,7 @@ function WorkspaceInner(): React.ReactElement {
             onDropCard={dropCardOnCanvas}
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
+            onEmbed={embedIntoCard}
           />
         )}
 

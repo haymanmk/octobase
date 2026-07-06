@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
-import { CARD_DRAG_MIME } from "./Canvas.tsx";
+import { CARD_DRAG_MIME } from "./dnd.ts";
 import { clipUrl } from "./electron-bridge.ts";
+import { snippet } from "./MarkdownView.tsx";
 import type { Card, CardKind } from "../lib/model/types.ts";
 
 export interface LibraryPanelProps {
@@ -20,20 +21,6 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "article", label: "Articles" },
   { key: "image", label: "Clips" },
 ];
-
-/** Markdown body → short plain-text preview for a tile. */
-function snippet(body: string): string {
-  return body
-    .replace(/!\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/[*_`>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 140);
-}
 
 const KIND_GLYPH: Record<string, string> = {
   note: "✎",

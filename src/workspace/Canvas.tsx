@@ -20,6 +20,8 @@ export interface CanvasProps {
   onContextMenu: (cardId: string, x: number, y: number) => void;
   /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
+  /** Nest a card into a note (library-tile drop, or ⌥-release of a card drag). */
+  onEmbed: (hostCardId: string, childCardId: string, opts: { removePlacement: boolean }) => void;
 }
 
 /** Imperative surface for callers that receive screen-space points (drops). */
@@ -32,7 +34,8 @@ export interface CanvasHandle {
   zoomToFit: () => void;
 }
 
-export const CARD_DRAG_MIME = "application/x-octobase-card";
+export { CARD_DRAG_MIME } from "./dnd.ts";
+import { CARD_DRAG_MIME } from "./dnd.ts";
 
 interface View {
   tx: number;
@@ -53,6 +56,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   onDropCard,
   onContextMenu,
   onBackgroundContextMenu,
+  onEmbed,
 }: CanvasProps, handleRef): React.ReactElement {
   const store = useWorkspace();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -448,6 +452,8 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
               onSelect={(id) => { onSelect(id); setSelectedEdgeId(null); store.bringToFront(p.id); }}
               onStartEdge={startEdgeDrag}
               edgeTarget={card.id === edgeTargetId}
+              onEmbedDrop={(hostId, childId) => onEmbed(hostId, childId, { removePlacement: false })}
+              onAltDropOnCard={(draggedId, hostId) => onEmbed(hostId, draggedId, { removePlacement: true })}
               onMove={(id, x, y) => {
                 // Dragging one card of a multi-selection moves the group.
                 // `placements` is the drag-start snapshot (the handler closure

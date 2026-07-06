@@ -13,7 +13,7 @@ import type {
 } from "../model/types.ts";
 import { ID } from "../model/ids.ts";
 import { describeAnchor } from "../anchor/text-anchor.ts";
-import { normalizeTitle, parseWikilinks } from "../model/wikilinks.ts";
+import { normalizeTitle, parseEmbeds, parseWikilinks } from "../model/wikilinks.ts";
 import type { PersistenceBackend } from "./persistence.ts";
 
 type Listener = () => void;
@@ -655,13 +655,18 @@ export class WorkspaceStore {
     return this.getCards().find((c) => normalizeTitle(c.title) === key);
   }
 
+  /** [[links]] and ![[embeds]] both create graph relations. */
+  private references(body: string) {
+    return [...parseWikilinks(body), ...parseEmbeds(body)];
+  }
+
   /** Outgoing resolved links from a card (deduped, existing targets only). */
   getOutgoingLinks(cardId: string): Card[] {
     const card = this.getCard(cardId);
     if (!card) return [];
     const seen = new Set<string>();
     const out: Card[] = [];
-    for (const wl of parseWikilinks(card.body)) {
+    for (const wl of this.references(card.body)) {
       const target = this.cardByTitle(wl.target);
       if (target && target.id !== cardId && !seen.has(target.id)) {
         seen.add(target.id);
@@ -679,10 +684,47 @@ export class WorkspaceStore {
     const out: Card[] = [];
     for (const other of this.getCards()) {
       if (other.id === cardId) continue;
-      const links = parseWikilinks(other.body);
+      const links = this.references(other.body);
       if (links.some((l) => normalizeTitle(l.target) === key)) out.push(other);
     }
     return out;
+  }
+
+  // ---- nesting (embeds) ------------------------------------------------------
+
+  /** Cards embedded in this card's body, in body order, deduped. */
+  getChildCards(cardId: string): Card[] {
+    const card = this.getCard(cardId);
+    if (!card) return [];
+    const seen = new Set<string>();
+    const out: Card[] = [];
+    for (const em of parseEmbeds(card.body)) {
+      const target = this.cardByTitle(em.target);
+      if (target && target.id !== cardId && !seen.has(target.id)) {
+        seen.add(target.id);
+        out.push(target);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Nest a card: append an ![[embed]] block to the host's body. Returns false
+   * on self-embeds, missing cards, or when the child is already embedded.
+   */
+  embedCard(hostCardId: string, childCardId: string): boolean {
+    if (hostCardId === childCardId) return false;
+    const host = this.getCard(hostCardId);
+    const child = this.getCard(childCardId);
+    if (!host || !child) return false;
+    const key = normalizeTitle(child.title);
+    if (parseEmbeds(host.body).some((e) => normalizeTitle(e.target) === key)) {
+      return false;
+    }
+    const block = `![[${child.title.trim()}]]`;
+    const body = host.body.trim() ? `${host.body.replace(/\s+$/, "")}\n\n${block}` : block;
+    this.updateCard(hostCardId, { body });
+    return true;
   }
 
   /** Unresolved wikilink targets in a card (no matching card exists yet). */
