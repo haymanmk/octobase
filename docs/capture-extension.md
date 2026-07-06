@@ -12,15 +12,29 @@ either way.
 
 ## In-app reader (P3) — `src/workspace/reader/`
 
-- `Reader.tsx` opens article cards full-screen: serif/sans toggle, font-size and
-  measure controls (persisted to `octobase.reader.prefs`), "open original".
-- `highlight-overlay.ts` paints a card's highlights over the rendered article via
-  the **CSS Custom Highlight API** (one registry per color, multi-node ranges, no
-  DOM mutation), and hit-tests clicks (caret-from-point) back to the card.
-- Selecting text in the reader shows a color toolbar that creates an anchored
-  `HighlightCard` — the capture loop, fully in-app.
-- Article cards open the reader; notes/highlights open the editor. Context-menu
-  "Read" is available on article/highlight cards.
+- `Reader.tsx` renders article cards as 📖 tabs in the dockable viewer pane
+  (`ViewerHost.tsx`), next to the pinned live-browser tab — not full-screen.
+  Serif/sans toggle and font-size controls (persisted to
+  `octobase.reader.prefs`); "↗ Open in browser" routes the source URL to the
+  live-browser tab.
+- `highlight-overlay.ts` resolves a card's highlights against the rendered
+  article (shared `locateAnchorRange`) and returns **marker-band rects**
+  (`bandsFor`: one per line box, spanning the middle 50% of the line — the
+  same stroke the live-browser highlighter paints, so inline-code chips stay
+  legible). `Reader.tsx` paints them as absolutely-positioned divs and
+  re-measures on reflow; the CSS Custom Highlight API can't draw the
+  partial-height stroke, so the reader no longer uses it (the extension still
+  does). Clicks hit-test back to the card via `offsetFromPoint` /
+  `highlightAtOffset` (caret-from-point).
+- Selecting text shows the shared toolbar pill (`toolbar-ui.ts` — same styles
+  as the injected widget and the extension; see `highlighter.md`); picking a
+  color creates an anchored `HighlightCard` and expands straight into the edit
+  popover. **Click an existing highlight** to edit it (recolor / tags / note /
+  delete); **hold-drag** one out of the article to place its card on the
+  whiteboard — the capture loop, fully in-app.
+- Opening an article card opens a reader tab; notes/highlights are placed on
+  the board and edited in place. Context-menu "Read" on a highlight card opens
+  its captured source article and scrolls to the highlight.
 
 ## Capture server (P4) — `src/electron/capture-server.js`
 
@@ -36,18 +50,20 @@ Loopback HTTP server (default `127.0.0.1:7373`) the extension posts to.
 
 `main.js` starts it and forwards captures/highlights to the KB renderer over IPC
 (`capture:received` / `highlight:received`); they land in the **inbox**. The
-pairing token + port are shown in-app via the "Connect extension" button
-(topbar, Electron only) → `extension:info`.
+pairing token + port are shown in-app via "Connect extension" in the topbar's
+⋯ menu (Electron only) → `extension:info`.
 
 ## Chrome extension (P4) — `src/extension/`
 
 MV3. Reuses `src/lib` anchoring + extractor verbatim.
 
-- `content.ts` — selection → color toolbar → `describeAnchorFromRange` →
-  POST `/highlight` (via the worker). Each highlight carries a stable `id`,
-  is cached in `chrome.storage.local` keyed by URL, and **re-painted on every
-  page load** via the shared `paintAnchors` / `locateAnchorRange` (the same
-  anchor→DOM-range logic the reader uses), so highlights survive refreshes.
+- `content.ts` — selection → toolbar pill (shared `toolbar-ui.ts` styles in a
+  shadow-DOM host) → `describeAnchorFromRange` → POST `/highlight` (via the
+  worker). Each highlight carries a stable `id`, is cached in
+  `chrome.storage.local` keyed by URL, and **re-painted on every page load**
+  via the shared `paintAnchors` (CSS Custom Highlight API) over
+  `locateAnchorRange` (the same anchor→DOM-range logic the reader uses), so
+  highlights survive refreshes.
   **Click an existing highlight** to open an edit popover: recolor, add a note,
   or delete — each updates the cache, re-paints, and syncs to the app card
   (same `id`). "Capture article" runs the shared extractor.
@@ -87,8 +103,9 @@ Notes:
 ## What's verified vs. what needs a desktop run
 
 - **Verified (CI-able):** the extractor (4 tests, linkedom), the capture server
-  (6 HTTP tests), the server→store contract (1 integration test), and all P1/P2/P3
-  unit + in-browser checks. The extension bundles clean and type-checks.
+  (9 HTTP tests), the server→store contract (`capture-integration.test.ts`), the
+  shared toolbar CSS (`toolbar-ui.test.ts`), and all P1/P2/P3 unit + in-browser
+  checks. The extension bundles clean and type-checks.
 - **Needs a desktop run:** the Electron IPC hop (server → renderer card) and the
   extension running inside real Chrome (content script, service-worker fetch,
   popup). These can't be exercised headlessly here; load-unpacked + `npm run dev`

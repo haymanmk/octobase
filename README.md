@@ -1,73 +1,35 @@
-# React + TypeScript + Vite
+# Octobase
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A note-taking app built for your brain.
 
-Currently, two official plugins are available:
+Octobase is an Electron app that pairs a card-based whiteboard workspace with
+a built-in article browser. Read any web page in the right pane, highlight it
+in place, and drag highlights onto whiteboards as cards — then link, tag, and
+search them as a knowledge base. A companion Chrome extension (MV3) captures
+articles from your regular browser into the same store.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Quick start
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm install
+npm run dev        # build everything, then launch Electron
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Other useful scripts:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm run build             # type-check + bundle app and highlighter into dist/
+npm run build:extension   # bundle the Chrome capture extension into dist-extension/
+npm test                  # node --test test/**/*.test.ts
+npm run lint              # eslint
 ```
+
+There is no watch mode for the Electron app — re-run `npm run dev` after
+changes. `npm run vite-dev` serves the React tree in a plain browser for
+quick UI iteration (Electron IPC bridges won't be available there).
+
+## Documentation
+
+Architecture and subsystem docs live in [`docs/`](docs/README.md) — start
+with [`docs/architecture.md`](docs/architecture.md) for the process model,
+and [`docs/build.md`](docs/build.md) for the build chain.

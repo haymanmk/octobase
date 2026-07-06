@@ -1,18 +1,22 @@
 # Highlighter widget
 
-The right-pane article browser loads arbitrary web pages. Octobase injects
-its own UI on top of those pages without changing their markup. That UI is
-the **highlighter widget**: a Lit-based set of web components, bundled as a
-single IIFE, and injected via `executeJavaScript` on every page load.
+The viewer pane's pinned live-browser tab is a native `WebContentsView`
+that loads arbitrary web pages (the renderer owns the pane layout and
+streams the slot rectangle to main over `pane:set-bounds` — see
+`architecture.md`). Octobase injects its own UI on top of those pages
+without changing their markup. That UI is the **highlighter widget**: a
+Lit-based set of web components, bundled as a single IIFE, and injected
+via `executeJavaScript` on every page load.
 
 Source: `src/components/highlighter/`. Bundle: `dist/highlighter/highlighter.iife.js`
-(produced by `vite.highlighter.config.ts`).
+(produced by `vite.highlighter.config.ts` — see `build.md`).
 
 ## Module layout
 
 ```
 src/components/highlighter/
   highlighter.ts     Entry. Bootstraps everything; defines the widget custom element.
+  toolbar-ui.ts      Shared pill + popover CSS for widget / extension / reader.
   colors.ts          PALETTE, classNameFor, paletteCss.
   widget-styles.ts   injectGlobalStyles — appends paletteCss to document.head.
   highlight-id.ts    Helpers for stamping fragments with shared id + text.
@@ -23,8 +27,10 @@ src/components/highlighter/
 
 ## Bootstrap
 
-On every right-pane navigation, `main.js` reads the bundle and runs
-`executeJavaScript(bundleSource)`. The IIFE then:
+`main.js` reads the bundle from disk once at window creation and runs
+`executeJavaScript(bundleSource)` on the browser view's every
+`did-finish-load`, so the widget re-mounts on each navigation. The IIFE
+then:
 
 1. Defines `<octobase-widget-root>`, the host custom element, and appends
    one instance to `document.body`. The widget itself lives inside that
@@ -37,7 +43,8 @@ On every right-pane navigation, `main.js` reads the bundle and runs
    appliers wrap text directly in the page DOM, outside shadow DOM, so the
    styles must live in the host document).
 4. Wires document-level `mouseup`, `mousedown`, `keydown` listeners.
-5. Schedules `reapplyOnLoad` to fire on `window.load + 500 ms` so any
+5. Schedules `reapplyOnLoad` to fire on `window.load + 500 ms` (or
+   immediately + 500 ms if the document is already `complete`) so any
    persisted highlights for the current URL are restored.
 
 ## Per-color class appliers
@@ -57,15 +64,43 @@ single linear-gradient stripe centred vertically:
   padding: 0;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+.octo-hl-yellow:hover { filter: brightness(0.97); }
 ```
 
 `box-decoration-break: clone` is what lets a highlight that wraps onto
 multiple visual lines paint its background on every line. `padding: 0`
 keeps partial-word selections flush against adjacent characters so the
 highlight does not visually split a word.
+
+## Shared toolbar UI
+
+The selection pill and the edit popover look identical across three
+surfaces on purpose. `toolbar-ui.ts` is the single source of truth for
+that look:
+
+- `pillCss()` — `.octo-pill` / `.octo-swatch` / `.octo-divider` /
+  `.octo-add-note`: the white creation pill with 22 px (`SWATCH_SIZE`)
+  fill swatches.
+- `popoverCss()` — the `.octo-pop*` edit popover: color row, note input,
+  Delete / primary buttons.
+- `ensureToolbarStyles(root)` — idempotently installs both into a
+  `Document` head or a `ShadowRoot`.
+
+| Surface | How it consumes the module |
+|---|---|
+| `<highlighter-widget>` (this bundle) | `unsafeCSS(pillCss())` in its static styles |
+| Chrome extension content script (`src/extension/content.ts`) | `ensureToolbarStyles(shadow)` into each toolbar / popover host's shadow root |
+| In-app reader (`src/workspace/reader/Reader.tsx`) | `ensureToolbarStyles()` into the app document |
+
+Positioning (`fixed` / `left` / `top` / `z-index`) stays with each caller;
+the module covers look and feel only. One nuance: the Lit
+`<octo-edit-form>` keeps its own component styles — the `.octo-pop*`
+classes serve the extension's and the reader's popovers, which are plain
+DOM rather than Lit.
 
 ## Widget state machine
 
@@ -143,7 +178,7 @@ the drag flow.
 
 ## Persistence and reapply
 
-The right view persists highlights via `highlights:save` and re-applies
+The browser view persists highlights via `highlights:save` and re-applies
 them on every page load:
 
 ```ts
@@ -165,7 +200,8 @@ to render before we resolve node-index offsets.
 
 ## Listening for sync broadcasts
 
-The right view subscribes to `highlight:updated` so card-side edits that
+The browser view subscribes to `highlight:updated` so card-side edits that
 propagate back through `syncHighlightFromCard` reflect in the page DOM. If
 the broadcast color differs from the current class on each fragment, the
-class is swapped without re-creating the range.
+class is swapped without re-creating the range, and the fragment's
+`data-octobase-highlight-text` is refreshed from the broadcast record.
