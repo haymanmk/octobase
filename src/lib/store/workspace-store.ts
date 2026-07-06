@@ -55,6 +55,7 @@ export class WorkspaceStore {
     const loaded = await this.backend.load();
     this.data = loaded ?? emptyData();
     const fresh = !loaded;
+    this.migrateHighlightBodies();
     if (!this.data.whiteboards.some((w) => !w.deletedAt)) {
       // Guarantee at least one board to land on.
       const wb = this.createWhiteboard(seed ? "Welcome" : "My first whiteboard", { silent: true });
@@ -63,6 +64,31 @@ export class WorkspaceStore {
     this.loaded = true;
     if (fresh) void this.backend.save(this.snapshot());
     this.emit();
+  }
+
+  /**
+   * Highlight card bodies used to duplicate the quoted text ("> exact\n\nnote");
+   * the title already carries the text, so bodies now hold only the note.
+   * Strip the legacy quote from persisted cards once on load.
+   */
+  private migrateHighlightBodies(): void {
+    for (const c of this.data.cards) {
+      if (c.kind !== "highlight") continue;
+      const exact = c.anchor?.exact;
+      if (!exact || !c.body.startsWith("> ")) continue;
+      // Exact prefix first; fall back to comparing the first paragraph with
+      // whitespace normalized (old bodies quoted a trimmed copy of the text).
+      const quote = `> ${exact}`;
+      if (c.body.startsWith(quote)) {
+        c.body = c.body.slice(quote.length).trimStart();
+        continue;
+      }
+      const nl = c.body.indexOf("\n\n");
+      const first = nl === -1 ? c.body : c.body.slice(0, nl);
+      if (first.slice(2).trim() === exact.trim()) {
+        c.body = nl === -1 ? "" : c.body.slice(nl + 2).trimStart();
+      }
+    }
   }
 
   /** A small first-run board that demonstrates notes, links, and tags. */
@@ -280,7 +306,8 @@ export class WorkspaceStore {
       id: ID.card(),
       kind: "highlight",
       title: text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight",
-      body: init.notes ? `> ${text}\n\n${init.notes}` : `> ${text}`,
+      // The title carries the highlighted text; the body is just the note.
+      body: init.notes ?? "",
       tags: init.tags ?? [],
       color: init.color ?? "yellow",
       createdAt: ts,
@@ -309,8 +336,8 @@ export class WorkspaceStore {
   }): HighlightCard {
     const text = init.text.trim();
     const title = text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight";
-    const note = init.note?.trim();
-    const body = note ? `> ${text}\n\n${note}` : `> ${text}`;
+    // The title carries the highlighted text; the body is just the note.
+    const body = init.note?.trim() ?? "";
 
     if (init.id) {
       const idx = this.data.cards.findIndex((c) => c.id === init.id);

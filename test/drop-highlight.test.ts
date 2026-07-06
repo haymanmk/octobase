@@ -37,8 +37,8 @@ test("drop on the canvas creates a highlight card placed at the drop point", asy
   assert.equal(card.sourceUrl, payload.sourceUrl);
   assert.equal(card.color, "pink");
   assert.deepEqual(card.tags, ["philosophy"]);
-  assert.match(card.body, /information lies beyond the skin/);
-  assert.match(card.body, /core claim/);
+  assert.match(card.title, /information lies beyond the skin/);
+  assert.equal(card.body, "core claim"); // body is the note only — no quote
   assert.equal(card.anchor.exact, payload.text);
 
   const placements = store.getPlacements(boardId);
@@ -71,6 +71,24 @@ test("drop outside the canvas lands in the inbox with no placement", async () =>
   assert.ok(store.getInboxCards().some((c) => c.id === card.id));
 });
 
+test("legacy quoted highlight bodies migrate to note-only on load", async () => {
+  const legacy = {
+    version: 1 as const,
+    whiteboards: [],
+    placements: [],
+    cards: [{
+      id: "h1", kind: "highlight" as const, title: "exact text",
+      body: "> exact text\n\nmy note", tags: [], color: "yellow" as const,
+      createdAt: 1, updatedAt: 1, deletedAt: null,
+      sourceUrl: "https://a.b",
+      anchor: { exact: "exact text", prefix: "", suffix: "", startHint: 0 },
+    }],
+  };
+  const store = new WorkspaceStore(new MemoryPersistence(legacy));
+  await store.init({ seed: false });
+  assert.equal(store.getCard("h1")?.body, "my note");
+});
+
 test("missing optional fields fall back to defaults", async () => {
   const { store, boardId } = await makeStore();
 
@@ -82,5 +100,6 @@ test("missing optional fields fall back to defaults", async () => {
 
   assert.equal(card.color, "yellow");
   assert.deepEqual(card.tags, []);
-  assert.match(card.body, /bare text/);
+  assert.match(card.title, /bare text/);
+  assert.equal(card.body, ""); // no note was provided
 });

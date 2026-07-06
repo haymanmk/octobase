@@ -129,10 +129,13 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   return (
     <div
       className={`ws-card${selected ? " selected" : ""}${dragging ? " dragging" : ""}${editing ? " editing" : ""}`}
+      data-card-id={card.id}
       style={{ left: placement.x, top: placement.y, width: placement.w, height: placement.h, zIndex: placement.z }}
       onPointerDown={(e) => { if (!editing) beginMove(e); else props.onSelect(card.id); }}
       onDoubleClick={(e) => { e.stopPropagation(); if (!editing) props.onOpen(card.id); }}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); props.onContextMenu(card.id, e.clientX, e.clientY); }}
+      // The canvas opens context menus on right-button release (macOS fires
+      // this event already on press, which would beat a right-drag pan).
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
     >
       <div className="ws-card-accent" style={{ background: palette.underline }} />
       <div className="ws-card-head">

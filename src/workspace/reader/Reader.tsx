@@ -45,11 +45,11 @@ function hostOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }
 
-/** The free-text note stored after the quoted text in a highlight card body. */
+/** A highlight card's body is its note (legacy bodies carried the quote too). */
 function noteOfHighlight(card: HighlightCard): string {
   const quote = `> ${card.anchor.exact}`;
   if (card.body.startsWith(quote)) return card.body.slice(quote.length).trimStart();
-  return "";
+  return card.body;
 }
 
 const HOLD_MS = 250;
@@ -73,6 +73,7 @@ export function Reader({
   const version = store.getVersion();
   const card = store.getCard(cardId);
   const bodyRef = React.useRef<HTMLDivElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
   const [prefs, setPrefs] = React.useState<ReaderPrefs>(loadPrefs);
   const placedRef = React.useRef<PlacedHighlight[]>([]);
   const [selToolbar, setSelToolbar] = React.useState<{ x: number; y: number } | null>(null);
@@ -109,9 +110,17 @@ export function Reader({
       const target = placedRef.current.find((p) => p.cardId === focusHighlight.id);
       if (target) {
         focusDoneRef.current = focusHighlight.at;
-        const node = target.range.startContainer;
-        const elToShow = node instanceof Element ? node : node.parentElement;
-        elToShow?.scrollIntoView({ block: "center", behavior: "smooth" });
+        // Center the range itself (not its whole paragraph), and correct once
+        // more after images/fonts settle and shift the layout.
+        const center = () => {
+          const scroller = scrollRef.current;
+          const r = target.range.getBoundingClientRect();
+          if (!scroller || r.height === 0) return;
+          const s = scroller.getBoundingClientRect();
+          scroller.scrollTop += r.top - s.top - scroller.clientHeight / 2 + r.height / 2;
+        };
+        center();
+        setTimeout(center, 400);
       }
     }
     return () => clearHighlights();
@@ -249,20 +258,20 @@ export function Reader({
     <div className="ws-reader-pane">
       <div className="ws-reader-tools">
         <div className="ws-reader-typo">
-          <button className={`ws-tb-btn${prefs.family === "serif" ? " active" : ""}`} title="Serif"
+          <button className={`ws-tb-btn${prefs.family === "serif" ? " active" : ""}`} title="Serif font"
             onClick={() => setPrefs((p) => ({ ...p, family: "serif" }))} style={{ fontFamily: "var(--ws-font-display)" }}>Aa</button>
-          <button className={`ws-tb-btn${prefs.family === "sans" ? " active" : ""}`} title="Sans"
+          <button className={`ws-tb-btn${prefs.family === "sans" ? " active" : ""}`} title="Sans-serif font"
             onClick={() => setPrefs((p) => ({ ...p, family: "sans" }))} style={{ fontFamily: "var(--ws-font-ui)" }}>Aa</button>
           <span className="ws-tb-sep" />
-          <button className="ws-tb-btn" title="Smaller" onClick={() => bump(-0.1)}>A−</button>
-          <button className="ws-tb-btn" title="Larger" onClick={() => bump(0.1)}>A+</button>
+          <button className="ws-tb-btn" title="Decrease font size" onClick={() => bump(-0.1)}>A−</button>
+          <button className="ws-tb-btn" title="Increase font size" onClick={() => bump(0.1)}>A+</button>
         </div>
         <div className="ws-topbar-spacer" />
         {sourceUrl && (
           <button
             className="ws-tb-btn"
-            title="Open original"
-            aria-label="Open original"
+            title="Open in browser"
+            aria-label="Open in browser"
             onClick={() => {
               if (onOpenOriginal) onOpenOriginal(sourceUrl);
               else window.open(sourceUrl, "_blank", "noreferrer");
@@ -271,7 +280,7 @@ export function Reader({
         )}
       </div>
 
-      <div className="ws-reader-scroll">
+      <div ref={scrollRef} className="ws-reader-scroll">
         <article
           className={`ws-reader-doc fam-${prefs.family}`}
           style={{ maxWidth: prefs.measure, fontSize: `${prefs.scale}rem` }}

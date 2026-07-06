@@ -44,7 +44,11 @@ function WorkspaceInner(): React.ReactElement {
   const store = useWorkspace();
   const boards = store.getWhiteboards();
   const [activeBoardId, setActiveBoardId] = React.useState<string>(() => boards[0]?.id ?? "");
-  const [selectedCardId, setSelectedCardId] = React.useState<string | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = React.useState<string[]>([]);
+  /** Single-select (or clear); the marquee uses setSelectedCardIds directly. */
+  const selectOne = React.useCallback((id: string | null) => {
+    setSelectedCardIds(id ? [id] : []);
+  }, []);
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null);
   const [cmdk, setCmdk] = React.useState<{ open: boolean; seed?: string }>({ open: false });
   const [ctx, setCtx] = React.useState<ContextMenuState | null>(null);
@@ -113,12 +117,16 @@ function WorkspaceInner(): React.ReactElement {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Dismiss menus on an outside click.
+  // Dismiss menus on any outside press. Capture phase: cards stop pointer
+  // propagation for their own reasons, which must not keep menus alive.
   React.useEffect(() => {
     if (!ctx && !canvasMenu && !menuOpen) return;
-    const close = () => { setCtx(null); setCanvasMenu(null); setMenuOpen(false); };
-    window.addEventListener("pointerdown", close);
-    return () => window.removeEventListener("pointerdown", close);
+    const close = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest?.(".ws-ctx, .ws-menu-anchor")) return;
+      setCtx(null); setCanvasMenu(null); setMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
   }, [ctx, canvasMenu, menuOpen]);
 
   const showToast = React.useCallback((t: ToastState) => {
@@ -144,7 +152,7 @@ function WorkspaceInner(): React.ReactElement {
           wx: x - 130,
           wy: y - 20,
         });
-        setSelectedCardId(card.id);
+        selectOne(card.id);
         showToast({ message: `Added “${card.title}”` });
       } else {
         applyHighlightDrop(store, d, null);
@@ -207,7 +215,7 @@ function WorkspaceInner(): React.ReactElement {
   const openCard = (cardId: string, opts: { edit?: boolean } = {}) => {
     const card = store.getCard(cardId);
     if (!card) return;
-    setSelectedCardId(cardId);
+    selectOne(cardId);
     if (card.kind === "article") {
       openReaderTab(cardId);
       return;
@@ -242,7 +250,7 @@ function WorkspaceInner(): React.ReactElement {
     if (!activeBoardId || !canvas?.containsPoint(x, y)) return; // not a board drop
     const { x: wx, y: wy } = canvas.screenToWorld(x, y);
     store.placeCard(activeBoardId, hlCardId, wx - 130, wy - 20);
-    setSelectedCardId(hlCardId);
+    selectOne(hlCardId);
     const title = store.getCard(hlCardId)?.title ?? "highlight";
     showToast({ message: `Added “${title}”` });
   };
@@ -251,7 +259,7 @@ function WorkspaceInner(): React.ReactElement {
   const dropCardOnCanvas = (cardId: string, wx: number, wy: number) => {
     if (!activeBoardId || !store.getCard(cardId)) return;
     store.placeCard(activeBoardId, cardId, wx - 130, wy - 20);
-    setSelectedCardId(cardId);
+    selectOne(cardId);
   };
 
   // Create a note at a canvas position (from double-click or the canvas menu).
@@ -270,7 +278,7 @@ function WorkspaceInner(): React.ReactElement {
       .snapshot()
       .placements.filter((p) => p.cardId === cardId);
     store.deleteCard(cardId);
-    if (selectedCardId === cardId) setSelectedCardId(null);
+    setSelectedCardIds((ids) => ids.filter((id) => id !== cardId));
     if (editingCardId === cardId) setEditingCardId(null);
     showToast({
       message: `Deleted “${card?.title || "card"}”`,
@@ -289,7 +297,7 @@ function WorkspaceInner(): React.ReactElement {
     const p = store.getPlacements(activeBoardId).find((pl) => pl.cardId === cardId);
     if (!p) return;
     store.removePlacement(p.id);
-    if (selectedCardId === cardId) setSelectedCardId(null);
+    setSelectedCardIds((ids) => ids.filter((id) => id !== cardId));
     showToast({
       message: "Moved to inbox",
       actionLabel: "Undo",
@@ -311,7 +319,7 @@ function WorkspaceInner(): React.ReactElement {
       {viewer.sidebarOpen && (
         <Sidebar
           activeBoardId={activeBoardId}
-          onSelectBoard={(id) => { setActiveBoardId(id); setSelectedCardId(null); }}
+          onSelectBoard={(id) => { setActiveBoardId(id); selectOne(null); }}
           onOpenCard={openCard}
           onOpenSearch={(seed) => setCmdk({ open: true, seed })}
         />
@@ -375,12 +383,16 @@ function WorkspaceInner(): React.ReactElement {
             key={activeBoardId}
             ref={canvasRef}
             boardId={activeBoardId}
-            selectedCardId={selectedCardId}
+            selectedCardIds={selectedCardIds}
             editingCardId={editingCardId}
             onEndEdit={() => setEditingCardId(null)}
             onSelect={(id) => {
-              setSelectedCardId(id);
+              selectOne(id);
               if (editingCardId && id !== editingCardId) setEditingCardId(null);
+            }}
+            onSelectMany={(ids) => {
+              setSelectedCardIds(ids);
+              if (editingCardId) setEditingCardId(null);
             }}
             onOpen={openCard}
             onDropCard={dropCardOnCanvas}

@@ -1017,3 +1017,13 @@
   font: 500 12px/1.45 var(--ws-font-ui);
   color: var(--ws-ink);
 }
+
+/* Rubber-band selection (left-drag on empty canvas). */
+.ws-marquee {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border: 1px solid var(--ws-accent);
+  background: rgba(79, 125, 201, 0.08);
+  border-radius: 2px;
+}

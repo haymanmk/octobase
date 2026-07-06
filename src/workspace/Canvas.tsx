@@ -5,11 +5,13 @@ import type { Card } from "../lib/model/types.ts";
 
 export interface CanvasProps {
   boardId: string;
-  selectedCardId: string | null;
+  selectedCardIds: string[];
   /** Card being edited in place (double-click); null = none. */
   editingCardId: string | null;
   onEndEdit: () => void;
   onSelect: (cardId: string | null) => void;
+  /** Marquee selection result (possibly empty). */
+  onSelectMany: (cardIds: string[]) => void;
   onOpen: (cardId: string) => void;
   /** A card was dropped from outside the canvas (sidebar inbox drag). */
   onDropCard: (cardId: string, wx: number, wy: number) => void;
@@ -40,10 +42,11 @@ const DEFAULT_VIEW: View = { tx: 60, ty: 60, scale: 1 };
 
 export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canvas({
   boardId,
-  selectedCardId,
+  selectedCardIds,
   editingCardId,
   onEndEdit,
   onSelect,
+  onSelectMany,
   onOpen,
   onDropCard,
   onContextMenu,
@@ -53,7 +56,12 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   const ref = React.useRef<HTMLDivElement>(null);
   const [view, setView] = React.useState<View>(DEFAULT_VIEW);
   const [panning, setPanning] = React.useState(false);
-  const pan = React.useRef<null | { sx: number; sy: number; tx: number; ty: number }>(null);
+  // Right-button drag pans; `panned` distinguishes a drag from a plain
+  // right-click (which opens a context menu on release).
+  const pan = React.useRef<null | { sx: number; sy: number; tx: number; ty: number; panned: boolean }>(null);
+  // Left-button drag on empty canvas rubber-bands a selection.
+  const marq = React.useRef<null | { sx: number; sy: number; active: boolean }>(null);
+  const [marquee, setMarquee] = React.useState<null | { x: number; y: number; w: number; h: number }>(null);
 
   // Reset the view when switching boards.
   React.useEffect(() => {
@@ -135,33 +143,107 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     [view, zoomToFit],
   );
 
+  const isBackground = (target: EventTarget) =>
+    target === ref.current || (target as HTMLElement).classList?.contains("ws-canvas-surface");
+
+  const localPoint = (clientX: number, clientY: number) => {
+    const rect = ref.current!.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  // Right-drag pans from anywhere (even over cards); left-drag on empty
+  // canvas rubber-bands a selection. Plain right-click opens the menu on
+  // release (macOS fires contextmenu on press, so menus are deferred here).
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("ws-canvas-surface")) {
+    if (e.button === 2) {
+      pan.current = { sx: e.clientX, sy: e.clientY, tx: view.tx, ty: view.ty, panned: false };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
-    onSelect(null);
-    if (e.button !== 0) return;
-    pan.current = { sx: e.clientX, sy: e.clientY, tx: view.tx, ty: view.ty };
-    setPanning(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (e.button === 0 && isBackground(e.target)) {
+      marq.current = { sx: e.clientX, sy: e.clientY, active: false };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
   };
+
   const onPointerMove = (e: React.PointerEvent) => {
     // Snapshot before queueing state: the updater runs later, and a quick
     // pointerup can null the ref first — dereferencing it inside the updater
     // crashes React mid-render (the "blank screen while panning" bug).
     const p = pan.current;
-    if (!p) return;
-    const tx = p.tx + (e.clientX - p.sx);
-    const ty = p.ty + (e.clientY - p.sy);
-    setView((v) => ({ ...v, tx, ty }));
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    pan.current = null;
-    setPanning(false);
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (p) {
+      if (!p.panned && Math.abs(e.clientX - p.sx) + Math.abs(e.clientY - p.sy) > 3) {
+        p.panned = true;
+        setPanning(true);
+      }
+      if (p.panned) {
+        const tx = p.tx + (e.clientX - p.sx);
+        const ty = p.ty + (e.clientY - p.sy);
+        setView((v) => ({ ...v, tx, ty }));
+      }
+      return;
+    }
+    const m = marq.current;
+    if (m) {
+      if (!m.active && Math.abs(e.clientX - m.sx) + Math.abs(e.clientY - m.sy) > 4) m.active = true;
+      if (m.active) {
+        const a = localPoint(m.sx, m.sy);
+        const b = localPoint(e.clientX, e.clientY);
+        setMarquee({
+          x: Math.min(a.x, b.x),
+          y: Math.min(a.y, b.y),
+          w: Math.abs(a.x - b.x),
+          h: Math.abs(a.y - b.y),
+        });
+      }
+    }
   };
 
-  // Wheel zooms, anchored at the cursor (panning is left-drag on the canvas).
+  const onPointerUp = (e: React.PointerEvent) => {
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (e.button === 2 && pan.current) {
+      const wasPanned = pan.current.panned;
+      pan.current = null;
+      setPanning(false);
+      if (!wasPanned) {
+        // Plain right-click → context menu for the card under the cursor,
+        // or the new-card menu on empty canvas. Hit-test by point: pointer
+        // capture retargets e.target to the canvas itself.
+        const cardEl = document
+          .elementFromPoint(e.clientX, e.clientY)
+          ?.closest(".ws-card") as HTMLElement | null;
+        const cardId = cardEl?.dataset.cardId;
+        if (cardId) {
+          onContextMenu(cardId, e.clientX, e.clientY);
+        } else {
+          const { x, y } = screenToCanvas(e.clientX, e.clientY);
+          onBackgroundContextMenu(x, y, e.clientX, e.clientY);
+        }
+      }
+      return;
+    }
+    const m = marq.current;
+    if (m) {
+      marq.current = null;
+      setMarquee(null);
+      if (m.active) {
+        const a = screenToCanvas(m.sx, m.sy);
+        const b = screenToCanvas(e.clientX, e.clientY);
+        const minX = Math.min(a.x, b.x);
+        const maxX = Math.max(a.x, b.x);
+        const minY = Math.min(a.y, b.y);
+        const maxY = Math.max(a.y, b.y);
+        const hit = placements
+          .filter((p) => p.x < maxX && p.x + p.w > minX && p.y < maxY && p.y + p.h > minY)
+          .map((p) => p.cardId);
+        onSelectMany(hit);
+      } else {
+        onSelect(null); // plain click on empty canvas clears the selection
+      }
+    }
+  };
+
+  // Wheel zooms, anchored at the cursor (panning is right-drag).
   // Trackpad pinch arrives as ctrl+wheel and zooms too, just faster.
   const onWheel = (e: React.WheelEvent) => {
     const rect = ref.current!.getBoundingClientRect();
@@ -183,13 +265,9 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     onOpen(card.id);
   };
 
-  const onBgContextMenu = (e: React.MouseEvent) => {
-    // Only on empty canvas — cards stop propagation in their own handler.
-    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("ws-canvas-surface")) return;
-    e.preventDefault();
-    const { x, y } = screenToCanvas(e.clientX, e.clientY);
-    onBackgroundContextMenu(x, y, e.clientX, e.clientY);
-  };
+  // Menus open from pointerup (right-click without drag) — suppress the
+  // native event, which macOS fires already on press.
+  const onBgContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
   return (
     <div
@@ -224,13 +302,28 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
               key={p.id}
               card={card}
               placement={p}
-              selected={card.id === selectedCardId}
+              selected={selectedCardIds.includes(card.id)}
               editing={card.id === editingCardId}
               onCommitEdit={(patch) => store.updateCard(card.id, patch)}
               onEndEdit={onEndEdit}
               scale={view.scale}
               onSelect={(id) => { onSelect(id); store.bringToFront(p.id); }}
-              onMove={(id, x, y) => store.updatePlacement(id, { x, y })}
+              onMove={(id, x, y) => {
+                // Dragging one card of a multi-selection moves the group.
+                // `placements` is the drag-start snapshot (the handler closure
+                // is captured then), so deltas stay origin-based.
+                const dx = x - p.x;
+                const dy = y - p.y;
+                if (selectedCardIds.length > 1 && selectedCardIds.includes(p.cardId)) {
+                  for (const pl of placements) {
+                    if (selectedCardIds.includes(pl.cardId)) {
+                      store.updatePlacement(pl.id, { x: pl.x + dx, y: pl.y + dy });
+                    }
+                  }
+                } else {
+                  store.updatePlacement(id, { x, y });
+                }
+              }}
               onResize={(id, w, h) => store.updatePlacement(id, { w, h })}
               onOpen={onOpen}
               onContextMenu={onContextMenu}
@@ -250,6 +343,13 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           );
         })}
       </div>
+
+      {marquee && (
+        <div
+          className="ws-marquee"
+          style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+        />
+      )}
 
       {placements.length === 0 && (
         <div className="ws-canvas-empty">
