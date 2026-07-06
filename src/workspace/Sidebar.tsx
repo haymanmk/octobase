@@ -22,6 +22,23 @@ export function Sidebar({
   const tags = store.getAllTags();
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameDraft, setRenameDraft] = React.useState("");
+  // Collapsible sections, persisted across launches.
+  const [closed, setClosed] = React.useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("octobase.sidebar.closed") ?? "{}"); }
+    catch { return {}; }
+  });
+  const toggleSection = (key: string) =>
+    setClosed((c) => {
+      const next = { ...c, [key]: !c[key] };
+      try { localStorage.setItem("octobase.sidebar.closed", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  const sectionHead = (key: string, label: string, extra?: React.ReactNode) => (
+    <div className="ws-section-label clickable" onClick={() => toggleSection(key)}>
+      <span><span className="ws-chevron">{closed[key] ? "›" : "⌄"}</span>{label}</span>
+      <span onClick={(e) => e.stopPropagation()}>{extra}</span>
+    </div>
+  );
 
   const startRename = (id: string, name: string) => {
     setRenamingId(id);
@@ -64,11 +81,8 @@ export function Sidebar({
       </div>
 
       <nav className="ws-nav">
-        <div className="ws-section-label">
-          <span>Whiteboards</span>
-          <button title="New whiteboard" onClick={addBoard}>+</button>
-        </div>
-        {boards.map((b) => {
+        {sectionHead("boards", "Whiteboards", <button title="New whiteboard" onClick={addBoard}>+</button>)}
+        {!closed.boards && boards.map((b) => {
           const count = store.getPlacements(b.id).length;
           const active = b.id === activeBoardId;
           return (
@@ -109,8 +123,8 @@ export function Sidebar({
           );
         })}
 
-        <div className="ws-section-label"><span>Inbox</span><span className="ws-count">{inbox.length}</span></div>
-        {inbox.length === 0 ? (
+        {sectionHead("inbox", "Inbox", <span className="ws-count">{inbox.length}</span>)}
+        {closed.inbox ? null : inbox.length === 0 ? (
           <div className="ws-empty-hint">No loose cards</div>
         ) : (
           inbox.slice(0, 30).map((c) => (
@@ -133,8 +147,8 @@ export function Sidebar({
           ))
         )}
 
-        <div className="ws-section-label"><span>Tags</span></div>
-        {tags.length === 0 ? (
+        {sectionHead("tags", "Tags")}
+        {closed.tags ? null : tags.length === 0 ? (
           <div className="ws-empty-hint">No tags yet</div>
         ) : (
           <div className="ws-tag-row">

@@ -47,13 +47,16 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   // once, so anything it captures directly would be a stale first render.
   const placementRef = React.useRef(placement);
   placementRef.current = placement;
+  const MAX_AUTO_H = 900;
   const growToFit = React.useCallback(() => {
     requestAnimationFrame(() => {
       const el = editBoxRef.current?.querySelector(".ws-card-md-edit");
       if (!el) return;
       const overflow = el.scrollHeight - el.clientHeight;
       const p = placementRef.current;
-      if (overflow > 2) props.onResize(p.id, p.w, p.h + overflow + 6);
+      if (overflow > 2 && p.h < MAX_AUTO_H) {
+        props.onResize(p.id, p.w, Math.min(MAX_AUTO_H, p.h + overflow + 6));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -101,6 +104,12 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   // way element events do, and — unlike pointer capture on pointerdown —
   // they leave plain clicks alone so links/checkboxes in the body still work.
   // Moves start anywhere on the card after a small threshold.
+  // Whether the card was selected before this press, and whether the press
+  // turned into a drag — a motionless click on an already-selected card
+  // enters edit mode (no double-click needed).
+  const wasSelectedAtDown = React.useRef(false);
+  const movedRef = React.useRef(false);
+
   const startDrag = (
     e: React.PointerEvent,
     mode: "move" | "resize",
@@ -108,6 +117,8 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   ) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    wasSelectedAtDown.current = selected;
+    movedRef.current = false;
     props.onSelect(card.id);
     const sx = e.clientX;
     const sy = e.clientY;
@@ -117,6 +128,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       if (!active) {
         if (Math.abs(me.clientX - sx) + Math.abs(me.clientY - sy) <= 3) return;
         active = true;
+        movedRef.current = true;
         setDragging(true);
       }
       const dx = (me.clientX - sx) / scale;
@@ -153,6 +165,13 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       data-card-id={card.id}
       style={{ left: placement.x, top: placement.y, width: placement.w, height: placement.h, zIndex: placement.z }}
       onPointerDown={(e) => { if (!editing) beginMove(e); else props.onSelect(card.id); }}
+      onClick={(e) => {
+        // Click on an already-selected card (that didn't move and didn't hit
+        // an interactive element) opens it for editing.
+        if (editing || movedRef.current || !wasSelectedAtDown.current) return;
+        if ((e.target as HTMLElement).closest("a, button, input, .ws-wikilink, .ws-card-menu-btn")) return;
+        props.onOpen(card.id);
+      }}
       onDoubleClick={(e) => { e.stopPropagation(); if (!editing) props.onOpen(card.id); }}
       // The canvas opens context menus on right-button release (macOS fires
       // this event already on press, which would beat a right-drag pan).

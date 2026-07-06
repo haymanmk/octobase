@@ -246,6 +246,13 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   // Wheel zooms, anchored at the cursor (panning is right-drag).
   // Trackpad pinch arrives as ctrl+wheel and zooms too, just faster.
   const onWheel = (e: React.WheelEvent) => {
+    // Scrollable card content under the cursor gets the wheel first: the
+    // editor while writing, or a selected card's overflowing body.
+    const t = e.target as HTMLElement;
+    const scroller =
+      t.closest(".ws-card-md-edit") ??
+      (t.closest(".ws-card.selected") ? t.closest(".ws-card-body") : null);
+    if (scroller && scroller.scrollHeight > scroller.clientHeight + 1) return;
     const rect = ref.current!.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;

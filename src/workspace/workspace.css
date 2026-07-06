@@ -301,6 +301,7 @@
 }
 .ws-card:hover { box-shadow: var(--ws-shadow-md); }
 .ws-card.selected { border-color: var(--ws-accent); box-shadow: 0 0 0 2px var(--ws-accent-soft), var(--ws-shadow-md); }
+.ws-card.selected .ws-card-body { overflow-y: auto; }
 .ws-card .ws-card-accent { height: 5px; flex: none; }
 .ws-card-head {
   display: flex;
@@ -945,8 +946,8 @@
 .ws-card-body-input:focus { border-color: var(--ws-accent); }
 
 /* ── WYSIWYG in-place markdown editor (TipTap) ───────────────────────────── */
-/* The EditorContent wrapper is the only div child of .ws-card-edit. */
-.ws-card-edit > div {
+/* Stretch only the EditorContent wrapper — not the keyboard hint. */
+.ws-card-edit > div:not(.ws-card-edit-hint) {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1026,4 +1027,40 @@
   border: 1px solid var(--ws-accent);
   background: rgba(79, 125, 201, 0.08);
   border-radius: 2px;
+}
+
+/* ── Heptabase-style scrollbars: thin floating thumb, no track ───────────── */
+.ws-card-md-edit::-webkit-scrollbar,
+.ws-card-body::-webkit-scrollbar,
+.ws-reader-scroll::-webkit-scrollbar {
+  width: 11px;
+}
+.ws-card-md-edit::-webkit-scrollbar-thumb,
+.ws-card-body::-webkit-scrollbar-thumb,
+.ws-reader-scroll::-webkit-scrollbar-thumb {
+  background: rgba(31, 33, 38, 0.2);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.ws-card-md-edit::-webkit-scrollbar-thumb:hover,
+.ws-card-body::-webkit-scrollbar-thumb:hover,
+.ws-reader-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(31, 33, 38, 0.38);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+.ws-card-md-edit::-webkit-scrollbar-track,
+.ws-card-body::-webkit-scrollbar-track,
+.ws-reader-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ws-section-label.clickable { cursor: pointer; user-select: none; }
+.ws-section-label.clickable:hover { color: var(--ws-spine-text); }
+.ws-chevron {
+  display: inline-block;
+  width: 14px;
+  font-size: 12px;
+  line-height: 1;
 }
