@@ -38,12 +38,33 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   // The WYSIWYG editor streams markdown into this ref on every keystroke;
   // state would re-render the card for no benefit.
   const bodyDraft = React.useRef(card.body);
+  const editBoxRef = React.useRef<HTMLDivElement>(null);
 
-  // Entering edit mode: seed drafts from the card (the editor autofocuses).
+  // While typing, grow the card so the editor never overflows (grow-only —
+  // shrinking back automatically would fight manual resizes). Measurements
+  // are pre-transform layout px, so they map 1:1 onto placement units.
+  // Live values go through a ref: the editor's onUpdate closure is created
+  // once, so anything it captures directly would be a stale first render.
+  const placementRef = React.useRef(placement);
+  placementRef.current = placement;
+  const growToFit = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = editBoxRef.current?.querySelector(".ws-card-md-edit");
+      if (!el) return;
+      const overflow = el.scrollHeight - el.clientHeight;
+      const p = placementRef.current;
+      if (overflow > 2) props.onResize(p.id, p.w, p.h + overflow + 6);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Entering edit mode: seed drafts from the card (the editor autofocuses),
+  // and grow immediately if the existing content already overflows.
   React.useEffect(() => {
     if (!editing) return;
     setTitleDraft(card.title);
     bodyDraft.current = card.body;
+    growToFit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
@@ -148,7 +169,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         >⋯</span>
       </div>
       {editing ? (
-        <div className="ws-card-edit" onBlur={onEditBlur} onKeyDown={onEditKeyDown}
+        <div ref={editBoxRef} className="ws-card-edit" onBlur={onEditBlur} onKeyDown={onEditKeyDown}
           onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <input
             className="ws-card-title-input"
@@ -165,7 +186,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           />
           <CardMarkdownEditor
             value={card.body}
-            onChange={(md) => { bodyDraft.current = md; }}
+            onChange={(md) => { bodyDraft.current = md; growToFit(); }}
           />
           <div className="ws-card-edit-hint" aria-hidden="true">
             {navigator.platform.includes("Mac") ? "⌘↵" : "Ctrl↵"} to save · esc to cancel
