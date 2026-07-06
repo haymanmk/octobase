@@ -1,6 +1,7 @@
 import type {
   ArticleCard,
   Card,
+  Edge,
   HighlightCard,
   HighlightColor,
   NoteCard,
@@ -21,7 +22,7 @@ function now(): number {
 }
 
 function emptyData(): WorkspaceData {
-  return { version: 1, cards: [], whiteboards: [], placements: [] };
+  return { version: 1, cards: [], whiteboards: [], placements: [], edges: [] };
 }
 
 export interface SearchHit {
@@ -54,6 +55,7 @@ export class WorkspaceStore {
     const seed = opts.seed ?? true;
     const loaded = await this.backend.load();
     this.data = loaded ?? emptyData();
+    this.data.edges ??= []; // pre-edges documents
     const fresh = !loaded;
     this.migrateHighlightBodies();
     if (!this.data.whiteboards.some((w) => !w.deletedAt)) {
@@ -430,8 +432,11 @@ export class WorkspaceStore {
     const idx = this.data.cards.findIndex((c) => c.id === id);
     if (idx < 0) return;
     this.data.cards[idx] = { ...this.data.cards[idx], deletedAt: now() } as Card;
-    // Drop placements of the deleted card.
+    // Drop placements and edges of the deleted card.
     this.data.placements = this.data.placements.filter((p) => p.cardId !== id);
+    this.data.edges = this.data.edges.filter(
+      (e) => e.fromCardId !== id && e.toCardId !== id,
+    );
     this.touch();
   }
 
@@ -480,6 +485,7 @@ export class WorkspaceStore {
     this.data.placements = this.data.placements.filter(
       (p) => p.whiteboardId !== id,
     );
+    this.data.edges = this.data.edges.filter((e) => e.whiteboardId !== id);
     this.touch();
   }
 
@@ -534,9 +540,16 @@ export class WorkspaceStore {
   }
 
   removePlacement(id: string): void {
-    const before = this.data.placements.length;
+    const removed = this.data.placements.find((p) => p.id === id);
+    if (!removed) return;
     this.data.placements = this.data.placements.filter((p) => p.id !== id);
-    if (this.data.placements.length !== before) this.touch();
+    // The card left this board — its edges here go with it.
+    this.data.edges = this.data.edges.filter(
+      (e) =>
+        e.whiteboardId !== removed.whiteboardId ||
+        (e.fromCardId !== removed.cardId && e.toCardId !== removed.cardId),
+    );
+    this.touch();
   }
 
   /** Create a note card and immediately place it on a board. */
@@ -549,6 +562,62 @@ export class WorkspaceStore {
     const card = this.createNoteCard(init);
     const placement = this.placeCard(whiteboardId, card.id, x, y);
     return { card, placement };
+  }
+
+  // ---- edges ---------------------------------------------------------------
+
+  /** Edges of one board. Cleanup on delete keeps these consistent already. */
+  getEdges(whiteboardId: string): Edge[] {
+    return this.data.edges.filter((e) => e.whiteboardId === whiteboardId);
+  }
+
+  /**
+   * Connect two cards on a board. Same-direction duplicates return the
+   * existing edge; the reverse direction is a distinct edge.
+   */
+  createEdge(whiteboardId: string, fromCardId: string, toCardId: string): Edge {
+    if (fromCardId === toCardId) {
+      throw new Error("cannot connect a card to itself");
+    }
+    const existing = this.data.edges.find(
+      (e) =>
+        e.whiteboardId === whiteboardId &&
+        e.fromCardId === fromCardId &&
+        e.toCardId === toCardId,
+    );
+    if (existing) return existing;
+    const edge: Edge = {
+      id: ID.edge(),
+      whiteboardId,
+      fromCardId,
+      toCardId,
+      label: "",
+      directed: true,
+    };
+    this.data.edges.push(edge);
+    this.touch();
+    return edge;
+  }
+
+  updateEdge(id: string, patch: Partial<Pick<Edge, "label" | "directed">>): void {
+    const idx = this.data.edges.findIndex((e) => e.id === id);
+    if (idx < 0) return;
+    this.data.edges[idx] = { ...this.data.edges[idx], ...patch };
+    this.touch();
+  }
+
+  flipEdge(id: string): void {
+    const idx = this.data.edges.findIndex((e) => e.id === id);
+    if (idx < 0) return;
+    const e = this.data.edges[idx];
+    this.data.edges[idx] = { ...e, fromCardId: e.toCardId, toCardId: e.fromCardId };
+    this.touch();
+  }
+
+  deleteEdge(id: string): void {
+    const before = this.data.edges.length;
+    this.data.edges = this.data.edges.filter((e) => e.id !== id);
+    if (this.data.edges.length !== before) this.touch();
   }
 
   // ---- link graph ----------------------------------------------------------

@@ -75,12 +75,28 @@ export interface Link {
   toCardId: string;
 }
 
+/**
+ * A hand-drawn connector between two cards on one whiteboard. Board-scoped:
+ * it exists only while both cards are placed on that board.
+ */
+export interface Edge {
+  id: string;
+  whiteboardId: string;
+  fromCardId: string;
+  toCardId: string;
+  /** Short text rendered in a pill at the curve midpoint; "" = none. */
+  label: string;
+  /** Arrowhead at the target end. */
+  directed: boolean;
+}
+
 /** The full serialized workspace persisted as one document. */
 export interface WorkspaceData {
   version: 1;
   cards: Card[];
   whiteboards: Whiteboard[];
   placements: Placement[];
+  edges: Edge[];
 }
 
 export function isCard(value: unknown): value is Card {

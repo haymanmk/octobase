@@ -20,4 +20,5 @@ export const ID = {
   whiteboard: () => newId("wb"),
   placement: () => newId("pl"),
   link: () => newId("ln"),
+  edge: () => newId("ed"),
 };

@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { Card, Placement } from "../lib/model/types.ts";
+import type { Side } from "./edge-geometry.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { CardMarkdownEditor } from "./CardMarkdownEditor.tsx";
@@ -21,7 +22,13 @@ export interface CanvasCardProps {
   resolve: (title: string) => Card | undefined;
   onOpenCard: (card: Card) => void;
   onCreateLink: (title: string) => void;
+  /** Pointer went down on a connector handle — Canvas runs the edge drag. */
+  onStartEdge: (cardId: string, side: Side, e: React.PointerEvent) => void;
+  /** True while an edge drag hovers this card as its drop target. */
+  edgeTarget: boolean;
 }
+
+const HANDLE_SIDES: Side[] = ["top", "right", "bottom", "left"];
 
 function hostOf(url: string): string {
   try {
@@ -161,7 +168,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
 
   return (
     <div
-      className={`ws-card${selected ? " selected" : ""}${dragging ? " dragging" : ""}${editing ? " editing" : ""}`}
+      className={`ws-card${selected ? " selected" : ""}${dragging ? " dragging" : ""}${editing ? " editing" : ""}${props.edgeTarget ? " edge-target" : ""}`}
       data-card-id={card.id}
       style={{ left: placement.x, top: placement.y, width: placement.w, height: placement.h, zIndex: placement.z }}
       onPointerDown={(e) => { if (!editing) beginMove(e); else props.onSelect(card.id); }}
@@ -236,6 +243,15 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       {card.kind !== "note" && "sourceUrl" in card && card.sourceUrl && (
         <div className="ws-card-source">◉ {hostOf(card.sourceUrl)}</div>
       )}
+      {!editing &&
+        HANDLE_SIDES.map((side) => (
+          <div
+            key={side}
+            className={`ws-handle ws-handle-${side}`}
+            title="Drag to connect"
+            onPointerDown={(e) => props.onStartEdge(card.id, side, e)}
+          />
+        ))}
       <div className="ws-resize" onPointerDown={beginResize} />
     </div>
   );
