@@ -134,7 +134,9 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
     if (e.button !== 0) return;
     e.stopPropagation();
     wasSelectedAtDown.current = selected;
-    movedRef.current = false;
+    // A resize counts as movement from the start — otherwise releasing the
+    // corner handle reads as a motionless click and falsely enters edit mode.
+    movedRef.current = mode === "resize";
     props.onSelect(card.id);
     const sx = e.clientX;
     const sy = e.clientY;
@@ -197,7 +199,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         // Click on an already-selected card (that didn't move and didn't hit
         // an interactive element) opens it for editing.
         if (editing || movedRef.current || !wasSelectedAtDown.current) return;
-        if ((e.target as HTMLElement).closest("a, button, input, .ws-wikilink, .ws-card-menu-btn")) return;
+        if ((e.target as HTMLElement).closest("a, button, input, .ws-wikilink, .ws-card-menu-btn, .ws-resize, .ws-handle")) return;
         props.onOpen(card.id);
       }}
       onDoubleClick={(e) => { e.stopPropagation(); if (!editing) props.onOpen(card.id); }}
