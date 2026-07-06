@@ -7,6 +7,7 @@ import { paintAnchors, offsetFromPoint, type Placement } from "../lib/anchor/hig
 import { extractArticle } from "../lib/extract/extract-article.ts";
 import { HIGHLIGHT_COLORS } from "../types/highlight.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
+import { ensureToolbarStyles } from "../components/highlighter/toolbar-ui.ts";
 import type { HighlightColor } from "../types/highlight.ts";
 import type { TextAnchor } from "../lib/model/types.ts";
 
@@ -181,11 +182,13 @@ function showSelToolbar(range: Range) {
   removeSelToolbar();
   const rect = range.getBoundingClientRect();
   const host = document.createElement("div");
-  host.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top - 6}px;transform:translate(-50%,-100%);z-index:2147483647;`;
+  // Below the selection, left-aligned — same placement as the in-app
+  // highlighter widget in the live browser pane.
+  host.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 10}px;z-index:2147483647;`;
   const shadow = host.attachShadow({ mode: "open" });
+  ensureToolbarStyles(shadow);
   const bar = document.createElement("div");
-  bar.style.cssText =
-    "display:flex;gap:7px;padding:7px 9px;background:#211d17;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.35);";
+  bar.className = "octo-pill";
   for (const color of HIGHLIGHT_COLORS) {
     bar.appendChild(colorDot(color, () => void saveHighlight(color)));
   }
@@ -200,9 +203,10 @@ function closePopover() {
   popover = null;
 }
 function colorDot(color: HighlightColor, onClick: () => void): HTMLElement {
-  const dot = document.createElement("span");
+  const dot = document.createElement("button");
   dot.title = color;
-  dot.style.cssText = `width:18px;height:18px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(255,255,255,.25);background:${PALETTE[color].underline};`;
+  dot.className = "octo-swatch";
+  dot.style.background = PALETTE[color].fill;
   dot.addEventListener("mousedown", (e) => e.preventDefault());
   dot.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
   return dot;
@@ -212,18 +216,15 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:${x}px;top:${y + 12}px;transform:translateX(-50%);z-index:2147483647;`;
   const shadow = host.attachShadow({ mode: "open" });
+  ensureToolbarStyles(shadow);
   const box = document.createElement("div");
-  box.style.cssText =
-    "min-width:230px;background:#fffdf8;border:1px solid #ddd3c1;border-radius:12px;box-shadow:0 10px 30px rgba(30,24,12,.28);padding:10px;font-family:system-ui,sans-serif;color:#211d17;";
+  box.className = "octo-pop";
 
   const dots = document.createElement("div");
-  dots.style.cssText = "display:flex;gap:7px;padding:2px 2px 8px;";
+  dots.className = "octo-pop-row";
   for (const color of HIGHLIGHT_COLORS) {
     const d = colorDot(color, () => { void updateHighlight(h.id, { color }); closePopover(); });
-    if (color === h.color) {
-      d.style.outline = "2px solid #211d17";
-      d.style.outlineOffset = "1px";
-    }
+    if (color === h.color) d.classList.add("current");
     dots.appendChild(d);
   }
   box.appendChild(dots);
@@ -232,8 +233,7 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   note.value = h.note ?? "";
   note.placeholder = "Add a note…";
   note.rows = 2;
-  note.style.cssText =
-    "width:100%;box-sizing:border-box;resize:vertical;border:1px solid #ddd3c1;border-radius:8px;padding:7px 8px;font:13px system-ui;background:#fff;color:#211d17;";
+  note.className = "octo-pop-input";
   note.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitNote(); }
     if (e.key === "Escape") closePopover();
@@ -246,14 +246,14 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   box.appendChild(note);
 
   const foot = document.createElement("div");
-  foot.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding-top:8px;";
+  foot.className = "octo-pop-foot";
   const del = document.createElement("button");
   del.textContent = "Delete";
-  del.style.cssText = "border:none;background:none;color:#b4452f;cursor:pointer;font:500 13px system-ui;padding:4px 2px;";
+  del.className = "octo-pop-delete";
   del.addEventListener("click", () => void deleteHighlight(h.id));
   const save = document.createElement("button");
   save.textContent = "Save note";
-  save.style.cssText = "border:1px solid #211d17;background:#211d17;color:#f4efe6;border-radius:8px;cursor:pointer;font:500 13px system-ui;padding:6px 12px;";
+  save.className = "octo-pop-primary";
   save.addEventListener("click", commitNote);
   foot.append(del, save);
   box.appendChild(foot);
