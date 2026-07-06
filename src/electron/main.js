@@ -40,6 +40,33 @@ const sendBrowserState = () => {
   });
 };
 
+// Append diagnostics to userData/octobase.log — renderer crashes, hangs, GPU
+// exits. The renderer paints white when these hit, so without a trail they
+// are unexplainable after the fact.
+let logFile = null;
+const dlog = (...parts) => {
+  const line = `${new Date().toISOString()} ${parts.join(' ')}`;
+  console.log(line);
+  try {
+    if (logFile) fs.appendFileSync(logFile, line + '\n');
+  } catch { /* logging must never break the app */ }
+};
+
+/** Watch a webContents for death/hangs; reload it when its process dies. */
+const superviseView = (name, wc) => {
+  wc.on('render-process-gone', (_e, details) => {
+    dlog(`[${name}] renderer gone:`, details.reason, `exitCode=${details.exitCode}`, '— reloading');
+    try { wc.reload(); } catch (err) { dlog(`[${name}] reload failed:`, err); }
+  });
+  wc.on('unresponsive', () => dlog(`[${name}] unresponsive`));
+  wc.on('responsive', () => dlog(`[${name}] responsive again`));
+  wc.on('console-message', (event) => {
+    if (event.level === 'error') {
+      dlog(`[${name}] console.error:`, event.message, `(${event.sourceId}:${event.lineNumber})`);
+    }
+  });
+};
+
 const createMainWindow = () => {
   parentWin = new BrowserWindow({
     width: 1440,
@@ -102,9 +129,21 @@ const createMainWindow = () => {
   browserView.setVisible(false); // hidden until the shell docks it
   updateViewBounds();
   parentWin.on('resize', updateViewBounds);
+
+  superviseView('app', appView.webContents);
+  superviseView('browser', browserView.webContents);
+  superviseView('overlay', overlayView.webContents);
 };
 
 app.whenReady().then(() => {
+  logFile = path.join(app.getPath('userData'), 'octobase.log');
+  dlog('app ready, electron', process.versions.electron);
+  // GPU-process exits leave every Chromium surface painted white while the
+  // window chrome still works — exactly the "screen went blank" report.
+  app.on('child-process-gone', (_event, details) => {
+    dlog('child process gone:', details.type, details.reason, `exitCode=${details.exitCode}`);
+  });
+
   createMainWindow();
 
   const store = createStore(app.getPath('userData'));
