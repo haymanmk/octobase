@@ -2,7 +2,8 @@
  * Highlighter widget entry point for building standalone bundle.
  * Here we inject the custom web component into another website via shadow DOM.
  */
-import {LitElement, html, css } from 'lit';
+import {LitElement, html, css, unsafeCSS } from 'lit';
+import { pillCss } from './toolbar-ui';
 import { customElement } from 'lit/decorators.js';
 import 'rangy/lib/rangy-classapplier';
 import 'rangy/lib/rangy-highlighter';
@@ -425,34 +426,18 @@ export class HighlighterComponent extends LitElement {
 // Define the highlighter widget
 @customElement('highlighter-widget')
 export class HighlighterWidget extends LitElement {
-  static styles = css`
-    :host {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      pointer-events: auto;
-      isolation: isolate;
-    }
-    .pill {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 8px 10px; background: white; border-radius: 24px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.12); border: 1px solid #eee;
-      pointer-events: auto;
-    }
-    .swatch {
-      width: 22px; height: 22px; border-radius: 50%;
-      border: 1px solid rgba(0,0,0,0.06); cursor: pointer; padding: 0;
-    }
-    .divider { width: 1px; height: 20px; background: #e5e5e5; margin: 0 2px; }
-    .add-note {
-      font-size: 11px; color: #666; cursor: pointer; user-select: none;
-      background: transparent; border: none; padding: 4px;
-    }
-    .add-note:hover { color: #111; }
-    .pulse .swatch { animation: pulse 0.6s ease 2; }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.15); }
-    }
-  `;
+  // Look and feel comes from the shared toolbar module so the widget, the
+  // extension, and the in-app reader can never drift apart.
+  static styles = [
+    css`
+      :host {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        pointer-events: auto;
+        isolation: isolate;
+      }
+    `,
+    unsafeCSS(pillCss()),
+  ];
 
   // Plain class fields rather than @property/@state — Vite library mode parses
   // the entry file with Rollup's acorn parser, which does not yet recognise the
@@ -563,15 +548,15 @@ export class HighlighterWidget extends LitElement {
       ></octo-edit-form>`;
     }
     return html`
-      <div class="pill ${this.pulseColors ? 'pulse' : ''}"
+      <div class="octo-pill ${this.pulseColors ? 'pulse' : ''}"
            @pointerdown=${(e: PointerEvent) => { e.stopPropagation(); }}
            @mousedown=${(e: MouseEvent) => { e.stopPropagation(); }}>
         ${HIGHLIGHT_COLORS.map((c) => html`
-          <button class="swatch" style="background:${PALETTE[c].fill}" title=${c}
+          <button class="octo-swatch" style="background:${PALETTE[c].fill}" title=${c}
                   @click=${() => this.onSwatch(c)}></button>
         `)}
-        <div class="divider"></div>
-        <button class="add-note" @click=${this.onAddNote}>+ note</button>
+        <div class="octo-divider"></div>
+        <button class="octo-add-note" @click=${this.onAddNote}>+ note</button>
       </div>
     `;
   }

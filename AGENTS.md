@@ -51,6 +51,14 @@ For UI-only iteration on the React side: `npm run vite-dev` or
 
 ## Where to read more
 
+- `docs/workspace-kb.md` — **the knowledge-base core** (multiple whiteboards,
+  rich-markdown note cards, wikilinks/backlinks, tags, search). `src/App.tsx`
+  now renders `src/workspace/Workspace.tsx`; the foundation lives in `src/lib/`
+  (card model, durable text anchoring, pluggable store). Start here for new work.
+- `docs/capture-extension.md` — **article reader + web capture**: the in-app
+  reader with highlight overlay (`src/workspace/reader/`), the localhost capture
+  server (`src/electron/capture-server.js`), and the MV3 Chrome extension
+  (`src/extension/`, `npm run build:extension`).
 - `docs/architecture.md` — multi-process / multi-view layout and IPC matrix
 - `docs/electron-main.md` — main process responsibilities, view bounds, drag flow
 - `docs/highlighter.md` — the right-view bundle (Lit + Rangy + shadow DOM)

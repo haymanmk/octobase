@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root { --ink:#211d17; --paper:#f4efe6; --accent:#b8893b; --line:#ddd3c1; }
+      * { box-sizing: border-box; }
+      body { width: 300px; margin: 0; font-family: system-ui, sans-serif; background: var(--paper); color: var(--ink); }
+      header { padding: 14px 16px 10px; }
+      h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+      h1 .dot { color: var(--accent); }
+      .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 0 16px 12px; color: #6f654f; }
+      .led { width: 9px; height: 9px; border-radius: 50%; background: #c2c2c2; }
+      .led.on { background: #16a34a; }
+      .led.off { background: #b4452f; }
+      .body { padding: 0 16px 16px; }
+      button { font: 500 13px system-ui; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: #fff; cursor: pointer; width: 100%; }
+      button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .row { display: flex; gap: 8px; margin-top: 8px; }
+      details { margin-top: 14px; font-size: 12.5px; }
+      summary { cursor: pointer; color: #6f654f; }
+      label { display: block; margin: 8px 0 3px; color: #6f654f; }
+      input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font: 13px system-ui; }
+      .hint { font-size: 11px; color: #998d77; margin-top: 6px; line-height: 1.5; }
+      .queue { font-size: 11.5px; color: #998d77; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>octo<span class="dot">·</span>base</h1>
+    </header>
+    <div class="status">
+      <span class="led" id="led"></span>
+      <span id="status-text">Checking…</span>
+    </div>
+    <div class="body">
+      <button class="primary" id="capture">Capture this article</button>
+      <div class="queue" id="queue"></div>
+      <details>
+        <summary>Connection settings</summary>
+        <label for="port">Port</label>
+        <input id="port" type="number" />
+        <label for="token">Pairing token</label>
+        <input id="token" type="text" placeholder="paste from octobase → Connect extension" />
+        <div class="row"><button id="save">Save &amp; reconnect</button></div>
+        <div class="hint">In octobase, open “Connect extension” to copy the port and token.</div>
+      </details>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
