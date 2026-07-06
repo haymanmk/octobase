@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { Card, Placement } from "../lib/model/types.ts";
 import type { Side } from "./edge-geometry.ts";
+import { clipUrl } from "./electron-bridge.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { CardMarkdownEditor } from "./CardMarkdownEditor.tsx";
@@ -164,7 +165,11 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   const beginResize = (e: React.PointerEvent) =>
     startDrag(e, "resize", { ox: placement.w, oy: placement.h });
 
-  const kindLabel = card.kind === "note" ? "Note" : card.kind === "article" ? "Article" : "Highlight";
+  const kindLabel =
+    card.kind === "note" ? "Note"
+    : card.kind === "article" ? "Article"
+    : card.kind === "image" ? "Clip"
+    : "Highlight";
 
   return (
     <div
@@ -223,6 +228,16 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           <div className="ws-card-title">
             {card.title || "Untitled"}
           </div>
+          {card.kind === "image" && (
+            <div className="ws-card-imgwrap">
+              <img
+                className="ws-card-img"
+                src={clipUrl(card.image.file)}
+                alt={card.title}
+                draggable={false}
+              />
+            </div>
+          )}
           <div className="ws-card-body">
             <MarkdownView
               body={card.body}

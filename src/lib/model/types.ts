@@ -2,7 +2,7 @@ import type { HighlightColor } from "../../types/highlight.ts";
 
 export type { HighlightColor };
 
-export type CardKind = "note" | "highlight" | "article";
+export type CardKind = "note" | "highlight" | "article" | "image";
 
 /**
  * Durable text anchor: a W3C-style text-quote + position hint that re-locates a
@@ -47,7 +47,24 @@ export interface ArticleCard extends BaseCard {
   byline?: string;
 }
 
-export type Card = NoteCard | HighlightCard | ArticleCard;
+/**
+ * A clipped region of a web page. The PNG lives on disk under the app's
+ * userData (served to the renderer via the octobase-clip:// protocol); the
+ * card carries only the reference. `body` is an optional markdown note.
+ */
+export interface ImageCard extends BaseCard {
+  kind: "image";
+  sourceUrl: string;
+  image: {
+    /** File name inside the clips directory. */
+    file: string;
+    /** Natural size in physical pixels. */
+    w: number;
+    h: number;
+  };
+}
+
+export type Card = NoteCard | HighlightCard | ArticleCard | ImageCard;
 
 export interface Whiteboard {
   id: string;

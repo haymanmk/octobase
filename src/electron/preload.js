@@ -31,6 +31,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   paneSetVisible: (visible) => ipcRenderer.send('pane:set-visible', visible),
 
   // Browser chrome (URL bar / nav buttons rendered by the shell).
+  // Region clipping over the live browser page.
+  clipStart: () => ipcRenderer.send('clip:start'),
+  onClipCaptured: (callback) => {
+    ipcRenderer.removeAllListeners('clip:captured');
+    ipcRenderer.on('clip:captured', (_event, data) => callback(data));
+  },
+  onClipCancelled: (callback) => {
+    ipcRenderer.removeAllListeners('clip:cancelled');
+    ipcRenderer.on('clip:cancelled', (_event, data) => callback(data));
+  },
+
   browserNavigate: (input) => ipcRenderer.send('browser:navigate', input),
   browserBack: () => ipcRenderer.send('browser:back'),
   browserForward: () => ipcRenderer.send('browser:forward'),

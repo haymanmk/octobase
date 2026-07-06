@@ -2,6 +2,7 @@ import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import { CARD_DRAG_MIME } from "./Canvas.tsx";
+import { clipUrl } from "./electron-bridge.ts";
 import type { Card, CardKind } from "../lib/model/types.ts";
 
 export interface LibraryPanelProps {
@@ -17,6 +18,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "note", label: "Notes" },
   { key: "highlight", label: "Highlights" },
   { key: "article", label: "Articles" },
+  { key: "image", label: "Clips" },
 ];
 
 /** Markdown body → short plain-text preview for a tile. */
@@ -115,6 +117,11 @@ function LibraryTile({ card, onOpen }: { card: Card; onOpen: () => void }): Reac
       onClick={onOpen}
     >
       <div className="ws-lib-accent" style={{ background: palette.underline }} />
+      {card.kind === "image" && (
+        <div className="ws-lib-thumb">
+          <img src={clipUrl(card.image.file)} alt="" draggable={false} />
+        </div>
+      )}
       <div className="ws-lib-title">{card.title || "Untitled"}</div>
       {text && <div className="ws-lib-snippet">{text}</div>}
       <div className="ws-lib-kind">{KIND_GLYPH[card.kind] ?? "•"}</div>

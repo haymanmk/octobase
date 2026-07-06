@@ -576,6 +576,37 @@
   font-size: 10px;
   color: var(--ws-spine-dim);
 }
+.ws-lib-thumb {
+  margin: 5px -2px 2px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  background: var(--ws-paper);
+}
+.ws-lib-thumb img {
+  display: block;
+  width: 100%;
+  max-height: 90px;
+  object-fit: cover;
+}
+
+/* image (clip) cards on the canvas */
+.ws-card-imgwrap {
+  margin: 2px 12px 6px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  background: var(--ws-paper);
+  flex: none;
+}
+.ws-card-img {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 
 /* markdown rendering inside cards & editor preview */
 .ws-md { word-break: break-word; }

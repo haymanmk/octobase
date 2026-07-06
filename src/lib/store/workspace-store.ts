@@ -4,6 +4,7 @@ import type {
   Edge,
   HighlightCard,
   HighlightColor,
+  ImageCard,
   NoteCard,
   Placement,
   TextAnchor,
@@ -403,6 +404,33 @@ export class WorkspaceStore {
       sourceUrl: init.sourceUrl,
       siteName: init.siteName,
       byline: init.byline,
+    };
+    this.data.cards.push(card);
+    this.touch();
+    return card;
+  }
+
+  createImageCard(init: {
+    title: string;
+    sourceUrl: string;
+    image: ImageCard["image"];
+    body?: string;
+    tags?: string[];
+    color?: HighlightColor;
+  }): ImageCard {
+    const ts = now();
+    const card: ImageCard = {
+      id: ID.card(),
+      kind: "image",
+      title: init.title.trim() || "Clip",
+      body: init.body ?? "",
+      tags: init.tags ?? [],
+      color: init.color ?? "blue",
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+      sourceUrl: init.sourceUrl,
+      image: init.image,
     };
     this.data.cards.push(card);
     this.touch();

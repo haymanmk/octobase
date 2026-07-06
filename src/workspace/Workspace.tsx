@@ -6,7 +6,7 @@ import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { getCaptureBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { getCaptureBridge, getClipBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
@@ -169,6 +169,25 @@ function WorkspaceInner(): React.ReactElement {
     });
     return () => bridge.removeHighlightDroppedListener();
   }, [store, activeBoardId, showToast]);
+
+  // Clipped regions arrive from main as saved PNG references; they become
+  // image cards in the library (unplaced), and the library opens to show them.
+  React.useEffect(() => {
+    const bridge = getClipBridge();
+    if (!bridge) return;
+    bridge.onClipCaptured((d) => {
+      let host = "";
+      try { host = new URL(d.sourceUrl).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
+      const card = store.createImageCard({
+        title: d.title?.trim() || (host ? `Clip · ${host}` : "Clip"),
+        sourceUrl: d.sourceUrl,
+        image: { file: d.file, w: d.w, h: d.h },
+      });
+      setLibraryOpen(true);
+      showToast({ message: `Clipped “${card.title}” to the library` });
+    });
+    bridge.onClipCancelled(() => { /* nothing to clean up — button is stateless */ });
+  }, [store, showToast]);
 
   const board = store.getWhiteboard(activeBoardId);
 
@@ -473,7 +492,7 @@ function WorkspaceInner(): React.ReactElement {
           style={{ left: ctx.x, top: ctx.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {store.getCard(ctx.cardId)?.kind !== "note" && (
+          {["highlight", "article"].includes(store.getCard(ctx.cardId)?.kind ?? "") && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
               <span className="ws-ctx-ico">📖</span> Read
             </div>
