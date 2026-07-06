@@ -1,20 +1,21 @@
 import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
-import { PALETTE } from "../components/highlighter/colors.ts";
-import { CARD_DRAG_MIME } from "./Canvas.tsx";
 
 export interface SidebarProps {
   activeBoardId: string | null;
   onSelectBoard: (id: string) => void;
   onOpenCard: (cardId: string) => void;
   onOpenSearch: (seed?: string) => void;
+  libraryOpen: boolean;
+  onToggleLibrary: () => void;
 }
 
 export function Sidebar({
   activeBoardId,
   onSelectBoard,
-  onOpenCard,
   onOpenSearch,
+  libraryOpen,
+  onToggleLibrary,
 }: SidebarProps): React.ReactElement {
   const store = useWorkspace();
   const boards = store.getWhiteboards();
@@ -123,29 +124,18 @@ export function Sidebar({
           );
         })}
 
-        {sectionHead("inbox", "Inbox", <span className="ws-count">{inbox.length}</span>)}
-        {closed.inbox ? null : inbox.length === 0 ? (
-          <div className="ws-empty-hint">No loose cards</div>
-        ) : (
-          inbox.slice(0, 30).map((c) => (
-            <div
-              key={c.id}
-              className="ws-nav-item"
-              onClick={() => onOpenCard(c.id)}
-              title="Open card · drag onto the board to place it"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData(CARD_DRAG_MIME, c.id);
-                e.dataTransfer.effectAllowed = "copy";
-              }}
-            >
-              <span className="ws-ico" style={{ color: PALETTE[c.color].underline }}>●</span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {c.title || "Untitled"}
-              </span>
-            </div>
-          ))
-        )}
+        <div className="ws-section-label">
+          <span>Cards</span>
+        </div>
+        <div
+          className={`ws-nav-item${libraryOpen ? " active" : ""}`}
+          onClick={onToggleLibrary}
+          title={libraryOpen ? "Close the card library" : "Browse all cards"}
+        >
+          <span className="ws-ico">🗂</span>
+          <span>Library</span>
+          {inbox.length > 0 && <span className="ws-count" title="Unplaced cards">{inbox.length}</span>}
+        </div>
 
         {sectionHead("tags", "Tags")}
         {closed.tags ? null : tags.length === 0 ? (

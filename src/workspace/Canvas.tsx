@@ -1,6 +1,8 @@
 import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { CanvasCard } from "./CanvasCard.tsx";
+import { EdgeLayer } from "./EdgeLayer.tsx";
+import { sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
 import type { Card } from "../lib/model/types.ts";
 
 export interface CanvasProps {
@@ -18,6 +20,8 @@ export interface CanvasProps {
   onContextMenu: (cardId: string, x: number, y: number) => void;
   /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
+  /** Nest a card into a note (library-tile drop, or ⌥-release of a card drag). */
+  onEmbed: (hostCardId: string, childCardId: string, opts: { removePlacement: boolean }) => void;
 }
 
 /** Imperative surface for callers that receive screen-space points (drops). */
@@ -30,7 +34,8 @@ export interface CanvasHandle {
   zoomToFit: () => void;
 }
 
-export const CARD_DRAG_MIME = "application/x-octobase-card";
+export { CARD_DRAG_MIME } from "./dnd.ts";
+import { CARD_DRAG_MIME } from "./dnd.ts";
 
 interface View {
   tx: number;
@@ -51,6 +56,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   onDropCard,
   onContextMenu,
   onBackgroundContextMenu,
+  onEmbed,
 }: CanvasProps, handleRef): React.ReactElement {
   const store = useWorkspace();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -62,6 +68,17 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   // Left-button drag on empty canvas rubber-bands a selection.
   const marq = React.useRef<null | { sx: number; sy: number; active: boolean }>(null);
   const [marquee, setMarquee] = React.useState<null | { x: number; y: number; w: number; h: number }>(null);
+  // Edge state: selection, inline label editing, context menu, and the
+  // in-flight handle drag (preview curve + hovered target card).
+  const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
+  const [labelEdgeId, setLabelEdgeId] = React.useState<string | null>(null);
+  const [edgeMenu, setEdgeMenu] = React.useState<null | { edgeId: string; x: number; y: number }>(null);
+  const [edgePreview, setEdgePreview] = React.useState<null | { from: Anchor; to: Point }>(null);
+  const [edgeTargetId, setEdgeTargetId] = React.useState<string | null>(null);
+  const edgeDragRef = React.useRef<null | { fromCardId: string; from: Anchor }>(null);
+  // Window-level drag handlers need the live view, not the closed-over one.
+  const viewRef = React.useRef(view);
+  viewRef.current = view;
 
   // Reset the view when switching boards.
   React.useEffect(() => {
@@ -143,6 +160,94 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     [view, zoomToFit],
   );
 
+  // Reset edge UI when switching boards.
+  React.useEffect(() => {
+    setSelectedEdgeId(null);
+    setLabelEdgeId(null);
+    setEdgeMenu(null);
+  }, [boardId]);
+
+  // Delete/Backspace removes the selected edge; Escape deselects.
+  React.useEffect(() => {
+    if (!selectedEdgeId) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest?.("input, textarea, [contenteditable=true]")) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        store.deleteEdge(selectedEdgeId);
+        setSelectedEdgeId(null);
+        setEdgeMenu(null);
+      }
+      if (e.key === "Escape") setSelectedEdgeId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedEdgeId, store]);
+
+  // Dismiss the edge menu on any outside press (same capture-phase pattern
+  // as the Workspace menus — cards stop pointer propagation).
+  React.useEffect(() => {
+    if (!edgeMenu) return;
+    const close = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest?.(".ws-ctx")) return;
+      setEdgeMenu(null);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [edgeMenu]);
+
+  /** Drag from a connector handle: preview curve, then create on release. */
+  const startEdgeDrag = (cardId: string, side: Side, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const p = store.getPlacements(boardId).find((pl) => pl.cardId === cardId);
+    if (!p) return;
+    const from: Anchor = { ...sideMidpoint({ x: p.x, y: p.y, w: p.w, h: p.h }, side), side };
+    edgeDragRef.current = { fromCardId: cardId, from };
+    const toWorld = (me: PointerEvent): Point => {
+      const rect = ref.current!.getBoundingClientRect();
+      const v = viewRef.current;
+      return {
+        x: (me.clientX - rect.left - v.tx) / v.scale,
+        y: (me.clientY - rect.top - v.ty) / v.scale,
+      };
+    };
+    const cardUnder = (me: PointerEvent) => {
+      const el = document
+        .elementFromPoint(me.clientX, me.clientY)
+        ?.closest(".ws-card") as HTMLElement | null;
+      return el?.dataset.cardId ?? null;
+    };
+    const onMove = (me: PointerEvent) => {
+      const d = edgeDragRef.current;
+      if (!d) return;
+      setEdgePreview({ from: d.from, to: toWorld(me) });
+      const tid = cardUnder(me);
+      setEdgeTargetId(tid && tid !== d.fromCardId ? tid : null);
+    };
+    const onUp = (me: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const d = edgeDragRef.current;
+      edgeDragRef.current = null;
+      setEdgePreview(null);
+      setEdgeTargetId(null);
+      if (!d) return;
+      const tid = cardUnder(me);
+      if (tid && tid !== d.fromCardId) {
+        const edge = store.createEdge(boardId, d.fromCardId, tid);
+        setSelectedEdgeId(edge.id);
+        onSelect(null);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const edgeAt = (target: Element | null): string | null =>
+    target?.closest?.(".ws-edge-hit, .ws-edge-label")?.getAttribute("data-edge-id") ?? null;
+
   const isBackground = (target: EventTarget) =>
     target === ref.current || (target as HTMLElement).classList?.contains("ws-canvas-surface");
 
@@ -209,12 +314,15 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         // Plain right-click → context menu for the card under the cursor,
         // or the new-card menu on empty canvas. Hit-test by point: pointer
         // capture retargets e.target to the canvas itself.
-        const cardEl = document
-          .elementFromPoint(e.clientX, e.clientY)
-          ?.closest(".ws-card") as HTMLElement | null;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const cardEl = under?.closest(".ws-card") as HTMLElement | null;
         const cardId = cardEl?.dataset.cardId;
+        const edgeId = cardId ? null : edgeAt(under);
         if (cardId) {
           onContextMenu(cardId, e.clientX, e.clientY);
+        } else if (edgeId) {
+          setSelectedEdgeId(edgeId);
+          setEdgeMenu({ edgeId, x: e.clientX, y: e.clientY });
         } else {
           const { x, y } = screenToCanvas(e.clientX, e.clientY);
           onBackgroundContextMenu(x, y, e.clientX, e.clientY);
@@ -237,8 +345,10 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           .filter((p) => p.x < maxX && p.x + p.w > minX && p.y < maxY && p.y + p.h > minY)
           .map((p) => p.cardId);
         onSelectMany(hit);
+        setSelectedEdgeId(null);
       } else {
         onSelect(null); // plain click on empty canvas clears the selection
+        setSelectedEdgeId(null);
       }
     }
   };
@@ -266,6 +376,12 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
+    const edgeId = edgeAt(e.target as Element);
+    if (edgeId) {
+      setSelectedEdgeId(edgeId);
+      setLabelEdgeId(edgeId);
+      return;
+    }
     if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("ws-canvas-surface")) return;
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
     const { card } = store.createNoteOnBoard(boardId, x - 130, y - 20, { title: "Untitled" });
@@ -286,6 +402,13 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
       onWheel={onWheel}
       onDoubleClick={onDoubleClick}
       onContextMenu={onBgContextMenu}
+      onClick={(e) => {
+        const edgeId = edgeAt(e.target as Element);
+        if (edgeId) {
+          setSelectedEdgeId(edgeId);
+          onSelect(null);
+        }
+      }}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes(CARD_DRAG_MIME)) e.preventDefault();
       }}
@@ -301,6 +424,18 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         className="ws-canvas-surface"
         style={{ transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}
       >
+        <EdgeLayer
+          edges={store.getEdges(boardId)}
+          rectOf={(cardId) => {
+            const p = placements.find((pl) => pl.cardId === cardId);
+            return p ? { x: p.x, y: p.y, w: p.w, h: p.h } : null;
+          }}
+          selectedEdgeId={selectedEdgeId}
+          editingLabelEdgeId={labelEdgeId}
+          onCommitLabel={(id, label) => store.updateEdge(id, { label })}
+          onEndLabelEdit={() => setLabelEdgeId(null)}
+          preview={edgePreview}
+        />
         {placements.map((p) => {
           const card = cardById.get(p.cardId);
           if (!card) return null;
@@ -314,7 +449,11 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
               onCommitEdit={(patch) => store.updateCard(card.id, patch)}
               onEndEdit={onEndEdit}
               scale={view.scale}
-              onSelect={(id) => { onSelect(id); store.bringToFront(p.id); }}
+              onSelect={(id) => { onSelect(id); setSelectedEdgeId(null); store.bringToFront(p.id); }}
+              onStartEdge={startEdgeDrag}
+              edgeTarget={card.id === edgeTargetId}
+              onEmbedDrop={(hostId, childId) => onEmbed(hostId, childId, { removePlacement: false })}
+              onAltDropOnCard={(draggedId, hostId) => onEmbed(hostId, draggedId, { removePlacement: true })}
               onMove={(id, x, y) => {
                 // Dragging one card of a multi-selection moves the group.
                 // `placements` is the drag-start snapshot (the handler closure
@@ -357,6 +496,32 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
         />
       )}
+
+      {edgeMenu && (() => {
+        const edge = store.getEdges(boardId).find((ed) => ed.id === edgeMenu.edgeId);
+        if (!edge) return null;
+        return (
+          <div
+            className="ws-ctx"
+            style={{ left: edgeMenu.x, top: edgeMenu.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="ws-ctx-item" onClick={() => { setLabelEdgeId(edge.id); setEdgeMenu(null); }}>
+              <span className="ws-ctx-ico">✎</span> {edge.label ? "Edit label" : "Add label"}
+            </div>
+            <div className="ws-ctx-item" onClick={() => { store.flipEdge(edge.id); setEdgeMenu(null); }}>
+              <span className="ws-ctx-ico">⇄</span> Flip direction
+            </div>
+            <div className="ws-ctx-item" onClick={() => { store.updateEdge(edge.id, { directed: !edge.directed }); setEdgeMenu(null); }}>
+              <span className="ws-ctx-ico">➤</span> {edge.directed ? "Hide arrowhead" : "Show arrowhead"}
+            </div>
+            <div className="ws-ctx-sep" />
+            <div className="ws-ctx-item danger" onClick={() => { store.deleteEdge(edge.id); setSelectedEdgeId(null); setEdgeMenu(null); }}>
+              <span className="ws-ctx-ico">🗑</span> Delete connection
+            </div>
+          </div>
+        );
+      })()}
 
       {placements.length === 0 && (
         <div className="ws-canvas-empty">

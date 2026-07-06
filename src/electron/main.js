@@ -8,11 +8,11 @@
  * `overlayView` is attached on top only while a highlight drag is in flight.
  */
 
-import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
+import { app, BrowserWindow, ipcMain, net, protocol, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStore } from './highlights-store.js';
 import { createCaptureServer } from './capture-server.js';
 import { normalizeAddress } from './url-normalize.js';
@@ -20,12 +20,71 @@ import { normalizeAddress } from './url-normalize.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Clip PNGs live on disk and are served to the renderer over this scheme
+// (octobase-clip://c/<file>). Must be registered before app.whenReady.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'octobase-clip', privileges: { standard: true, secure: true, stream: true } },
+]);
+
 const defaultURL = "https://www.electronjs.org/docs/latest/api/web-contents#contentsexecutejavascriptcode-usergesture";
 let parentWin = null;
 let overlayView = null;
 let appView = null;
 let browserView = null;
 let captureServer = null;
+
+/**
+ * One-shot region-selection overlay injected into the live page. Draws a
+ * crosshair + rubber-band rect; Esc cancels. The overlay removes itself and
+ * waits two frames before reporting, so the dim/selection chrome is never in
+ * the captured pixels. Reports through the highlighter preload bridge.
+ */
+const CLIP_OVERLAY_JS = `(() => {
+  if (document.getElementById('__octobase_clip')) return;
+  const ov = document.createElement('div');
+  ov.id = '__octobase_clip';
+  Object.assign(ov.style, {
+    position: 'fixed', inset: '0', zIndex: 2147483647,
+    cursor: 'crosshair', background: 'rgba(15,18,24,0.18)',
+  });
+  const box = document.createElement('div');
+  Object.assign(box.style, {
+    position: 'fixed', border: '1.5px solid #4f7dc9',
+    background: 'rgba(79,125,201,0.12)', display: 'none', pointerEvents: 'none',
+  });
+  ov.appendChild(box);
+  let sx = 0, sy = 0, drag = false;
+  const finish = (rect) => {
+    ov.remove();
+    window.removeEventListener('keydown', esc, true);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (rect) window.electronAPI.clipRegion(rect);
+      else window.electronAPI.clipCancel();
+    }));
+  };
+  const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); finish(null); } };
+  const upd = (e) => {
+    const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
+    Object.assign(box.style, {
+      left: x + 'px', top: y + 'px',
+      width: Math.abs(e.clientX - sx) + 'px', height: Math.abs(e.clientY - sy) + 'px',
+    });
+  };
+  ov.addEventListener('pointerdown', (e) => {
+    drag = true; sx = e.clientX; sy = e.clientY;
+    box.style.display = 'block'; upd(e); e.preventDefault();
+  });
+  ov.addEventListener('pointermove', (e) => { if (drag) upd(e); });
+  ov.addEventListener('pointerup', (e) => {
+    if (!drag) return;
+    const w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
+    finish(w > 3 && h > 3
+      ? { x: Math.min(sx, e.clientX), y: Math.min(sy, e.clientY), width: w, height: h }
+      : null);
+  });
+  window.addEventListener('keydown', esc, true);
+  document.documentElement.appendChild(ov);
+})();`;
 
 // Push navigation state to the shell's URL bar.
 const sendBrowserState = () => {
@@ -181,6 +240,55 @@ app.whenReady().then(() => {
   });
   ipcMain.on('browser:reload', () => {
     browserView?.webContents.reload();
+  });
+
+  // Clip a region of the live page as an image card. The renderer's ✂ button
+  // starts it; the injected overlay reports the rect (page-view DIP coords,
+  // exactly what capturePage wants); the PNG lands in userData/clips and the
+  // app view turns the reference into an image card.
+  const clipsDir = path.join(app.getPath('userData'), 'clips');
+  fs.mkdirSync(clipsDir, { recursive: true });
+  protocol.handle('octobase-clip', (req) => {
+    const name = path.basename(new URL(req.url).pathname);
+    return net.fetch(pathToFileURL(path.join(clipsDir, name)).toString());
+  });
+
+  ipcMain.on('clip:start', () => {
+    browserView?.webContents.executeJavaScript(CLIP_OVERLAY_JS).catch((err) => {
+      dlog('clip overlay injection failed:', err);
+      appView?.webContents.send('clip:cancelled');
+    });
+  });
+
+  ipcMain.on('clip:cancel', () => appView?.webContents.send('clip:cancelled'));
+
+  ipcMain.on('clip:region', async (_event, rect) => {
+    try {
+      if (!browserView || !rect || rect.width < 4 || rect.height < 4) {
+        appView?.webContents.send('clip:cancelled');
+        return;
+      }
+      const wc = browserView.webContents;
+      const image = await wc.capturePage({
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+      const file = `${randomUUID()}.png`;
+      fs.writeFileSync(path.join(clipsDir, file), image.toPNG());
+      const size = image.getSize();
+      appView?.webContents.send('clip:captured', {
+        file,
+        w: size.width,
+        h: size.height,
+        sourceUrl: wc.getURL(),
+        title: wc.getTitle(),
+      });
+    } catch (err) {
+      dlog('clip capture failed:', err);
+      appView?.webContents.send('clip:cancelled');
+    }
   });
 
   // Highlights persistence (browser view ↔ main)

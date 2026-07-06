@@ -86,6 +86,22 @@ test("inbox holds unplaced cards only", async () => {
   assert.equal(inbox[0].title, "loose");
 });
 
+test("createImageCard stores the clip file reference and dimensions", async () => {
+  const store = await freshStore();
+  const card = store.createImageCard({
+    title: "Clip · example.com",
+    sourceUrl: "https://example.com/page",
+    image: { file: "abc.png", w: 640, h: 400 },
+  });
+  assert.equal(card.kind, "image");
+  assert.deepEqual(card.image, { file: "abc.png", w: 640, h: 400 });
+  const loaded = store.getCard(card.id);
+  assert.ok(loaded && loaded.kind === "image");
+  assert.equal(loaded.sourceUrl, "https://example.com/page");
+  // Unplaced by default — it lands in the library.
+  assert.ok(store.getInboxCards().some((c) => c.id === card.id));
+});
+
 test("data persists through the backend across reloads", async () => {
   const backend = new MemoryPersistence();
   const store = new WorkspaceStore(backend);

@@ -105,3 +105,31 @@ export function getViewerBridge(): OctobaseViewerBridge | undefined {
     .electronAPI;
   return api?.paneSetBounds ? (api as OctobaseViewerBridge) : undefined;
 }
+
+/** A clipped region captured by main.js, ready to become an image card. */
+export interface ClipCapturedPayload {
+  /** File name inside userData/clips. */
+  file: string;
+  w: number;
+  h: number;
+  sourceUrl: string;
+  title: string;
+}
+
+export interface OctobaseClipBridge {
+  clipStart: () => void;
+  onClipCaptured: (cb: (d: ClipCapturedPayload) => void) => void;
+  onClipCancelled: (cb: () => void) => void;
+}
+
+/** Present only inside the Electron renderer (exposed by preload.js). */
+export function getClipBridge(): OctobaseClipBridge | undefined {
+  const api = (window as unknown as { electronAPI?: Partial<OctobaseClipBridge> })
+    .electronAPI;
+  return api?.clipStart ? (api as OctobaseClipBridge) : undefined;
+}
+
+/** Renderer-side URL for a clip file served by the octobase-clip protocol. */
+export function clipUrl(file: string): string {
+  return `octobase-clip://c/${file}`;
+}

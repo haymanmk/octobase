@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  getClipBridge,
   getViewerBridge,
   type BrowserState,
   type OctobaseViewerBridge,
@@ -176,6 +177,13 @@ export function ViewerHost({
           <button className="ws-tb-btn" title="Reload" onClick={() => bridge?.browserReload()}>
             {browser?.loading ? "…" : "⟳"}
           </button>
+          {getClipBridge() && (
+            <button
+              className="ws-tb-btn"
+              title="Clip a region as an image card (drag a rectangle · esc cancels)"
+              onClick={() => getClipBridge()?.clipStart()}
+            >✂</button>
+          )}
           <input
             ref={urlInputRef}
             className="ws-viewer-url"

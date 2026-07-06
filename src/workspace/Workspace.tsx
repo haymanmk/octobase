@@ -3,9 +3,10 @@ import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
 import { Sidebar } from "./Sidebar.tsx";
+import { LibraryPanel } from "./LibraryPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { getCaptureBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { getCaptureBridge, getClipBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
@@ -70,6 +71,13 @@ function WorkspaceInner(): React.ReactElement {
     return { ...saved, width: clampViewerWidth(saved.width, window.innerWidth) };
   });
   const [dividerDrag, setDividerDrag] = React.useState(false);
+  // Card library panel between sidebar and board; open state persists.
+  const [libraryOpen, setLibraryOpen] = React.useState(
+    () => localStorage.getItem("octobase.library.open") === "1",
+  );
+  React.useEffect(() => {
+    localStorage.setItem("octobase.library.open", libraryOpen ? "1" : "0");
+  }, [libraryOpen]);
   const viewerOpen = viewer.open && (viewerAvailable || viewer.readerTabs.length > 0);
   // The native browser view always paints above our DOM, so it must yield
   // whenever a full-window overlay is up (⌘K palette, extension dialog) or
@@ -161,6 +169,25 @@ function WorkspaceInner(): React.ReactElement {
     });
     return () => bridge.removeHighlightDroppedListener();
   }, [store, activeBoardId, showToast]);
+
+  // Clipped regions arrive from main as saved PNG references; they become
+  // image cards in the library (unplaced), and the library opens to show them.
+  React.useEffect(() => {
+    const bridge = getClipBridge();
+    if (!bridge) return;
+    bridge.onClipCaptured((d) => {
+      let host = "";
+      try { host = new URL(d.sourceUrl).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
+      const card = store.createImageCard({
+        title: d.title?.trim() || (host ? `Clip · ${host}` : "Clip"),
+        sourceUrl: d.sourceUrl,
+        image: { file: d.file, w: d.w, h: d.h },
+      });
+      setLibraryOpen(true);
+      showToast({ message: `Clipped “${card.title}” to the library` });
+    });
+    bridge.onClipCancelled(() => { /* nothing to clean up — button is stateless */ });
+  }, [store, showToast]);
 
   const board = store.getWhiteboard(activeBoardId);
 
@@ -262,6 +289,41 @@ function WorkspaceInner(): React.ReactElement {
     selectOne(cardId);
   };
 
+  /** Nest a card into a note: append an ![[embed]] block to the host body. */
+  const embedIntoCard = (
+    hostCardId: string,
+    childCardId: string,
+    opts: { removePlacement: boolean },
+  ) => {
+    const host = store.getCard(hostCardId);
+    const child = store.getCard(childCardId);
+    if (!host || !child || host.kind !== "note") return;
+    const ok = store.embedCard(hostCardId, childCardId);
+    if (!ok) {
+      showToast({ message: `Already embedded in “${host.title}”` });
+      return;
+    }
+    if (opts.removePlacement) {
+      const p = store.getPlacements(activeBoardId).find((pl) => pl.cardId === childCardId);
+      if (p) store.removePlacement(p.id);
+      setSelectedCardIds((ids) => ids.filter((id) => id !== childCardId));
+    }
+    showToast({
+      message: `Embedded “${child.title}” in “${host.title}”`,
+      actionLabel: "Undo",
+      onAction: () => {
+        store.updateCard(hostCardId, { body: host.body });
+        if (opts.removePlacement) {
+          const prev = store
+            .snapshot()
+            .placements.find((pl) => pl.cardId === childCardId && pl.whiteboardId === activeBoardId);
+          if (!prev) store.placeCard(activeBoardId, childCardId, 120, 120);
+        }
+        setToast(null);
+      },
+    });
+  };
+
   // Create a note at a canvas position (from double-click or the canvas menu).
   const newNoteAt = (wx: number, wy: number, color?: HighlightColor) => {
     if (!activeBoardId) return;
@@ -311,6 +373,7 @@ function WorkspaceInner(): React.ReactElement {
       style={{
         gridTemplateColumns: [
           viewer.sidebarOpen ? `${SIDEBAR_W}px` : "",
+          libraryOpen ? "272px" : "",
           "minmax(0, 1fr)",
           viewerOpen ? `${DIVIDER_W}px ${viewer.width}px` : "",
         ].filter(Boolean).join(" "),
@@ -322,7 +385,13 @@ function WorkspaceInner(): React.ReactElement {
           onSelectBoard={(id) => { setActiveBoardId(id); selectOne(null); }}
           onOpenCard={openCard}
           onOpenSearch={(seed) => setCmdk({ open: true, seed })}
+          libraryOpen={libraryOpen}
+          onToggleLibrary={() => setLibraryOpen((o) => !o)}
         />
+      )}
+
+      {libraryOpen && (
+        <LibraryPanel onOpenCard={openCard} onClose={() => setLibraryOpen(false)} />
       )}
 
       <main className="ws-main">
@@ -398,6 +467,7 @@ function WorkspaceInner(): React.ReactElement {
             onDropCard={dropCardOnCanvas}
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
+            onEmbed={embedIntoCard}
           />
         )}
 
@@ -458,7 +528,7 @@ function WorkspaceInner(): React.ReactElement {
           style={{ left: ctx.x, top: ctx.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {store.getCard(ctx.cardId)?.kind !== "note" && (
+          {["highlight", "article"].includes(store.getCard(ctx.cardId)?.kind ?? "") && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
               <span className="ws-ctx-ico">📖</span> Read
             </div>
