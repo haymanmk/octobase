@@ -146,12 +146,14 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!pan.current) return;
-    setView((v) => ({
-      ...v,
-      tx: pan.current!.tx + (e.clientX - pan.current!.sx),
-      ty: pan.current!.ty + (e.clientY - pan.current!.sy),
-    }));
+    // Snapshot before queueing state: the updater runs later, and a quick
+    // pointerup can null the ref first — dereferencing it inside the updater
+    // crashes React mid-render (the "blank screen while panning" bug).
+    const p = pan.current;
+    if (!p) return;
+    const tx = p.tx + (e.clientX - p.sx);
+    const ty = p.ty + (e.clientY - p.sy);
+    setView((v) => ({ ...v, tx, ty }));
   };
   const onPointerUp = (e: React.PointerEvent) => {
     pan.current = null;
