@@ -653,12 +653,16 @@
 .ws-reader-body .ws-md blockquote { font-size: 1.02em; }
 
 /* Custom-highlight overlay colors (one registry per highlight color). */
-::highlight(octo-reader-yellow) { background-color: #fff3b0; color: #3a2f10; }
-::highlight(octo-reader-green)  { background-color: #c8e6c9; color: #14331b; }
-::highlight(octo-reader-pink)   { background-color: #fbcfe8; color: #3a1430; }
-::highlight(octo-reader-blue)   { background-color: #bfdbfe; color: #102a4d; }
-::highlight(octo-reader-purple) { background-color: #e9d5ff; color: #2c1147; }
-::highlight(octo-reader-orange) { background-color: #fed7aa; color: #43210a; }
+/* Reader highlights are geometry bands (.ws-hl-band) — the marker-stroke
+   look shared with the live browser; ::highlight() can't paint partial-height
+   bands, and a solid fill would swallow inline-code chips. */
+.ws-reader-body { position: relative; }
+.ws-hl-layer { position: absolute; inset: 0; pointer-events: none; }
+.ws-hl-band {
+  position: absolute;
+  mix-blend-mode: multiply;
+  border-radius: 1px;
+}
 
 /* Selection pill + highlight edit popover: shared octo-* classes from
    src/components/highlighter/toolbar-ui.ts (single source for the live

@@ -17,7 +17,7 @@ export function paletteCss(): string {
   return (Object.entries(PALETTE) as Array<[HighlightColor, { fill: string; underline: string }]>)
     .map(
       ([color, { fill }]) => `.${classNameFor(color)} {
-  background-color: ${fill};
+  background-image: linear-gradient(transparent 25%, ${fill} 25%, ${fill} 75%, transparent 75%);
   padding: 0;
   cursor: pointer;
   user-select: none;

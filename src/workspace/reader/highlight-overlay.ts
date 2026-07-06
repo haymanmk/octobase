@@ -1,7 +1,4 @@
-import {
-  locateAnchorRange,
-  supportsCustomHighlight,
-} from "../../lib/anchor/highlight-dom.ts";
+import { locateAnchorRange } from "../../lib/anchor/highlight-dom.ts";
 import type { HighlightColor, TextAnchor } from "../../lib/model/types.ts";
 
 export interface OverlayHighlight {
@@ -13,56 +10,63 @@ export interface OverlayHighlight {
 export interface PlacedHighlight extends OverlayHighlight {
   start: number;
   end: number;
-  /** The live DOM range, for scroll-into-view and hit ghosts. */
+  /** The live DOM range, for scroll-into-view, hit ghosts, and band rects. */
   range: Range;
 }
 
-const HL_PREFIX = "octo-reader-";
+/** A marker band rectangle, relative to the reader body element. */
+export interface HighlightBand {
+  cardId: string;
+  color: HighlightColor;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /**
- * Paint highlights over already-rendered article content using the CSS Custom
- * Highlight API (no DOM mutation, multi-node ranges just work). Returns the
- * resolved placements so callers can hit-test clicks back to a card.
+ * Resolve highlight anchors against the rendered article. Painting is done by
+ * the caller with geometry bands (see bandsFor) — the CSS Highlight API can't
+ * draw the partial-height marker stroke shared with the live browser.
  */
-export function applyHighlights(
+export function locateHighlights(
   container: HTMLElement,
   highlights: OverlayHighlight[],
 ): PlacedHighlight[] {
   const placed: PlacedHighlight[] = [];
-  const rangesByColor = new Map<HighlightColor, Range[]>();
-
   for (const hl of highlights) {
     const located = locateAnchorRange(container, hl.anchor);
     if (!located) continue;
     placed.push({ ...hl, start: located.start, end: located.end, range: located.range });
-    const list = rangesByColor.get(hl.color) ?? [];
-    list.push(located.range);
-    rangesByColor.set(hl.color, list);
   }
-
-  if (supportsCustomHighlight()) {
-    const highlightsApi = (CSS as unknown as { highlights: Map<string, unknown> }).highlights;
-    // Clear our previous registrations.
-    for (const key of [...highlightsApi.keys()]) {
-      if (key.startsWith(HL_PREFIX)) highlightsApi.delete(key);
-    }
-    const HighlightCtor = (globalThis as unknown as {
-      Highlight: new (...ranges: Range[]) => unknown;
-    }).Highlight;
-    for (const [color, ranges] of rangesByColor) {
-      highlightsApi.set(`${HL_PREFIX}${color}`, new HighlightCtor(...ranges));
-    }
-  }
-
   return placed.sort((a, b) => a.start - b.start);
 }
 
-export function clearHighlights(): void {
-  if (!supportsCustomHighlight()) return;
-  const highlightsApi = (CSS as unknown as { highlights: Map<string, unknown> }).highlights;
-  for (const key of [...highlightsApi.keys()]) {
-    if (key.startsWith(HL_PREFIX)) highlightsApi.delete(key);
+/**
+ * Marker-band rectangles for the placed highlights: one per line box, spanning
+ * the middle 50% of the line — the same stroke the live-browser highlighter
+ * paints, which keeps inline-code chips recognizable underneath.
+ */
+export function bandsFor(
+  container: HTMLElement,
+  placed: PlacedHighlight[],
+): HighlightBand[] {
+  const base = container.getBoundingClientRect();
+  const bands: HighlightBand[] = [];
+  for (const p of placed) {
+    for (const r of p.range.getClientRects()) {
+      if (r.width < 1 || r.height < 1) continue;
+      bands.push({
+        cardId: p.cardId,
+        color: p.color,
+        x: r.left - base.left,
+        y: r.top - base.top + r.height * 0.25,
+        w: r.width,
+        h: r.height * 0.5,
+      });
+    }
   }
+  return bands;
 }
 
 /** Map a click point to a global text offset within the container. */

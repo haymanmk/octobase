@@ -7,11 +7,12 @@ import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
 import type { Card, HighlightCard, HighlightColor } from "../../lib/model/types.ts";
 import {
-  applyHighlights,
-  clearHighlights,
+  locateHighlights,
+  bandsFor,
   highlightAtOffset,
   offsetFromPoint,
   type PlacedHighlight,
+  type HighlightBand,
 } from "./highlight-overlay.ts";
 
 interface ReaderPrefs {
@@ -81,6 +82,8 @@ export function Reader({
   const pendingRange = React.useRef<Range | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
   const [dragGhost, setDragGhost] = React.useState<{ cardId: string; text: string; color: HighlightColor; x: number; y: number } | null>(null);
+  const [bands, setBands] = React.useState<HighlightBand[]>([]);
+  const [reflowTick, setReflowTick] = React.useState(0);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
@@ -97,15 +100,25 @@ export function Reader({
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
   }, [prefs]);
 
+  // Re-measure the marker bands when the pane resizes and text reflows.
+  React.useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setReflowTick((t) => t + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Paint highlights whenever the body or the highlight set changes; then
   // honor a pending scroll-to-highlight request once per nonce.
   React.useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    placedRef.current = applyHighlights(
+    placedRef.current = locateHighlights(
       el,
       highlights.map((h) => ({ cardId: h.id, color: h.color, anchor: h.anchor })),
     );
+    setBands(bandsFor(el, placedRef.current));
     if (focusHighlight && focusHighlight.at !== focusDoneRef.current) {
       const target = placedRef.current.find((p) => p.cardId === focusHighlight.id);
       if (target) {
@@ -123,9 +136,8 @@ export function Reader({
         setTimeout(center, 400);
       }
     }
-    return () => clearHighlights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, version, prefs.family, prefs.scale, prefs.measure, focusHighlight]);
+  }, [cardId, version, prefs.family, prefs.scale, prefs.measure, focusHighlight, reflowTick]);
 
   // Close the edit popover on outside clicks or Esc.
   React.useEffect(() => {
@@ -301,6 +313,12 @@ export function Reader({
             onPointerUp={onBodyPointerUp}
           >
             <MarkdownView body={card.body} resolve={resolve} onOpenCard={(c: Card) => onOpenCard(c.id)} />
+            <div className="ws-hl-layer" aria-hidden="true">
+              {bands.map((b, i) => (
+                <div key={`${b.cardId}-${i}`} className="ws-hl-band"
+                  style={{ left: b.x, top: b.y, width: b.w, height: b.h, background: PALETTE[b.color].fill }} />
+              ))}
+            </div>
           </div>
         </article>
       </div>
