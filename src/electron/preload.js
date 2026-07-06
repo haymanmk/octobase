@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // existing
   onHighlightDropped: (callback) => {
+    ipcRenderer.removeAllListeners('highlight-dropped');
     ipcRenderer.on('highlight-dropped', (_event, data) => callback(data));
   },
   removeHighlightDroppedListener: () => {
@@ -22,6 +23,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCardDeleted: (callback) => {
     ipcRenderer.removeAllListeners('card:deleted');
     ipcRenderer.on('card:deleted', (_event, data) => callback(data));
+  },
+
+  // Viewer pane docking: the shell streams its viewer slot's rectangle and
+  // visibility; main applies them to the native browser view.
+  paneSetBounds: (rect) => ipcRenderer.send('pane:set-bounds', rect),
+  paneSetVisible: (visible) => ipcRenderer.send('pane:set-visible', visible),
+
+  // Browser chrome (URL bar / nav buttons rendered by the shell).
+  browserNavigate: (input) => ipcRenderer.send('browser:navigate', input),
+  browserBack: () => ipcRenderer.send('browser:back'),
+  browserForward: () => ipcRenderer.send('browser:forward'),
+  browserReload: () => ipcRenderer.send('browser:reload'),
+  onBrowserState: (callback) => {
+    ipcRenderer.removeAllListeners('browser:state');
+    ipcRenderer.on('browser:state', (_event, data) => callback(data));
   },
 });
 

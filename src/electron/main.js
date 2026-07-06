@@ -1,5 +1,11 @@
 /**
  * Main process code (Entry point) for Electron app
+ *
+ * View topology: `appView` (the React shell — workspace, viewer chrome) spans
+ * the whole window. The shell renders an empty "viewer slot" and streams its
+ * rectangle over IPC; `browserView` (a live web page with the highlighter
+ * injected) is docked into that slot by simply following the reported bounds.
+ * `overlayView` is attached on top only while a highlight drag is in flight.
  */
 
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron';
@@ -9,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './highlights-store.js';
 import { createCaptureServer } from './capture-server.js';
+import { normalizeAddress } from './url-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,15 +23,27 @@ const __dirname = path.dirname(__filename);
 const defaultURL = "https://www.electronjs.org/docs/latest/api/web-contents#contentsexecutejavascriptcode-usergesture";
 let parentWin = null;
 let overlayView = null;
-let leftView = null;
-let rightView = null;
+let appView = null;
+let browserView = null;
 let captureServer = null;
 
-const createSplitView = () => {
-  // Parent window
+// Push navigation state to the shell's URL bar.
+const sendBrowserState = () => {
+  if (!appView || !browserView) return;
+  const wc = browserView.webContents;
+  appView.webContents.send('browser:state', {
+    url: wc.getURL(),
+    title: wc.getTitle(),
+    canGoBack: wc.navigationHistory.canGoBack(),
+    canGoForward: wc.navigationHistory.canGoForward(),
+    loading: wc.isLoading(),
+  });
+};
+
+const createMainWindow = () => {
   parentWin = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1440,
+    height: 900,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -33,16 +52,14 @@ const createSplitView = () => {
     }
   });
 
-  // Create WebContentsViews
-  leftView = new WebContentsView({
+  appView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     }
   });
-  const searchBarView = new WebContentsView();
-  rightView = new WebContentsView({
+  browserView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-highlighter.js'),
       nodeIntegration: false,
@@ -55,103 +72,101 @@ const createSplitView = () => {
       nodeIntegration: false,
       contextIsolation: true,
     }
-  }); // For drag-and-drop overlays, if needed
+  }); // For drag-and-drop overlays, attached only during a drag
 
-  // Add views to the parent window
-  parentWin.contentView.addChildView(leftView);
-  parentWin.contentView.addChildView(searchBarView);
-  parentWin.contentView.addChildView(rightView);
-  // parentWin.contentView.addChildView(overlayView);
+  parentWin.contentView.addChildView(appView);
+  parentWin.contentView.addChildView(browserView);
 
-  // Load content into each view
-  leftView.webContents.loadFile(path.join(__dirname, '../../dist/index.html'));
-  searchBarView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/searchbar/searchbar.html'));
-  rightView.webContents.loadURL(defaultURL);
+  appView.webContents.loadFile(path.join(__dirname, '../../dist/index.html'));
+  browserView.webContents.loadURL(defaultURL);
   overlayView.webContents.loadFile(path.join(__dirname, '../../dist/src/components/overlay-canva/overlay-canva.html'));
 
   // Inject text selection monitoring script
-  // Read inject script
   const highlighterScript = fs.readFileSync(path.join(__dirname, '../../dist/highlighter/highlighter.iife.js'), 'utf8');
-  rightView.webContents.on('did-finish-load', () => {
-    // Inject JavaScript bundle
-    rightView.webContents.executeJavaScript(highlighterScript).catch(err => console.error('JS injection failed:', err));
+  browserView.webContents.on('did-finish-load', () => {
+    browserView.webContents.executeJavaScript(highlighterScript).catch(err => console.error('JS injection failed:', err));
   });
 
-  // Function to update view bounds based on window size
+  for (const ev of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading']) {
+    browserView.webContents.on(ev, sendBrowserState);
+  }
+
+  // Main only sizes the full-window views; the browser pane follows the
+  // shell's viewer slot via `pane:set-bounds`.
   const updateViewBounds = () => {
-    const bounds = parentWin.getBounds();
-    const width = bounds.width;
-    const height = bounds.height;
-    const searchBarHeight = 50; // Fixed height for search bar
-    
-    // Split window 50/50
-    leftView.setBounds({ 
-      x: 0, 
-      y: 0, 
-      width: Math.floor(width / 2), 
-      height: height 
-    });
-    searchBarView.setBounds({
-      x: Math.floor(width / 2),
-      y: 0,
-      width: Math.floor(width / 2),
-      height: searchBarHeight
-    });
-    rightView.setBounds({ 
-      x: Math.floor(width / 2),
-      y: searchBarHeight,
-      width: Math.floor(width / 2),
-      height: height - searchBarHeight
-    });
-    overlayView.setBounds({ 
-      x: 0, 
-      y: 0, 
-      width: width, 
-      height: height 
-    });
+    const { width, height } = parentWin.getContentBounds();
+    appView.setBounds({ x: 0, y: 0, width, height });
+    overlayView.setBounds({ x: 0, y: 0, width, height });
   };
 
-  // Initial bounds
+  browserView.setVisible(false); // hidden until the shell docks it
   updateViewBounds();
-
-  // Update bounds when window is resized
   parentWin.on('resize', updateViewBounds);
-
-  // Open devtools for debugging
-  leftView.webContents.openDevTools();
-  rightView.webContents.openDevTools();
-  overlayView.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {
-  // createWindow()
-  createSplitView();
+  createMainWindow();
 
   const store = createStore(app.getPath('userData'));
 
-  // Highlights persistence (right view ↔ main)
+  // Viewer pane docking: the renderer owns the layout and streams the slot
+  // rectangle; main just applies it to the native view.
+  ipcMain.on('pane:set-bounds', (_event, r) => {
+    if (!browserView || !r) return;
+    browserView.setBounds({
+      x: Math.round(r.x),
+      y: Math.round(r.y),
+      width: Math.max(0, Math.round(r.width)),
+      height: Math.max(0, Math.round(r.height)),
+    });
+  });
+
+  ipcMain.on('pane:set-visible', (_event, visible) => {
+    browserView?.setVisible(!!visible);
+    // A freshly remounted viewer has no navigation state yet — push it.
+    if (visible) sendBrowserState();
+  });
+
+  // Browser chrome (URL bar / nav buttons live in the shell).
+  ipcMain.on('browser:navigate', (_event, input) => {
+    const url = normalizeAddress(input);
+    if (url) browserView?.webContents.loadURL(url).catch((err) => console.warn('navigate failed:', err));
+  });
+  ipcMain.on('browser:back', () => {
+    const nav = browserView?.webContents.navigationHistory;
+    if (nav?.canGoBack()) nav.goBack();
+  });
+  ipcMain.on('browser:forward', () => {
+    const nav = browserView?.webContents.navigationHistory;
+    if (nav?.canGoForward()) nav.goForward();
+  });
+  ipcMain.on('browser:reload', () => {
+    browserView?.webContents.reload();
+  });
+
+  // Highlights persistence (browser view ↔ main)
   ipcMain.handle('highlights:load', async (_event, { url }) => {
     return await store.loadHighlightsForUrl(url);
   });
 
   ipcMain.handle('highlights:save', async (_event, highlight) => {
     await store.saveHighlight(highlight);
-    rightView?.webContents.send('highlight:updated', highlight);
+    browserView?.webContents.send('highlight:updated', highlight);
     const card = await store.syncCardFromHighlight(highlight);
-    if (card) leftView?.webContents.send('card:updated', card);
+    if (card) appView?.webContents.send('card:updated', card);
     return { ok: true };
   });
 
   ipcMain.handle('highlights:delete', async (_event, { id }) => {
     await store.deleteHighlight(id);
-    rightView?.webContents.send('highlight:deleted', { id });
+    browserView?.webContents.send('highlight:deleted', { id });
     return { ok: true };
   });
 
   ipcMain.handle('tags:list', async () => await store.listTags());
 
   // Capture extension: localhost server forwards captures/highlights to the
-  // knowledge-base renderer (left view), which adds them as inbox cards.
+  // knowledge-base renderer (app view), which adds them as inbox cards.
   // Persist the pairing token so it survives restarts (otherwise the user would
   // have to re-pair the extension every launch).
   const tokenFile = path.join(app.getPath('userData'), 'capture-token.txt');
@@ -166,42 +181,16 @@ app.whenReady().then(() => {
     try { fs.writeFileSync(tokenFile, captureToken); } catch (e) { console.warn('could not persist capture token:', e); }
   }
 
-  // Round-trip helper: ask the renderer (which owns the store) for the
-  // highlights on a URL so the extension can reconcile on page load.
-  const pendingHighlightReqs = new Map();
-  let highlightReqSeq = 0;
-  const requestHighlights = (forUrl) =>
-    new Promise((resolve) => {
-      if (!leftView) return resolve([]);
-      const reqId = `hlreq_${++highlightReqSeq}`;
-      const timer = setTimeout(() => {
-        if (pendingHighlightReqs.has(reqId)) {
-          pendingHighlightReqs.delete(reqId);
-          resolve([]);
-        }
-      }, 1500);
-      pendingHighlightReqs.set(reqId, (items) => { clearTimeout(timer); resolve(items); });
-      leftView.webContents.send('capture:highlights-request', { reqId, url: forUrl });
-    });
-  ipcMain.on('capture:highlights-response', (_event, { reqId, items }) => {
-    const resolver = pendingHighlightReqs.get(reqId);
-    if (resolver) { pendingHighlightReqs.delete(reqId); resolver(Array.isArray(items) ? items : []); }
-  });
-
   captureServer = createCaptureServer({
     token: captureToken,
     onCapture: (data) => {
-      leftView?.webContents.send('capture:received', data);
+      appView?.webContents.send('capture:received', data);
       return { id: null };
     },
     onHighlight: (data) => {
-      leftView?.webContents.send('highlight:received', data);
-      return { id: data.id ?? null };
+      appView?.webContents.send('highlight:received', data);
+      return { id: null };
     },
-    onHighlightDelete: (id) => {
-      leftView?.webContents.send('capture:highlight-remove', { id });
-    },
-    onListHighlights: (forUrl) => requestHighlights(forUrl),
   });
   captureServer
     .start()
@@ -213,29 +202,29 @@ app.whenReady().then(() => {
     token: captureServer?.token ?? '',
   }));
 
-  // Cards persistence (left view ↔ main)
+  // Cards persistence (app view ↔ main)
   ipcMain.handle('cards:load', async () => await store.loadCards());
 
   ipcMain.handle('cards:save', async (_event, card) => {
     await store.saveCard(card);
-    leftView?.webContents.send('card:updated', card);
+    appView?.webContents.send('card:updated', card);
     // Bidirectional sync: propagate content edits (color/tags/notes) from
     // the card side back into the matching highlight, and broadcast so the
-    // right view can re-apply the highlight color if it changed.
+    // browser view can re-apply the highlight color if it changed.
     const updatedHighlight = await store.syncHighlightFromCard(card);
     if (updatedHighlight) {
-      rightView?.webContents.send('highlight:updated', updatedHighlight);
+      browserView?.webContents.send('highlight:updated', updatedHighlight);
     }
     return { ok: true };
   });
 
   ipcMain.handle('cards:delete', async (_event, { id }) => {
     await store.deleteCard(id);
-    leftView?.webContents.send('card:deleted', { id });
+    appView?.webContents.send('card:deleted', { id });
     return { ok: true };
   });
 
-  // Monitor text selection in the right view
+  // Monitor text selection in the browser view
   ipcMain.on('text-selection', (event, data) => {
     // Here you can implement logic to show a popup or context menu based on selection
   });
@@ -247,27 +236,27 @@ app.whenReady().then(() => {
     // Make overlay non-transparent at native level so it captures cursor hit-testing
     // Format is #RRGGBBAA — alpha is the last two hex digits
     overlayView.setBackgroundColor('#00000001');
-    // Translate cursor position from right-view-local to window-global coordinates
-    const rightBounds = rightView.getBounds();
+    // Translate cursor position from browser-view-local to window-global coordinates
+    const browserBounds = browserView.getBounds();
     const adjustedData = {
       ...data,
-      cursorX: (data.cursorX || 0) + rightBounds.x,
-      cursorY: (data.cursorY || 0) + rightBounds.y,
+      cursorX: (data.cursorX || 0) + browserBounds.x,
+      cursorY: (data.cursorY || 0) + browserBounds.y,
     };
     // Send text data to overlay view
     overlayView.webContents.send('drag-drop-text-selection', adjustedData);
   });
 
-  // Relay mouse position from right view to overlay (translated to window coords)
+  // Relay mouse position from browser view to overlay (translated to window coords)
   ipcMain.on('drag-drop-text-position', (event, data) => {
-    const rightBounds = rightView.getBounds();
+    const browserBounds = browserView.getBounds();
     overlayView.webContents.send('drag-position-update', {
-      x: (data.x || 0) + rightBounds.x,
-      y: (data.y || 0) + rightBounds.y,
+      x: (data.x || 0) + browserBounds.x,
+      y: (data.y || 0) + browserBounds.y,
     });
   });
 
-  // Right view signals drag ended — tell overlay to finalize
+  // Browser view signals drag ended — tell overlay to finalize
   ipcMain.on('drag-drop-text-end', (event, data) => {
     overlayView.webContents.send('drag-end');
   });
@@ -282,31 +271,33 @@ app.whenReady().then(() => {
       console.warn('Failed to remove overlay view:', e);
     }
 
-    if (!data || !leftView) return;
+    if (!data || !appView) return;
 
-    // Get leftView bounds to check if drop is within the whiteboard
-    const leftBounds = leftView.getBounds();
+    // Discard drops outside the window; the shell decides what an in-window
+    // point means (canvas → placed card, viewer/divider → cancel, else inbox).
+    const appBounds = appView.getBounds();
     const dropX = data.x;
     const dropY = data.y;
 
     if (
-      dropX < leftBounds.x || dropX > leftBounds.x + leftBounds.width ||
-      dropY < leftBounds.y || dropY > leftBounds.y + leftBounds.height
+      dropX < appBounds.x || dropX > appBounds.x + appBounds.width ||
+      dropY < appBounds.y || dropY > appBounds.y + appBounds.height
     ) {
-      console.debug('Drop outside whiteboard, discarding.');
+      console.debug('Drop outside window, discarding.');
       return;
     }
 
-    const localX = dropX - leftBounds.x;
-    const localY = dropY - leftBounds.y;
+    const localX = dropX - appBounds.x;
+    const localY = dropY - appBounds.y;
 
     // Look up the originating highlight to copy color/tags/notes onto the card.
     const allHighlights = await store.loadAllHighlights();
     const highlight = allHighlights.find((h) => h.id === data.highlightId);
-    const now = Date.now();
 
-    const card = {
-      id: data.highlightId,
+    // The workspace renderer owns card creation + placement: it knows the
+    // canvas pan/zoom, so it converts the drop point to world coords itself.
+    appView.webContents.send('highlight-dropped', {
+      highlightId: data.highlightId,
       text: highlight?.text ?? data.text,
       sourceUrl: highlight?.sourceUrl ?? data.sourceUrl,
       color: highlight?.color ?? 'yellow',
@@ -314,20 +305,7 @@ app.whenReady().then(() => {
       notes: highlight?.notes ?? '',
       x: localX,
       y: localY,
-      updatedAt: now,
-    };
-    await store.saveCard(card);
-
-    // Legacy channel for whiteboard.tsx pre-rewrite; remove once whiteboard
-    // listens on `card:updated`.
-    leftView.webContents.send('highlight-dropped', {
-      text: card.text,
-      sourceUrl: card.sourceUrl,
-      highlightId: card.id,
-      x: card.x,
-      y: card.y,
     });
-    leftView.webContents.send('card:updated', card);
   });
 });
 
@@ -343,7 +321,6 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    // createWindow()
-    createSplitView();
+    createMainWindow();
   }
 });
