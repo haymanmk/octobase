@@ -3,6 +3,7 @@ import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
 import { Sidebar } from "./Sidebar.tsx";
+import { LibraryPanel } from "./LibraryPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { getCaptureBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
@@ -70,6 +71,13 @@ function WorkspaceInner(): React.ReactElement {
     return { ...saved, width: clampViewerWidth(saved.width, window.innerWidth) };
   });
   const [dividerDrag, setDividerDrag] = React.useState(false);
+  // Card library panel between sidebar and board; open state persists.
+  const [libraryOpen, setLibraryOpen] = React.useState(
+    () => localStorage.getItem("octobase.library.open") === "1",
+  );
+  React.useEffect(() => {
+    localStorage.setItem("octobase.library.open", libraryOpen ? "1" : "0");
+  }, [libraryOpen]);
   const viewerOpen = viewer.open && (viewerAvailable || viewer.readerTabs.length > 0);
   // The native browser view always paints above our DOM, so it must yield
   // whenever a full-window overlay is up (⌘K palette, extension dialog) or
@@ -311,6 +319,7 @@ function WorkspaceInner(): React.ReactElement {
       style={{
         gridTemplateColumns: [
           viewer.sidebarOpen ? `${SIDEBAR_W}px` : "",
+          libraryOpen ? "272px" : "",
           "minmax(0, 1fr)",
           viewerOpen ? `${DIVIDER_W}px ${viewer.width}px` : "",
         ].filter(Boolean).join(" "),
@@ -322,7 +331,13 @@ function WorkspaceInner(): React.ReactElement {
           onSelectBoard={(id) => { setActiveBoardId(id); selectOne(null); }}
           onOpenCard={openCard}
           onOpenSearch={(seed) => setCmdk({ open: true, seed })}
+          libraryOpen={libraryOpen}
+          onToggleLibrary={() => setLibraryOpen((o) => !o)}
         />
+      )}
+
+      {libraryOpen && (
+        <LibraryPanel onOpenCard={openCard} onClose={() => setLibraryOpen(false)} />
       )}
 
       <main className="ws-main">
