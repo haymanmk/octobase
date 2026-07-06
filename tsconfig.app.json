@@ -40,5 +40,6 @@
       "@dist/*": ["dist/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/extension"]
 }
