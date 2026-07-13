@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // existing
@@ -41,6 +41,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('clip:cancelled');
     ipcRenderer.on('clip:cancelled', (_event, data) => callback(data));
   },
+
+  // PDF import: native picker, or import a dropped file by absolute path.
+  pdfOpen: () => ipcRenderer.invoke('pdf:open'),
+  pdfDelete: (file) => ipcRenderer.invoke('pdf:delete', file),
+  // Absolute path of a dropped File (sandbox-safe replacement for File.path).
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  pdfImport: (absPath) => ipcRenderer.invoke('pdf:import', absPath),
+  // Persist a renderer-cropped PNG (PDF clip) into the clips store.
+  clipSave: (payload) => ipcRenderer.invoke('clip:save', payload),
 
   browserNavigate: (input) => ipcRenderer.send('browser:navigate', input),
   browserBack: () => ipcRenderer.send('browser:back'),

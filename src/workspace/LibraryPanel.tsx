@@ -20,6 +20,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "highlight", label: "Highlights" },
   { key: "article", label: "Articles" },
   { key: "image", label: "Clips" },
+  { key: "pdf", label: "PDFs" },
 ];
 
 const KIND_GLYPH: Record<string, string> = {
@@ -27,6 +28,7 @@ const KIND_GLYPH: Record<string, string> = {
   highlight: "▂",
   article: "¶",
   image: "▣",
+  pdf: "📄",
 };
 
 /**

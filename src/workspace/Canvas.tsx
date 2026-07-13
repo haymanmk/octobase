@@ -17,6 +17,8 @@ export interface CanvasProps {
   onOpen: (cardId: string) => void;
   /** A card was dropped from outside the canvas (sidebar inbox drag). */
   onDropCard: (cardId: string, wx: number, wy: number) => void;
+  /** OS files (e.g. .pdf) dropped onto the canvas. */
+  onDropFiles: (files: File[], wx: number, wy: number) => void;
   onContextMenu: (cardId: string, x: number, y: number) => void;
   /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
@@ -54,6 +56,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   onSelectMany,
   onOpen,
   onDropCard,
+  onDropFiles,
   onContextMenu,
   onBackgroundContextMenu,
   onEmbed,
@@ -486,14 +489,21 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         }
       }}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(CARD_DRAG_MIME)) e.preventDefault();
+        const t = e.dataTransfer.types;
+        if (t.includes(CARD_DRAG_MIME) || t.includes("Files")) e.preventDefault();
       }}
       onDrop={(e) => {
-        const id = e.dataTransfer.getData(CARD_DRAG_MIME);
-        if (!id) return;
-        e.preventDefault();
         const { x, y } = screenToCanvas(e.clientX, e.clientY);
-        onDropCard(id, x, y);
+        const id = e.dataTransfer.getData(CARD_DRAG_MIME);
+        if (id) {
+          e.preventDefault();
+          onDropCard(id, x, y);
+          return;
+        }
+        if (e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          onDropFiles(Array.from(e.dataTransfer.files), x, y);
+        }
       }}
     >
       <div

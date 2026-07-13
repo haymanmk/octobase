@@ -7,6 +7,7 @@ import type {
   HighlightColor,
   ImageCard,
   NoteCard,
+  PdfCard,
   Placement,
   TextAnchor,
   Whiteboard,
@@ -303,6 +304,7 @@ export class WorkspaceStore {
     color?: HighlightColor;
     tags?: string[];
     notes?: string;
+    page?: number;
   }): HighlightCard {
     const ts = now();
     const text = init.text.trim();
@@ -319,6 +321,7 @@ export class WorkspaceStore {
       deletedAt: null,
       sourceUrl: init.sourceUrl,
       anchor: init.anchor,
+      ...(init.page ? { page: init.page } : {}),
     };
     this.data.cards.push(card);
     this.touch();
@@ -337,6 +340,7 @@ export class WorkspaceStore {
     anchor: TextAnchor;
     color?: HighlightColor;
     note?: string;
+    page?: number;
   }): HighlightCard {
     const text = init.text.trim();
     const title = text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight";
@@ -376,6 +380,33 @@ export class WorkspaceStore {
       deletedAt: null,
       sourceUrl: init.sourceUrl,
       anchor: init.anchor,
+      ...(init.page ? { page: init.page } : {}),
+    };
+    this.data.cards.push(card);
+    this.touch();
+    return card;
+  }
+
+  createPdfCard(init: {
+    title: string;
+    file: string;
+    pages: number;
+    tags?: string[];
+    color?: HighlightColor;
+  }): PdfCard {
+    const ts = now();
+    const card: PdfCard = {
+      id: ID.card(),
+      kind: "pdf",
+      title: init.title.trim() || "PDF",
+      body: "",
+      tags: init.tags ?? [],
+      color: init.color ?? "blue",
+      createdAt: ts,
+      updatedAt: ts,
+      deletedAt: null,
+      file: init.file,
+      pages: init.pages,
     };
     this.data.cards.push(card);
     this.touch();

@@ -7,10 +7,13 @@ import {
 } from "./electron-bridge.ts";
 import { BROWSER_TAB } from "./viewer-layout.ts";
 import { Reader } from "./reader/Reader.tsx";
+import { PdfReader } from "./reader/PdfReader.tsx";
 
 export interface ViewerTabInfo {
   cardId: string;
   title: string;
+  /** Card kind — picks the viewer (pdf → PdfReader, else Reader). */
+  kind?: string;
 }
 
 /**
@@ -154,7 +157,7 @@ export function ViewerHost({
               title={t.title}
               onClick={() => onSelectTab(t.cardId)}
             >
-              <span className="ws-vtab-ico">📖</span>
+              <span className="ws-vtab-ico">{t.kind === "pdf" ? "📄" : "📖"}</span>
               <span className="ws-vtab-label">{t.title}</span>
               <span
                 className="ws-vtab-close"
@@ -209,10 +212,16 @@ export function ViewerHost({
           <div className="ws-viewer-placeholder">{browserTitle}</div>
         )}
         {!browserActive && (
-          <Reader key={activeTab} cardId={activeTab} onOpenCard={onOpenCard}
-            onOpenOriginal={openOriginal}
-            focusHighlight={focusHighlight}
-            onDropHighlight={onDropHighlight} />
+          readerTabs.find((t) => t.cardId === activeTab)?.kind === "pdf" ? (
+            <PdfReader key={activeTab} cardId={activeTab}
+              focusHighlight={focusHighlight}
+              onDropHighlight={onDropHighlight} />
+          ) : (
+            <Reader key={activeTab} cardId={activeTab} onOpenCard={onOpenCard}
+              onOpenOriginal={openOriginal}
+              focusHighlight={focusHighlight}
+              onDropHighlight={onDropHighlight} />
+          )
         )}
       </div>
 

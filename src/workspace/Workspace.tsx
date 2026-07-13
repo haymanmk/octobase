@@ -6,7 +6,7 @@ import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { getCaptureBridge, getClipBridge, getDropBridge, getViewerBridge, type ExtensionInfo } from "./electron-bridge.ts";
+import { getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
@@ -231,7 +231,44 @@ function WorkspaceInner(): React.ReactElement {
   const readerTabInfos: ViewerTabInfo[] = viewer.readerTabs.map((id) => ({
     cardId: id,
     title: store.getCard(id)?.title || "Untitled",
+    kind: store.getCard(id)?.kind,
   }));
+
+  /** Import a copied PDF as a card (reads the page count via pdf.js). */
+  const importedPdfCard = async (imp: PdfImportResult) => {
+    let pages = 0;
+    try {
+      const { loadPdf } = await import("./reader/pdf-doc.ts");
+      pages = (await loadPdf(pdfUrl(imp.file))).numPages;
+    } catch { /* unreadable — keep 0; the reader will surface the error */ }
+    return store.createPdfCard({ title: imp.name, file: imp.file, pages });
+  };
+
+  const openPdfFromDialog = async () => {
+    const bridge = getPdfBridge();
+    if (!bridge) return;
+    const imp = await bridge.pdfOpen();
+    if (!imp) return;
+    const card = await importedPdfCard(imp);
+    openReaderTab(card.id);
+    showToast({ message: `Imported “${card.title}”` });
+  };
+
+  /** .pdf files dropped on the canvas: import, place at the drop point. */
+  const dropFilesOnCanvas = async (files: File[], wx: number, wy: number) => {
+    const bridge = getPdfBridge();
+    if (!bridge || !activeBoardId) return;
+    let offset = 0;
+    for (const f of files) {
+      if (!f.name.toLowerCase().endsWith(".pdf")) continue;
+      const imp = await bridge.pdfImport(bridge.pathForFile(f));
+      if (!imp) continue;
+      const card = await importedPdfCard(imp);
+      store.placeCard(activeBoardId, card.id, wx - 130 + offset, wy - 20 + offset);
+      selectOne(card.id);
+      offset += 28;
+    }
+  };
 
   // ---- card opening ---------------------------------------------------------
 
@@ -243,7 +280,7 @@ function WorkspaceInner(): React.ReactElement {
     const card = store.getCard(cardId);
     if (!card) return;
     selectOne(cardId);
-    if (card.kind === "article") {
+    if (card.kind === "article" || card.kind === "pdf") {
       openReaderTab(cardId);
       return;
     }
@@ -259,6 +296,14 @@ function WorkspaceInner(): React.ReactElement {
     // For a highlight, read its source article if we captured one — and
     // scroll straight to where the highlight lives.
     if (card.kind === "highlight") {
+      if (card.sourceUrl.startsWith("pdf:")) {
+        const pdfId = card.sourceUrl.slice(4);
+        if (store.getCard(pdfId)) {
+          openReaderTab(pdfId);
+          setFocusHl({ id: cardId, at: Date.now() });
+          return;
+        }
+      }
       const article = store
         .getCards()
         .find((c) => c.kind === "article" && c.sourceUrl === card.sourceUrl);
@@ -336,6 +381,7 @@ function WorkspaceInner(): React.ReactElement {
 
   const deleteCard = (cardId: string) => {
     const card = store.getCard(cardId);
+    if (card?.kind === "pdf") void getPdfBridge()?.pdfDelete(card.file);
     const snapshotPlacements = store
       .snapshot()
       .placements.filter((p) => p.cardId === cardId);
@@ -433,6 +479,12 @@ function WorkspaceInner(): React.ReactElement {
                   <span className="ws-dd-ico">🔍</span> Search everything
                   <span className="ws-dd-kbd">⌘K</span>
                 </div>
+                {getPdfBridge() && (
+                  <div className="ws-dd-item" role="menuitem"
+                    onClick={() => { setMenuOpen(false); void openPdfFromDialog(); }}>
+                    <span className="ws-dd-ico">📄</span> Open PDF…
+                  </div>
+                )}
                 {captureBridge && (
                   <>
                     <div className="ws-dd-sep" />
@@ -465,6 +517,7 @@ function WorkspaceInner(): React.ReactElement {
             }}
             onOpen={openCard}
             onDropCard={dropCardOnCanvas}
+            onDropFiles={(files, wx, wy) => void dropFilesOnCanvas(files, wx, wy)}
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
             onEmbed={embedIntoCard}

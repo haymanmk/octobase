@@ -8,7 +8,7 @@
  * `overlayView` is attached on top only while a highlight drag is in flight.
  */
 
-import { app, BrowserWindow, ipcMain, net, protocol, WebContentsView } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 // (octobase-clip://c/<file>). Must be registered before app.whenReady.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'octobase-clip', privileges: { standard: true, secure: true, stream: true } },
+  { scheme: 'octobase-pdf', privileges: { standard: true, secure: true, stream: true } },
 ]);
 
 const defaultURL = "https://www.electronjs.org/docs/latest/api/web-contents#contentsexecutejavascriptcode-usergesture";
@@ -253,6 +254,55 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(path.join(clipsDir, name)).toString());
   });
 
+  // Imported PDFs live under userData/pdfs and are served over octobase-pdf://.
+  const pdfsDir = path.join(app.getPath('userData'), 'pdfs');
+  fs.mkdirSync(pdfsDir, { recursive: true });
+  protocol.handle('octobase-pdf', (req) => {
+    const name = path.basename(new URL(req.url).pathname);
+    return net.fetch(pathToFileURL(path.join(pdfsDir, name)).toString());
+  });
+
+  // Import a PDF: native picker → copy into pdfs/ under a fresh name. The
+  // renderer reads the page count via pdf.js, so main only needs to persist
+  // the file. Returns { file, name } or null if cancelled.
+  ipcMain.handle('pdf:open', async () => {
+    const res = await dialog.showOpenDialog(parentWin, {
+      title: 'Open PDF',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      properties: ['openFile'],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return importPdf(res.filePaths[0]);
+  });
+
+  // Import a dropped PDF by absolute path (the renderer forwards File.path).
+  ipcMain.handle('pdf:import', async (_event, srcPath) => {
+    try {
+      if (typeof srcPath !== 'string' || !srcPath.toLowerCase().endsWith('.pdf')) return null;
+      return importPdf(srcPath);
+    } catch (err) {
+      dlog('pdf import failed:', err);
+      return null;
+    }
+  });
+
+  // Deleting a pdf card deletes its imported copy.
+  ipcMain.handle('pdf:delete', (_event, file) => {
+    try {
+      fs.rmSync(path.join(pdfsDir, path.basename(String(file))), { force: true });
+      return true;
+    } catch (err) {
+      dlog('pdf delete failed:', err);
+      return false;
+    }
+  });
+
+  function importPdf(srcPath) {
+    const file = `${randomUUID()}.pdf`;
+    fs.copyFileSync(srcPath, path.join(pdfsDir, file));
+    return { file, name: path.basename(srcPath, path.extname(srcPath)) };
+  }
+
   ipcMain.on('clip:start', () => {
     browserView?.webContents.executeJavaScript(CLIP_OVERLAY_JS).catch((err) => {
       dlog('clip overlay injection failed:', err);
@@ -288,6 +338,20 @@ app.whenReady().then(() => {
     } catch (err) {
       dlog('clip capture failed:', err);
       appView?.webContents.send('clip:cancelled');
+    }
+  });
+
+  // PDF clips are cropped in the renderer (the page canvas is already there),
+  // so main just persists the PNG data URL into the same clips store.
+  ipcMain.handle('clip:save', async (_event, { dataUrl, w, h }) => {
+    try {
+      const base64 = String(dataUrl).replace(/^data:image\/png;base64,/, '');
+      const file = `${randomUUID()}.png`;
+      fs.writeFileSync(path.join(clipsDir, file), Buffer.from(base64, 'base64'));
+      return { file, w, h };
+    } catch (err) {
+      dlog('clip save failed:', err);
+      return null;
     }
   });
 

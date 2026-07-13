@@ -267,6 +267,12 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           <div className="ws-card-title">
             {card.title || "Untitled"}
           </div>
+          {card.kind === "pdf" && (
+            <div className="ws-card-pdfmeta">
+              📄 {card.pages > 0 ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "PDF"}
+              <span className="ws-card-pdfhint">double-click to read</span>
+            </div>
+          )}
           {card.kind === "image" && (
             <div className="ws-card-imgwrap">
               <img

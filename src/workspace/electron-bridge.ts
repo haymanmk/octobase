@@ -133,3 +133,34 @@ export function getClipBridge(): OctobaseClipBridge | undefined {
 export function clipUrl(file: string): string {
   return `octobase-clip://c/${file}`;
 }
+
+/** A PDF copied into app storage by main.js, ready to become a pdf card. */
+export interface PdfImportResult {
+  /** File name inside userData/pdfs. */
+  file: string;
+  /** Base name of the original file, for the card title. */
+  name: string;
+}
+
+export interface OctobasePdfBridge {
+  pdfOpen: () => Promise<PdfImportResult | null>;
+  pdfImport: (absPath: string) => Promise<PdfImportResult | null>;
+  pdfDelete: (file: string) => Promise<boolean>;
+  /** Absolute path of a dropped File object. */
+  pathForFile: (file: File) => string;
+  /** Persist a renderer-cropped PNG data URL; returns the clip file ref. */
+  clipSave: (payload: { dataUrl: string; w: number; h: number }) =>
+    Promise<{ file: string; w: number; h: number } | null>;
+}
+
+/** Present only inside the Electron renderer (exposed by preload.js). */
+export function getPdfBridge(): OctobasePdfBridge | undefined {
+  const api = (window as unknown as { electronAPI?: Partial<OctobasePdfBridge> })
+    .electronAPI;
+  return api?.pdfOpen ? (api as OctobasePdfBridge) : undefined;
+}
+
+/** Renderer-side URL for a PDF file served by the octobase-pdf protocol. */
+export function pdfUrl(file: string): string {
+  return `octobase-pdf://p/${file}`;
+}

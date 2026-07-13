@@ -2,7 +2,7 @@ import type { HighlightColor } from "../../types/highlight.ts";
 
 export type { HighlightColor };
 
-export type CardKind = "note" | "highlight" | "article" | "image";
+export type CardKind = "note" | "highlight" | "article" | "image" | "pdf";
 
 /**
  * Durable text anchor: a W3C-style text-quote + position hint that re-locates a
@@ -38,6 +38,8 @@ export interface HighlightCard extends BaseCard {
   kind: "highlight";
   sourceUrl: string;
   anchor: TextAnchor;
+  /** 1-based page number when the source is a PDF (sourceUrl = pdf:<id>). */
+  page?: number;
 }
 
 export interface ArticleCard extends BaseCard {
@@ -64,7 +66,25 @@ export interface ImageCard extends BaseCard {
   };
 }
 
-export type Card = NoteCard | HighlightCard | ArticleCard | ImageCard;
+/**
+ * An imported PDF. The file lives under userData/pdfs/<file> (served to the
+ * renderer via octobase-pdf://); the card carries only the reference and a
+ * cheap page count for display. Its stable pseudo-URL is `pdf:<card id>`, so
+ * highlights/clips taken from it share a source the way article highlights do.
+ */
+export interface PdfCard extends BaseCard {
+  kind: "pdf";
+  /** File name inside the pdfs directory. */
+  file: string;
+  pages: number;
+}
+
+export type Card = NoteCard | HighlightCard | ArticleCard | ImageCard | PdfCard;
+
+/** The stable source key for annotations taken from a PDF card. */
+export function pdfSourceUrl(cardId: string): string {
+  return `pdf:${cardId}`;
+}
 
 export interface Whiteboard {
   id: string;
