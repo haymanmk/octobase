@@ -197,6 +197,37 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     return () => window.removeEventListener("pointerdown", close, true);
   }, [edgeMenu]);
 
+  /** Client point → world coords, reading the live view (drag handlers). */
+  const toWorld = (me: PointerEvent): Point => {
+    const rect = ref.current!.getBoundingClientRect();
+    const v = viewRef.current;
+    return {
+      x: (me.clientX - rect.left - v.tx) / v.scale,
+      y: (me.clientY - rect.top - v.ty) / v.scale,
+    };
+  };
+
+  /**
+   * The card an edge drag would drop onto — a world-space hit test against
+   * placement rects inflated by a screen-constant margin. The tolerance is
+   * the point: the connector dots sit half OUTSIDE the card border, and
+   * aiming at one must count as hitting the card, not the empty canvas.
+   */
+  const cardUnder = (me: PointerEvent): string | null => {
+    const w = toWorld(me);
+    const pad = 14 / viewRef.current.scale;
+    let best: { id: string; z: number } | null = null;
+    for (const p of store.getPlacements(boardId)) {
+      if (
+        w.x >= p.x - pad && w.x <= p.x + p.w + pad &&
+        w.y >= p.y - pad && w.y <= p.y + p.h + pad
+      ) {
+        if (!best || p.z > best.z) best = { id: p.cardId, z: p.z };
+      }
+    }
+    return best?.id ?? null;
+  };
+
   /** Drag from a connector handle: preview curve, then create on release. */
   const startEdgeDrag = (cardId: string, side: Side, e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -206,20 +237,6 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     if (!p) return;
     const from: Anchor = { ...sideMidpoint({ x: p.x, y: p.y, w: p.w, h: p.h }, side), side };
     edgeDragRef.current = { fromCardId: cardId, from };
-    const toWorld = (me: PointerEvent): Point => {
-      const rect = ref.current!.getBoundingClientRect();
-      const v = viewRef.current;
-      return {
-        x: (me.clientX - rect.left - v.tx) / v.scale,
-        y: (me.clientY - rect.top - v.ty) / v.scale,
-      };
-    };
-    const cardUnder = (me: PointerEvent) => {
-      const el = document
-        .elementFromPoint(me.clientX, me.clientY)
-        ?.closest(".ws-card") as HTMLElement | null;
-      return el?.dataset.cardId ?? null;
-    };
     const onMove = (me: PointerEvent) => {
       const d = edgeDragRef.current;
       if (!d) return;
@@ -269,20 +286,6 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     const fixedCardId = end === "from" ? edge.toCardId : edge.fromCardId;
     const fixedAnchor = end === "from" ? geo.to : geo.from;
     setRewiringEdgeId(edgeId);
-    const toWorld = (me: PointerEvent): Point => {
-      const rect = ref.current!.getBoundingClientRect();
-      const v = viewRef.current;
-      return {
-        x: (me.clientX - rect.left - v.tx) / v.scale,
-        y: (me.clientY - rect.top - v.ty) / v.scale,
-      };
-    };
-    const cardUnder = (me: PointerEvent) => {
-      const el = document
-        .elementFromPoint(me.clientX, me.clientY)
-        ?.closest(".ws-card") as HTMLElement | null;
-      return el?.dataset.cardId ?? null;
-    };
     const onMove = (me: PointerEvent) => {
       setEdgePreview({ from: fixedAnchor, to: toWorld(me) });
       const tid = cardUnder(me);
