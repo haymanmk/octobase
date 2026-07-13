@@ -11,6 +11,7 @@ import { applyHighlightDrop } from "./drop-highlight.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
   SIDEBAR_W,
+  LIBRARY_W,
   DIVIDER_W,
   BROWSER_TAB,
   clampViewerWidth,
@@ -84,13 +85,16 @@ function WorkspaceInner(): React.ReactElement {
   // the divider is mid-drag. Reading and editing are panes now — not overlays.
   const overlayUp = Boolean(cmdk.open || connectInfo);
   React.useEffect(() => saveViewerLayout(viewer), [viewer]);
-  // Re-clamp when the window shrinks so the pane can't squeeze out the board.
+  // Re-clamp when the window shrinks or the library opens so the panes can't
+  // squeeze out the board.
   React.useEffect(() => {
+    const extraLeft = libraryOpen ? LIBRARY_W : 0;
     const onResize = () =>
-      setViewer((v) => ({ ...v, width: clampViewerWidth(v.width, window.innerWidth) }));
+      setViewer((v) => ({ ...v, width: clampViewerWidth(v.width, window.innerWidth, extraLeft) }));
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [libraryOpen]);
 
   // Keep the active board valid if it gets deleted.
   const version = store.getVersion();
@@ -194,6 +198,7 @@ function WorkspaceInner(): React.ReactElement {
   // ---- viewer tabs ----------------------------------------------------------
 
   const [focusHl, setFocusHl] = React.useState<{ id: string; at: number } | null>(null);
+  const [focusClip, setFocusClip] = React.useState<{ id: string; at: number } | null>(null);
 
   const openReaderTab = (cardId: string) => {
     // No duplicate tabs: if any open tab shows the same source (captured
@@ -313,7 +318,24 @@ function WorkspaceInner(): React.ReactElement {
         return;
       }
     }
+    // For a PDF clip, open the PDF and scroll to the clip's frame.
+    if (card.kind === "image" && card.sourceUrl.startsWith("pdf:") && card.clip) {
+      const pdfId = card.sourceUrl.slice(4);
+      if (store.getCard(pdfId)) {
+        openReaderTab(pdfId);
+        setFocusClip({ id: cardId, at: Date.now() });
+        return;
+      }
+    }
     openReaderTab(cardId);
+  };
+
+  /** Cards whose Read menu action leads somewhere useful. */
+  const canRead = (cardId: string): boolean => {
+    const c = store.getCard(cardId);
+    if (!c) return false;
+    if (c.kind === "highlight" || c.kind === "article") return true;
+    return c.kind === "image" && c.sourceUrl.startsWith("pdf:") && !!c.clip;
   };
 
   /** A highlight hold-dragged out of the reader was released at (x, y). */
@@ -419,7 +441,7 @@ function WorkspaceInner(): React.ReactElement {
       style={{
         gridTemplateColumns: [
           viewer.sidebarOpen ? `${SIDEBAR_W}px` : "",
-          libraryOpen ? "272px" : "",
+          libraryOpen ? `${LIBRARY_W}px` : "",
           "minmax(0, 1fr)",
           viewerOpen ? `${DIVIDER_W}px ${viewer.width}px` : "",
         ].filter(Boolean).join(" "),
@@ -448,12 +470,14 @@ function WorkspaceInner(): React.ReactElement {
             aria-pressed={viewer.sidebarOpen}
             onClick={() => setViewer((v) => ({ ...v, sidebarOpen: !v.sidebarOpen }))}
           >▦</button>
-          <h2 className="ws-board-title">{board?.name ?? "octobase"}</h2>
-          {board && (
-            <span className="ws-board-sub">
-              {store.getPlacements(board.id).length} cards
-            </span>
-          )}
+          <div className="ws-topbar-heading">
+            <h2 className="ws-board-title">{board?.name ?? "octobase"}</h2>
+            {board && (
+              <span className="ws-board-sub">
+                {store.getPlacements(board.id).length} cards
+              </span>
+            )}
+          </div>
           <div className="ws-topbar-spacer" />
           <button
             className="ws-icon-btn"
@@ -539,7 +563,11 @@ function WorkspaceInner(): React.ReactElement {
             }}
             onPointerMove={(e) => {
               if (!dividerDrag) return;
-              const width = clampViewerWidth(window.innerWidth - e.clientX, window.innerWidth);
+              const width = clampViewerWidth(
+                window.innerWidth - e.clientX,
+                window.innerWidth,
+                libraryOpen ? LIBRARY_W : 0,
+              );
               setViewer((v) => ({ ...v, width }));
             }}
             onPointerUp={(e) => {
@@ -558,6 +586,7 @@ function WorkspaceInner(): React.ReactElement {
             onClose={() => setViewer((v) => ({ ...v, open: false }))}
             onOpenCard={(id) => openCard(id, { edit: false })}
             focusHighlight={focusHl}
+            focusClip={focusClip}
             onDropHighlight={dropHighlightFromReader}
             suspended={dividerDrag || overlayUp}
           />
@@ -581,7 +610,7 @@ function WorkspaceInner(): React.ReactElement {
           style={{ left: ctx.x, top: ctx.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {["highlight", "article"].includes(store.getCard(ctx.cardId)?.kind ?? "") && (
+          {canRead(ctx.cardId) && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
               <span className="ws-ctx-ico">📖</span> Read
             </div>

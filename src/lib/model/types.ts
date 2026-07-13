@@ -64,6 +64,12 @@ export interface ImageCard extends BaseCard {
     w: number;
     h: number;
   };
+  /**
+   * For PDF clips: the region the clip was taken from, so the reader can
+   * frame it on the page and Read can scroll back to it. Coordinates are in
+   * scale-1 page units.
+   */
+  clip?: { page: number; x: number; y: number; w: number; h: number };
 }
 
 /**

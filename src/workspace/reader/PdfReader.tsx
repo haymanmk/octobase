@@ -4,7 +4,7 @@ import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
-import { pdfSourceUrl, type HighlightCard, type HighlightColor, type PdfCard } from "../../lib/model/types.ts";
+import { pdfSourceUrl, type HighlightCard, type HighlightColor, type ImageCard, type PdfCard } from "../../lib/model/types.ts";
 import { getPdfBridge, pdfUrl } from "../electron-bridge.ts";
 import {
   locateHighlights,
@@ -29,6 +29,8 @@ export interface PdfReaderProps {
   cardId: string;
   /** Scroll this highlight into view (at: nonce so repeats re-fire). */
   focusHighlight?: { id: string; at: number } | null;
+  /** Scroll this clip's frame into view (at: nonce so repeats re-fire). */
+  focusClip?: { id: string; at: number } | null;
   /** A highlight was hold-dragged out of the PDF and released here. */
   onDropHighlight?: (cardId: string, clientX: number, clientY: number) => void;
 }
@@ -71,6 +73,7 @@ function rangeFromOffsets(container: HTMLElement, start: number, end: number): R
 export function PdfReader({
   cardId,
   focusHighlight,
+  focusClip,
   onDropHighlight,
 }: PdfReaderProps): React.ReactElement | null {
   const store = useWorkspace();
@@ -103,6 +106,8 @@ export function PdfReader({
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
+  const clipFocusDoneRef = React.useRef(0);
+  const [clipPing, setClipPing] = React.useState<{ id: string; at: number } | null>(null);
 
   // Toolbar features.
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -123,6 +128,21 @@ export function PdfReader({
 
   const highlights = React.useMemo(
     () => (card ? store.getHighlightsForUrl(pdfSourceUrl(card.id)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, card?.id, version],
+  );
+
+  // Image cards clipped from this PDF that still know where they came from.
+  const clips = React.useMemo(
+    () =>
+      card
+        ? store
+            .getCards()
+            .filter(
+              (c): c is ImageCard =>
+                c.kind === "image" && c.sourceUrl === pdfSourceUrl(card.id) && !!c.clip,
+            )
+        : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store, card?.id, version],
   );
@@ -275,6 +295,23 @@ export function PdfReader({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlights, renderTick, scale, focusHighlight]);
+
+  // Scroll a clip's frame into view when Read is hit on its image card.
+  // Frames are pure geometry (no text locate needed), so this only waits for
+  // the page layout (baseSizes) to exist.
+  React.useEffect(() => {
+    if (!focusClip || focusClip.at === clipFocusDoneRef.current) return;
+    const rect = clips.find((c) => c.id === focusClip.id)?.clip;
+    if (!rect) return;
+    const host = pageRefs.current.get(rect.page);
+    const root = scrollRef.current;
+    if (!host || !root) return;
+    clipFocusDoneRef.current = focusClip.at;
+    const r = host.getBoundingClientRect();
+    const s = root.getBoundingClientRect();
+    root.scrollTop += r.top - s.top + (rect.y + rect.h / 2) * scale - root.clientHeight / 2;
+    setClipPing({ id: focusClip.id, at: focusClip.at });
+  }, [focusClip, clips, scale, baseSizes]);
 
   // Search flash: once the hit's page is rendered, band its range briefly.
   React.useEffect(() => {
@@ -484,6 +521,9 @@ export function PdfReader({
       title: `${card.title} — p.${rect.page}`,
       sourceUrl: pdfSourceUrl(card.id),
       image: { file: saved.file, w: saved.w, h: saved.h },
+      // Remember where on the page the clip came from, in scale-1 units, so
+      // the reader can frame it and Read can scroll back to it.
+      clip: { page: rect.page, x: rect.x / scale, y: rect.y / scale, w: rect.w / scale, h: rect.h / scale },
     });
     toast("Clipped ✓ — find it in the Library");
   };
@@ -564,6 +604,20 @@ export function PdfReader({
                   <div key={`flash-${j}`} className="ws-hl-band ws-hl-flash"
                     style={{ left: b.x, top: b.y, width: b.w, height: b.h }} />
                 ))}
+                {clips.map((c) =>
+                  c.clip!.page === n ? (
+                    <div
+                      key={clipPing?.id === c.id ? `${c.id}-${clipPing.at}` : c.id}
+                      className={`ws-clip-frame${clipPing?.id === c.id ? " ping" : ""}`}
+                      style={{
+                        left: c.clip!.x * scale,
+                        top: c.clip!.y * scale,
+                        width: c.clip!.w * scale,
+                        height: c.clip!.h * scale,
+                      }}
+                    />
+                  ) : null,
+                )}
                 {clipRect?.page === n && clipRect.w > 0 && (
                   <div className="ws-clip-rect"
                     style={{ left: clipRect.x, top: clipRect.y, width: clipRect.w, height: clipRect.h }} />

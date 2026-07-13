@@ -73,3 +73,28 @@ test("PDF highlights carry a page and share the pdf: source key", async () => {
   assert.equal(hl.sourceUrl, src);
   assert.deepEqual(store.getHighlightsForUrl(src).map((h) => h.id), [hl.id]);
 });
+
+test("PDF clips remember the page region they were taken from", async () => {
+  const store = new WorkspaceStore(new MemoryPersistence());
+  await store.init({ seed: false });
+  const pdf = store.createPdfCard({ title: "Paper", file: "a.pdf", pages: 3 });
+  const clip = store.createImageCard({
+    title: "Paper — p.2",
+    sourceUrl: pdfSourceUrl(pdf.id),
+    image: { file: "clip.png", w: 400, h: 300 },
+    clip: { page: 2, x: 10, y: 20, w: 200, h: 150 },
+  });
+  const stored = store.getCard(clip.id);
+  assert.equal(stored?.kind, "image");
+  assert.deepEqual(
+    stored?.kind === "image" ? stored.clip : undefined,
+    { page: 2, x: 10, y: 20, w: 200, h: 150 },
+  );
+  // Web clips (no clip region) stay undefined rather than gaining a key.
+  const webClip = store.createImageCard({
+    title: "Web clip",
+    sourceUrl: "https://example.com",
+    image: { file: "w.png", w: 10, h: 10 },
+  });
+  assert.equal("clip" in webClip, false);
+});

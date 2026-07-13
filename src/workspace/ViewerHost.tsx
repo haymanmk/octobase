@@ -34,6 +34,8 @@ export interface ViewerHostProps {
   onOpenCard: (cardId: string) => void;
   /** Scroll the active reader to this highlight (nonce re-fires repeats). */
   focusHighlight?: { id: string; at: number } | null;
+  /** Scroll the active PDF reader to this clip's frame. */
+  focusClip?: { id: string; at: number } | null;
   /** A highlight was hold-dragged out of the reader and dropped at (x, y). */
   onDropHighlight?: (cardId: string, clientX: number, clientY: number) => void;
   /**
@@ -52,6 +54,7 @@ export function ViewerHost({
   onClose,
   onOpenCard,
   focusHighlight,
+  focusClip,
   onDropHighlight,
   suspended,
 }: ViewerHostProps): React.ReactElement {
@@ -215,6 +218,7 @@ export function ViewerHost({
           readerTabs.find((t) => t.cardId === activeTab)?.kind === "pdf" ? (
             <PdfReader key={activeTab} cardId={activeTab}
               focusHighlight={focusHighlight}
+              focusClip={focusClip}
               onDropHighlight={onDropHighlight} />
           ) : (
             <Reader key={activeTab} cardId={activeTab} onOpenCard={onOpenCard}

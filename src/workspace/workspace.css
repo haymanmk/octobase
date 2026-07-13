@@ -217,6 +217,15 @@
   /* Above the inspector (z 6) so the ⋯ dropdown isn't covered by it. */
   z-index: 7;
 }
+/* Title + card count clip inside this wrapper instead of overflowing onto
+   the viewer pane when the board column is squeezed. */
+.ws-topbar-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
 .ws-board-title {
   font-family: var(--ws-font-display);
   font-size: 21px;
@@ -224,8 +233,12 @@
   letter-spacing: -0.01em;
   margin: 0;
   color: var(--ws-ink);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.ws-board-sub { font-size: 12px; color: #8f939c; margin-left: 2px; }
+.ws-board-sub { font-size: 12px; color: #8f939c; white-space: nowrap; }
 .ws-topbar-spacer { flex: 1; }
 
 .ws-btn {
@@ -1430,7 +1443,21 @@
 }
 .ws-pdf-text ::selection,
 .ws-pdf-text span::selection { background: rgba(79, 125, 201, 0.32); }
-.ws-pdf-page .ws-hl-layer { z-index: 2; }
+/* .ws-hl-layer deliberately gets no z-index on PDF pages: it would create a
+   stacking context that isolates the bands' mix-blend-mode from the page
+   canvas underneath, painting them opaque. DOM order already places the
+   layer above the canvas. */
+/* Persistent frame where a clip was taken; pings when focused via Read. */
+.ws-clip-frame {
+  position: absolute;
+  border: 1.5px dashed rgba(79, 125, 201, 0.5);
+  border-radius: 3px;
+}
+.ws-clip-frame.ping { animation: ws-clip-ping 1.8s ease forwards; }
+@keyframes ws-clip-ping {
+  from { background: rgba(79, 125, 201, 0.3); }
+  to { background: transparent; }
+}
 .ws-hl-flash {
   background: rgba(79, 125, 201, 0.4);
   animation: ws-flash-fade 1.4s ease forwards;

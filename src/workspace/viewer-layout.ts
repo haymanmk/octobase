@@ -15,6 +15,7 @@ export interface ViewerLayout {
 }
 
 export const SIDEBAR_W = 264;
+export const LIBRARY_W = 272;
 export const DIVIDER_W = 6;
 export const MIN_VIEWER_W = 320;
 export const MIN_MAIN_W = 360;
@@ -30,9 +31,13 @@ export const DEFAULT_VIEWER_LAYOUT: ViewerLayout = {
   activeTab: BROWSER_TAB,
 };
 
-/** Keep the pane wide enough to use and never let it squeeze out the board. */
-export function clampViewerWidth(desired: number, windowWidth: number): number {
-  const max = windowWidth - SIDEBAR_W - DIVIDER_W - MIN_MAIN_W;
+/**
+ * Keep the pane wide enough to use and never let it squeeze out the board.
+ * `extraLeft` is width taken by other left-side panes (e.g. the card library)
+ * so the board keeps MIN_MAIN_W with them open too.
+ */
+export function clampViewerWidth(desired: number, windowWidth: number, extraLeft = 0): number {
+  const max = windowWidth - SIDEBAR_W - extraLeft - DIVIDER_W - MIN_MAIN_W;
   if (max < MIN_VIEWER_W) return MIN_VIEWER_W;
   return Math.min(Math.max(desired, MIN_VIEWER_W), max);
 }

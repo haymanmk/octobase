@@ -446,6 +446,7 @@ export class WorkspaceStore {
     title: string;
     sourceUrl: string;
     image: ImageCard["image"];
+    clip?: ImageCard["clip"];
     body?: string;
     tags?: string[];
     color?: HighlightColor;
@@ -463,6 +464,7 @@ export class WorkspaceStore {
       deletedAt: null,
       sourceUrl: init.sourceUrl,
       image: init.image,
+      ...(init.clip ? { clip: init.clip } : {}),
     };
     this.data.cards.push(card);
     this.touch();
