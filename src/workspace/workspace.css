@@ -60,14 +60,13 @@
   letter-spacing: 0.02em;
 }
 
-/* ── Sidebar (the spine) ─────────────────────────────────────────────────── */
+/* ── Sidebar (light grey, one family with the canvas + library) ──────────── */
 .ws-sidebar {
-  background:
-    linear-gradient(180deg, var(--ws-spine) 0%, var(--ws-spine-2) 100%);
-  color: var(--ws-spine-text);
+  background: var(--ws-paper-2);
+  color: var(--ws-ink);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #14161a;
+  border-right: 1px solid var(--ws-line);
   min-height: 0;
 }
 
@@ -100,27 +99,27 @@
   gap: 8px;
   padding: 9px 12px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--ws-spine-dim);
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  color: #8f939c;
   font-size: 13px;
   cursor: text;
   transition: background 0.15s, border-color 0.15s;
 }
-.ws-search-trigger:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255,255,255,0.16); }
+.ws-search-trigger:hover { border-color: var(--ws-line-strong); }
 .ws-search-trigger kbd {
   margin-left: auto;
   font-family: var(--ws-font-mono);
   font-size: 10px;
   padding: 2px 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ws-spine-dim);
+  background: rgba(0, 0, 0, 0.05);
+  color: #8f939c;
 }
 
 .ws-nav { overflow-y: auto; flex: 1; padding: 0 8px 16px; min-height: 0; }
 .ws-nav::-webkit-scrollbar { width: 8px; }
-.ws-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 8px; }
+.ws-nav::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 8px; }
 
 .ws-section-label {
   display: flex;
@@ -130,19 +129,19 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  color: var(--ws-spine-dim);
+  color: #8f939c;
 }
 .ws-section-label button {
   all: unset;
   cursor: pointer;
-  color: var(--ws-spine-dim);
+  color: #8f939c;
   font-size: 16px;
   line-height: 1;
   width: 18px; height: 18px;
   display: grid; place-items: center;
   border-radius: 5px;
 }
-.ws-section-label button:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.ws-section-label button:hover { background: rgba(0, 0, 0, 0.07); color: var(--ws-ink); }
 
 .ws-nav-item {
   display: flex;
@@ -151,14 +150,14 @@
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 13.5px;
-  color: var(--ws-spine-text);
+  color: var(--ws-ink-soft);
   cursor: pointer;
   user-select: none;
   position: relative;
   transition: background 0.12s;
 }
-.ws-nav-item:hover { background: rgba(255, 255, 255, 0.07); }
-.ws-nav-item.active { background: rgba(79, 125, 201, 0.24); color: #fff; }
+.ws-nav-item:hover { background: rgba(0, 0, 0, 0.05); }
+.ws-nav-item.active { background: rgba(79, 125, 201, 0.14); color: var(--ws-ink); }
 .ws-nav-item.active::before {
   content: "";
   position: absolute;
@@ -168,12 +167,12 @@
   background: var(--ws-accent);
 }
 .ws-nav-item .ws-ico { width: 16px; text-align: center; opacity: 0.8; font-size: 14px; }
-.ws-nav-item .ws-count { margin-left: auto; font-size: 11px; color: var(--ws-spine-dim); font-family: var(--ws-font-mono); }
+.ws-nav-item .ws-count { margin-left: auto; font-size: 11px; color: #8f939c; font-family: var(--ws-font-mono); }
 .ws-nav-item .ws-rename {
   all: unset;
   width: 100%;
   font-size: 13.5px;
-  color: #fff;
+  color: var(--ws-ink);
   font-family: var(--ws-font-ui);
   border-bottom: 1px solid var(--ws-accent);
 }
@@ -181,27 +180,27 @@
   margin-left: auto;
   opacity: 0;
   font-size: 15px;
-  color: var(--ws-spine-dim);
+  color: #8f939c;
   padding: 0 4px;
   border-radius: 4px;
 }
 .ws-nav-item:hover .ws-kebab { opacity: 1; }
-.ws-nav-item .ws-kebab:hover { color: #fff; background: rgba(255,255,255,0.12); }
+.ws-nav-item .ws-kebab:hover { color: var(--ws-ink); background: rgba(0, 0, 0, 0.07); }
 
 .ws-tag-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 8px; }
 .ws-tag-chip {
   font-size: 11.5px;
   padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  color: var(--ws-spine-text);
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  color: var(--ws-ink-soft);
   cursor: pointer;
 }
-.ws-tag-chip:hover { background: rgba(79, 125, 201, 0.28); }
+.ws-tag-chip:hover { background: rgba(79, 125, 201, 0.14); }
 .ws-tag-chip.active { background: var(--ws-accent); color: #fff; border-color: transparent; font-weight: 600; }
 
-.ws-empty-hint { padding: 6px 12px; font-size: 12px; color: var(--ws-spine-dim); font-style: italic; }
+.ws-empty-hint { padding: 6px 12px; font-size: 12px; color: #8f939c; font-style: italic; }
 
 /* ── Main column ─────────────────────────────────────────────────────────── */
 .ws-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
@@ -297,8 +296,17 @@
   box-shadow: var(--ws-shadow-sm);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Overflow stays visible so the connector handles (half outside the
+     border) render as full circles; .ws-card-clip clips the content. */
   transition: box-shadow 0.16s, border-color 0.16s;
+}
+.ws-card-clip {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: calc(var(--ws-radius) - 1px);
 }
 .ws-card:hover { box-shadow: var(--ws-shadow-md); }
 .ws-card.selected { border-color: var(--ws-accent); box-shadow: 0 0 0 2px var(--ws-accent-soft), var(--ws-shadow-md); }
@@ -394,6 +402,7 @@
 }
 .ws-edge.selected { stroke: var(--ws-accent); stroke-width: 2.5; }
 .ws-edge.preview { stroke: var(--ws-accent); stroke-dasharray: 6 5; }
+.ws-edge.rewiring { opacity: 0.25; }
 .ws-edge-hit {
   fill: none;
   stroke: transparent;
@@ -401,7 +410,22 @@
   pointer-events: stroke;
   cursor: pointer;
 }
-.ws-edge-dot { fill: var(--ws-card); stroke: var(--ws-accent); stroke-width: 1.5; }
+/* Draggable rewire dots on the selected edge — HTML divs so they sit above
+   the cards and win the pointer over the card's own connector handles. */
+.ws-edge-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ws-card);
+  border: 2px solid var(--ws-accent);
+  transform: translate(-50%, -50%);
+  z-index: 99999;
+  cursor: grab;
+  box-shadow: var(--ws-shadow-sm);
+}
+.ws-edge-dot:hover { background: var(--ws-accent-soft); }
+.ws-edge-dot:active { cursor: grabbing; }
 .ws-edge-label {
   position: absolute;
   transform: translate(-50%, -50%);

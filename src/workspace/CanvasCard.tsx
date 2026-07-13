@@ -225,6 +225,9 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         props.onEmbedDrop(card.id, id);
       }}
     >
+      {/* Inner wrapper owns the rounded-corner clipping so the connector
+          handles (positioned half outside the card) don't get sliced. */}
+      <div className="ws-card-clip">
       <div className="ws-card-accent" style={{ background: palette.underline }} />
       <div className="ws-card-head">
         <span className="ws-card-kind">{kindLabel}</span>
@@ -294,6 +297,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       {card.kind !== "note" && "sourceUrl" in card && card.sourceUrl && (
         <div className="ws-card-source">◉ {hostOf(card.sourceUrl)}</div>
       )}
+      </div>
       {!editing &&
         HANDLE_SIDES.map((side) => (
           <div

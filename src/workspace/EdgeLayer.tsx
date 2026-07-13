@@ -19,6 +19,10 @@ export interface EdgeLayerProps {
   onEndLabelEdit: () => void;
   /** In-flight handle drag: fixed start anchor to the cursor. */
   preview: { from: Anchor; to: Point } | null;
+  /** Pointer went down on a selected edge's endpoint dot — Canvas rewires it. */
+  onEndpointDown: (edgeId: string, end: "from" | "to", e: React.PointerEvent) => void;
+  /** Edge being rewired right now — its resting path renders dimmed. */
+  rewiringEdgeId: string | null;
 }
 
 /**
@@ -35,6 +39,8 @@ export function EdgeLayer({
   onCommitLabel,
   onEndLabelEdit,
   preview,
+  onEndpointDown,
+  rewiringEdgeId,
 }: EdgeLayerProps): React.ReactElement {
   const drawn = edges.flatMap((edge) => {
     const a = rectOf(edge.fromCardId);
@@ -60,25 +66,40 @@ export function EdgeLayer({
         </defs>
         {drawn.map(({ edge, geo }) => {
           const selected = edge.id === selectedEdgeId;
+          const rewiring = edge.id === rewiringEdgeId;
           return (
             <g key={edge.id}>
               <path
-                className={`ws-edge${selected ? " selected" : ""}`}
+                className={`ws-edge${selected ? " selected" : ""}${rewiring ? " rewiring" : ""}`}
                 d={geo.d}
                 markerEnd={edge.directed ? `url(#ws-arrow${selected ? "-sel" : ""})` : undefined}
               />
               <path className="ws-edge-hit" d={geo.d} data-edge-id={edge.id} />
-              {selected && (
-                <>
-                  <circle className="ws-edge-dot" cx={geo.from.x} cy={geo.from.y} r="4" />
-                  <circle className="ws-edge-dot" cx={geo.to.x} cy={geo.to.y} r="4" />
-                </>
-              )}
             </g>
           );
         })}
         {preview && <path className="ws-edge preview" d={previewPath(preview.from, preview.to)} markerEnd="url(#ws-arrow)" />}
       </svg>
+
+      {/* Endpoint dots are HTML so they can paint ABOVE the cards: an anchor
+          sits exactly where the card's own connector handle lives, and the
+          rewire grab must win over drawing a new edge from that handle. */}
+      {drawn
+        .filter(({ edge }) => edge.id === selectedEdgeId && edge.id !== rewiringEdgeId)
+        .map(({ edge, geo }) =>
+          (["from", "to"] as const).map((end) => {
+            const p = end === "from" ? geo.from : geo.to;
+            return (
+              <div
+                key={`${edge.id}-${end}`}
+                className="ws-edge-dot"
+                style={{ left: p.x, top: p.y }}
+                title="Drag to reconnect"
+                onPointerDown={(e) => onEndpointDown(edge.id, end, e)}
+              />
+            );
+          }),
+        )}
 
       {drawn.map(({ edge, geo }) =>
         edge.id === editingLabelEdgeId ? (

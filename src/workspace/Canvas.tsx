@@ -2,7 +2,7 @@ import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { CanvasCard } from "./CanvasCard.tsx";
 import { EdgeLayer } from "./EdgeLayer.tsx";
-import { sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
+import { edgePath, sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
 import type { Card } from "../lib/model/types.ts";
 
 export interface CanvasProps {
@@ -74,6 +74,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   const [labelEdgeId, setLabelEdgeId] = React.useState<string | null>(null);
   const [edgeMenu, setEdgeMenu] = React.useState<null | { edgeId: string; x: number; y: number }>(null);
   const [edgePreview, setEdgePreview] = React.useState<null | { from: Anchor; to: Point }>(null);
+  const [rewiringEdgeId, setRewiringEdgeId] = React.useState<string | null>(null);
   const [edgeTargetId, setEdgeTargetId] = React.useState<string | null>(null);
   const edgeDragRef = React.useRef<null | { fromCardId: string; from: Anchor }>(null);
   // Window-level drag handlers need the live view, not the closed-over one.
@@ -240,6 +241,61 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         setSelectedEdgeId(edge.id);
         onSelect(null);
       }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  /**
+   * Drag an endpoint dot of the selected edge to re-attach that end to a
+   * different card (release elsewhere cancels). This is the wire's "edit
+   * mode" — it only exists once an edge is selected, so it can't be confused
+   * with drawing a new wire from a card handle.
+   */
+  const startEndpointDrag = (edgeId: string, end: "from" | "to", e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const edge = store.getEdges(boardId).find((ed) => ed.id === edgeId);
+    if (!edge) return;
+    const rectOfCard = (cardId: string) => {
+      const p = store.getPlacements(boardId).find((pl) => pl.cardId === cardId);
+      return p ? { x: p.x, y: p.y, w: p.w, h: p.h } : null;
+    };
+    const a = rectOfCard(edge.fromCardId);
+    const b = rectOfCard(edge.toCardId);
+    if (!a || !b) return;
+    const geo = edgePath(a, b);
+    const fixedCardId = end === "from" ? edge.toCardId : edge.fromCardId;
+    const fixedAnchor = end === "from" ? geo.to : geo.from;
+    setRewiringEdgeId(edgeId);
+    const toWorld = (me: PointerEvent): Point => {
+      const rect = ref.current!.getBoundingClientRect();
+      const v = viewRef.current;
+      return {
+        x: (me.clientX - rect.left - v.tx) / v.scale,
+        y: (me.clientY - rect.top - v.ty) / v.scale,
+      };
+    };
+    const cardUnder = (me: PointerEvent) => {
+      const el = document
+        .elementFromPoint(me.clientX, me.clientY)
+        ?.closest(".ws-card") as HTMLElement | null;
+      return el?.dataset.cardId ?? null;
+    };
+    const onMove = (me: PointerEvent) => {
+      setEdgePreview({ from: fixedAnchor, to: toWorld(me) });
+      const tid = cardUnder(me);
+      setEdgeTargetId(tid && tid !== fixedCardId ? tid : null);
+    };
+    const onUp = (me: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setEdgePreview(null);
+      setEdgeTargetId(null);
+      setRewiringEdgeId(null);
+      const tid = cardUnder(me);
+      if (tid && tid !== fixedCardId) store.reconnectEdge(edgeId, end, tid);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -435,6 +491,8 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           onCommitLabel={(id, label) => store.updateEdge(id, { label })}
           onEndLabelEdit={() => setLabelEdgeId(null)}
           preview={edgePreview}
+          onEndpointDown={startEndpointDrag}
+          rewiringEdgeId={rewiringEdgeId}
         />
         {placements.map((p) => {
           const card = cardById.get(p.cardId);

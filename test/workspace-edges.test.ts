@@ -52,6 +52,42 @@ test("updateEdge sets label, direction flag, and flips endpoints", async () => {
   assert.equal(e.toCardId, a.id);
 });
 
+test("reconnectEdge moves one endpoint to another card", async () => {
+  const { store, board, a, b } = await boardWithTwoCards();
+  const { card: c } = store.createNoteOnBoard(board.id, 0, 400, { title: "C" });
+  const edge = store.createEdge(board.id, a.id, b.id);
+
+  assert.equal(store.reconnectEdge(edge.id, "to", c.id), true);
+  let e = store.getEdges(board.id)[0];
+  assert.equal(e.fromCardId, a.id);
+  assert.equal(e.toCardId, c.id);
+
+  assert.equal(store.reconnectEdge(edge.id, "from", b.id), true);
+  e = store.getEdges(board.id)[0];
+  assert.equal(e.fromCardId, b.id);
+  assert.equal(e.toCardId, c.id);
+});
+
+test("reconnectEdge refuses self-loops, duplicates, and unknown edges", async () => {
+  const { store, board, a, b } = await boardWithTwoCards();
+  const { card: c } = store.createNoteOnBoard(board.id, 0, 400, { title: "C" });
+  const edge = store.createEdge(board.id, a.id, b.id);
+  store.createEdge(board.id, a.id, c.id);
+
+  // Would become a self-loop.
+  assert.equal(store.reconnectEdge(edge.id, "to", a.id), false);
+  // Would duplicate the existing a→c edge.
+  assert.equal(store.reconnectEdge(edge.id, "to", c.id), false);
+  // Unknown edge / unknown card.
+  assert.equal(store.reconnectEdge("ed_missing", "to", c.id), false);
+  assert.equal(store.reconnectEdge(edge.id, "to", "card_missing"), false);
+  // Reconnecting to where it already points is a harmless no-op.
+  assert.equal(store.reconnectEdge(edge.id, "to", b.id), false);
+  const e = store.getEdges(board.id).find((x) => x.id === edge.id)!;
+  assert.equal(e.fromCardId, a.id);
+  assert.equal(e.toCardId, b.id);
+});
+
 test("deleteEdge removes the edge", async () => {
   const { store, board, a, b } = await boardWithTwoCards();
   const edge = store.createEdge(board.id, a.id, b.id);

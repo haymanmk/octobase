@@ -642,6 +642,32 @@ export class WorkspaceStore {
     this.touch();
   }
 
+  /**
+   * Re-attach one end of an edge to a different card (drag an endpoint dot).
+   * Returns false when the move would create a self-loop, duplicate an
+   * existing same-direction edge, or reference a missing edge/card.
+   */
+  reconnectEdge(id: string, end: "from" | "to", cardId: string): boolean {
+    const idx = this.data.edges.findIndex((e) => e.id === id);
+    if (idx < 0 || !this.getCard(cardId)) return false;
+    const e = this.data.edges[idx];
+    const fromCardId = end === "from" ? cardId : e.fromCardId;
+    const toCardId = end === "to" ? cardId : e.toCardId;
+    if (fromCardId === toCardId) return false;
+    if (fromCardId === e.fromCardId && toCardId === e.toCardId) return false;
+    const duplicate = this.data.edges.some(
+      (other) =>
+        other.id !== id &&
+        other.whiteboardId === e.whiteboardId &&
+        other.fromCardId === fromCardId &&
+        other.toCardId === toCardId,
+    );
+    if (duplicate) return false;
+    this.data.edges[idx] = { ...e, fromCardId, toCardId };
+    this.touch();
+    return true;
+  }
+
   deleteEdge(id: string): void {
     const before = this.data.edges.length;
     this.data.edges = this.data.edges.filter((e) => e.id !== id);
