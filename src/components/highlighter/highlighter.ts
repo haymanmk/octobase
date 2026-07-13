@@ -10,7 +10,7 @@ import 'rangy/lib/rangy-highlighter';
 import 'rangy/lib/rangy-serializer';
 import rangy from 'rangy';
 import { HIGHLIGHT_COLORS, type HighlightColor, type Highlight } from '../../types/highlight';
-import { classNameFor, PALETTE } from './colors';
+import { applyContrastGuard, classNameFor, PALETTE } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
@@ -235,11 +235,13 @@ async function deleteHighlightWithUndo(id: string): Promise<void> {
       h.addClassApplier(appliers[record.color]);
       h.highlightSelection(classNameFor(record.color));
       sel.removeAllRanges();
-      for (const el of document.querySelectorAll(`.${classNameFor(record.color)}:not([data-octobase-highlight-id])`)) {
+      const restored = document.querySelectorAll(`.${classNameFor(record.color)}:not([data-octobase-highlight-id])`);
+      for (const el of restored) {
         const htmlEl = el as HTMLElement;
         htmlEl.dataset.octobaseHighlightId = record.id;
         htmlEl.dataset.octobaseHighlightText = record.text;
       }
+      applyContrastGuard(restored);
       await window.electronAPI?.saveHighlight({ ...record, updatedAt: Date.now() });
     } catch (err) {
       console.warn('[octobase-highlighter] undo re-apply failed', err);
@@ -370,6 +372,7 @@ async function applyHighlightFromSelection(color: HighlightColor): Promise<strin
   ) as HTMLElement[];
   if (fragments.length > 0) {
     stampHighlightGroup(fragments, text, () => id);
+    applyContrastGuard(fragments);
   }
   sel.removeAllRanges();
 
@@ -687,6 +690,7 @@ async function reapplyOnLoad() {
       ) as HTMLElement[];
       if (fragments.length > 0) {
         stampHighlightGroup(fragments, r.text, () => r.id);
+        applyContrastGuard(fragments);
       }
     } catch (err) {
       console.warn('[octobase-highlighter] failed to re-apply highlight', r.id, err);

@@ -77,8 +77,10 @@ function injectHighlightStyles() {
   if (stylesInjected) return;
   stylesInjected = true;
   const style = document.createElement("style");
+  // ::highlight paints a full-height band, so dark ink stays readable on it
+  // regardless of the page theme (white page text would vanish otherwise).
   style.textContent = HIGHLIGHT_COLORS.map(
-    (c) => `::highlight(octo-hl-${c}){background-color:${PALETTE[c].fill};}`,
+    (c) => `::highlight(octo-hl-${c}){background-color:${PALETTE[c].fill};color:#22252b;}`,
   ).join("");
   (document.head ?? document.documentElement).appendChild(style);
 }
