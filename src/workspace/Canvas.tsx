@@ -2,7 +2,7 @@ import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { CanvasCard } from "./CanvasCard.tsx";
 import { EdgeLayer } from "./EdgeLayer.tsx";
-import { edgePath, sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
+import { edgePath, nearestSide, sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
 import type { Card } from "../lib/model/types.ts";
 
 export interface CanvasProps {
@@ -254,7 +254,16 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
       if (!d) return;
       const tid = cardUnder(me);
       if (tid && tid !== d.fromCardId) {
-        const edge = store.createEdge(boardId, d.fromCardId, tid);
+        // Pin both anchors to the dots the user drew: the handle they
+        // started from and the target side nearest to their release point.
+        const tp = store.getPlacements(boardId).find((pl) => pl.cardId === tid);
+        const toSide = tp
+          ? nearestSide({ x: tp.x, y: tp.y, w: tp.w, h: tp.h }, toWorld(me))
+          : null;
+        const edge = store.createEdge(boardId, d.fromCardId, tid, {
+          fromSide: d.from.side,
+          toSide,
+        });
         setSelectedEdgeId(edge.id);
         onSelect(null);
       }
@@ -282,7 +291,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     const a = rectOfCard(edge.fromCardId);
     const b = rectOfCard(edge.toCardId);
     if (!a || !b) return;
-    const geo = edgePath(a, b);
+    const geo = edgePath(a, b, edge.fromSide ?? null, edge.toSide ?? null);
     const fixedCardId = end === "from" ? edge.toCardId : edge.fromCardId;
     const fixedAnchor = end === "from" ? geo.to : geo.from;
     setRewiringEdgeId(edgeId);
@@ -298,7 +307,15 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
       setEdgeTargetId(null);
       setRewiringEdgeId(null);
       const tid = cardUnder(me);
-      if (tid && tid !== fixedCardId) store.reconnectEdge(edgeId, end, tid);
+      if (tid && tid !== fixedCardId) {
+        // Pin the endpoint to the dot it was dropped on — including a
+        // different dot of the same card (moving the anchor).
+        const tp = store.getPlacements(boardId).find((pl) => pl.cardId === tid);
+        const side = tp
+          ? nearestSide({ x: tp.x, y: tp.y, w: tp.w, h: tp.h }, toWorld(me))
+          : null;
+        store.reconnectEdge(edgeId, end, tid, side);
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -576,6 +593,11 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
             <div className="ws-ctx-item" onClick={() => { store.updateEdge(edge.id, { directed: !edge.directed }); setEdgeMenu(null); }}>
               <span className="ws-ctx-ico">➤</span> {edge.directed ? "Hide arrowhead" : "Show arrowhead"}
             </div>
+            {(edge.fromSide || edge.toSide) && (
+              <div className="ws-ctx-item" onClick={() => { store.updateEdge(edge.id, { fromSide: null, toSide: null }); setEdgeMenu(null); }}>
+                <span className="ws-ctx-ico">⟳</span> Route automatically
+              </div>
+            )}
             <div className="ws-ctx-sep" />
             <div className="ws-ctx-item danger" onClick={() => { store.deleteEdge(edge.id); setSelectedEdgeId(null); setEdgeMenu(null); }}>
               <span className="ws-ctx-ico">🗑</span> Delete connection

@@ -2,6 +2,7 @@ import type {
   ArticleCard,
   Card,
   Edge,
+  EdgeSide,
   HighlightCard,
   HighlightColor,
   ImageCard,
@@ -601,9 +602,15 @@ export class WorkspaceStore {
 
   /**
    * Connect two cards on a board. Same-direction duplicates return the
-   * existing edge; the reverse direction is a distinct edge.
+   * existing edge; the reverse direction is a distinct edge. `sides` pins
+   * the anchors to the dots the user drew from/to; omitted = auto-route.
    */
-  createEdge(whiteboardId: string, fromCardId: string, toCardId: string): Edge {
+  createEdge(
+    whiteboardId: string,
+    fromCardId: string,
+    toCardId: string,
+    sides: { fromSide?: EdgeSide | null; toSide?: EdgeSide | null } = {},
+  ): Edge {
     if (fromCardId === toCardId) {
       throw new Error("cannot connect a card to itself");
     }
@@ -621,13 +628,18 @@ export class WorkspaceStore {
       toCardId,
       label: "",
       directed: true,
+      fromSide: sides.fromSide ?? null,
+      toSide: sides.toSide ?? null,
     };
     this.data.edges.push(edge);
     this.touch();
     return edge;
   }
 
-  updateEdge(id: string, patch: Partial<Pick<Edge, "label" | "directed">>): void {
+  updateEdge(
+    id: string,
+    patch: Partial<Pick<Edge, "label" | "directed" | "fromSide" | "toSide">>,
+  ): void {
     const idx = this.data.edges.findIndex((e) => e.id === id);
     if (idx < 0) return;
     this.data.edges[idx] = { ...this.data.edges[idx], ...patch };
@@ -638,32 +650,50 @@ export class WorkspaceStore {
     const idx = this.data.edges.findIndex((e) => e.id === id);
     if (idx < 0) return;
     const e = this.data.edges[idx];
-    this.data.edges[idx] = { ...e, fromCardId: e.toCardId, toCardId: e.fromCardId };
+    this.data.edges[idx] = {
+      ...e,
+      fromCardId: e.toCardId,
+      toCardId: e.fromCardId,
+      // Pinned anchors belong to their card, so they swap with it.
+      fromSide: e.toSide ?? null,
+      toSide: e.fromSide ?? null,
+    };
     this.touch();
   }
 
   /**
-   * Re-attach one end of an edge to a different card (drag an endpoint dot).
-   * Returns false when the move would create a self-loop, duplicate an
-   * existing same-direction edge, or reference a missing edge/card.
+   * Re-attach one end of an edge — to another card, or to a different dot
+   * (side) of the same card. Returns false when the move would create a
+   * self-loop, duplicate an existing same-direction edge, reference a
+   * missing edge/card, or change nothing.
    */
-  reconnectEdge(id: string, end: "from" | "to", cardId: string): boolean {
+  reconnectEdge(
+    id: string,
+    end: "from" | "to",
+    cardId: string,
+    side: EdgeSide | null = null,
+  ): boolean {
     const idx = this.data.edges.findIndex((e) => e.id === id);
     if (idx < 0 || !this.getCard(cardId)) return false;
     const e = this.data.edges[idx];
     const fromCardId = end === "from" ? cardId : e.fromCardId;
     const toCardId = end === "to" ? cardId : e.toCardId;
     if (fromCardId === toCardId) return false;
-    if (fromCardId === e.fromCardId && toCardId === e.toCardId) return false;
-    const duplicate = this.data.edges.some(
-      (other) =>
-        other.id !== id &&
-        other.whiteboardId === e.whiteboardId &&
-        other.fromCardId === fromCardId &&
-        other.toCardId === toCardId,
-    );
-    if (duplicate) return false;
-    this.data.edges[idx] = { ...e, fromCardId, toCardId };
+    const sideKey = end === "from" ? "fromSide" : "toSide";
+    const cardChanged = fromCardId !== e.fromCardId || toCardId !== e.toCardId;
+    const sideChanged = (e[sideKey] ?? null) !== side;
+    if (!cardChanged && !sideChanged) return false;
+    if (cardChanged) {
+      const duplicate = this.data.edges.some(
+        (other) =>
+          other.id !== id &&
+          other.whiteboardId === e.whiteboardId &&
+          other.fromCardId === fromCardId &&
+          other.toCardId === toCardId,
+      );
+      if (duplicate) return false;
+    }
+    this.data.edges[idx] = { ...e, fromCardId, toCardId, [sideKey]: side };
     this.touch();
     return true;
   }

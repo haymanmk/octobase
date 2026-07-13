@@ -92,6 +92,9 @@ export interface Link {
   toCardId: string;
 }
 
+/** A card side a connector can attach to. */
+export type EdgeSide = "top" | "right" | "bottom" | "left";
+
 /**
  * A hand-drawn connector between two cards on one whiteboard. Board-scoped:
  * it exists only while both cards are placed on that board.
@@ -105,6 +108,12 @@ export interface Edge {
   label: string;
   /** Arrowhead at the target end. */
   directed: boolean;
+  /**
+   * The dots the user drew from/to — pinned anchors that survive card moves.
+   * null (or absent, on pre-pinning edges) = auto-route to the nearest side.
+   */
+  fromSide?: EdgeSide | null;
+  toSide?: EdgeSide | null;
 }
 
 /** The full serialized workspace persisted as one document. */

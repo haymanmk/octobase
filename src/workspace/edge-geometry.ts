@@ -101,9 +101,48 @@ export interface EdgeGeometry {
   to: Anchor;
 }
 
-/** Full edge geometry between two placed cards. */
-export function edgePath(a: Rect, b: Rect): EdgeGeometry {
-  const { from, to } = nearestAnchors(a, b);
+/** The side whose midpoint dot lies closest to a point (drop targeting). */
+export function nearestSide(r: Rect, p: Point): Side {
+  let best: Side = "top";
+  let bd = Infinity;
+  for (const s of SIDES) {
+    const m = sideMidpoint(r, s);
+    const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = s;
+    }
+  }
+  return best;
+}
+
+/**
+ * Full edge geometry between two placed cards. Pinned sides are the dots the
+ * user actually drew from/to — they always win over routing. A null side
+ * auto-routes: it picks the dot nearest to the other (pinned or auto) end.
+ */
+export function edgePath(
+  a: Rect,
+  b: Rect,
+  fromSide: Side | null = null,
+  toSide: Side | null = null,
+): EdgeGeometry {
+  let from: Anchor;
+  let to: Anchor;
+  if (fromSide && toSide) {
+    from = { ...sideMidpoint(a, fromSide), side: fromSide };
+    to = { ...sideMidpoint(b, toSide), side: toSide };
+  } else if (fromSide) {
+    from = { ...sideMidpoint(a, fromSide), side: fromSide };
+    const s = nearestSide(b, from);
+    to = { ...sideMidpoint(b, s), side: s };
+  } else if (toSide) {
+    to = { ...sideMidpoint(b, toSide), side: toSide };
+    const s = nearestSide(a, to);
+    from = { ...sideMidpoint(a, s), side: s };
+  } else {
+    ({ from, to } = nearestAnchors(a, b));
+  }
   const { c1, c2 } = controls(from, to, to.side);
   return { d: cubic(from, c1, c2, to), mid: bezierMid(from, c1, c2, to), from, to };
 }

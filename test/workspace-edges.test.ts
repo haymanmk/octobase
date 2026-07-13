@@ -46,10 +46,38 @@ test("updateEdge sets label, direction flag, and flips endpoints", async () => {
   let e = store.getEdges(board.id)[0];
   assert.equal(e.label, "supports");
   assert.equal(e.directed, false);
+  store.updateEdge(edge.id, { fromSide: "bottom", toSide: "left" });
   store.flipEdge(edge.id);
   e = store.getEdges(board.id)[0];
   assert.equal(e.fromCardId, b.id);
   assert.equal(e.toCardId, a.id);
+  // Pinned anchors travel with their card when the direction flips.
+  assert.equal(e.fromSide, "left");
+  assert.equal(e.toSide, "bottom");
+});
+
+test("createEdge pins the sides the user drew from and to", async () => {
+  const { store, board, a, b } = await boardWithTwoCards();
+  const edge = store.createEdge(board.id, a.id, b.id, { fromSide: "bottom", toSide: "top" });
+  assert.equal(edge.fromSide, "bottom");
+  assert.equal(edge.toSide, "top");
+  // Legacy/optionless edges stay auto-routed.
+  const { card: c } = store.createNoteOnBoard(board.id, 0, 400, { title: "C" });
+  const auto = store.createEdge(board.id, a.id, c.id);
+  assert.equal(auto.fromSide, null);
+  assert.equal(auto.toSide, null);
+});
+
+test("reconnectEdge can re-pin a side on the same card", async () => {
+  const { store, board, a, b } = await boardWithTwoCards();
+  const edge = store.createEdge(board.id, a.id, b.id, { fromSide: "right", toSide: "left" });
+  // Same card, different dot: allowed — that's how you move the anchor.
+  assert.equal(store.reconnectEdge(edge.id, "to", b.id, "bottom"), true);
+  const e = store.getEdges(board.id)[0];
+  assert.equal(e.toCardId, b.id);
+  assert.equal(e.toSide, "bottom");
+  // Same card, same dot: nothing to do.
+  assert.equal(store.reconnectEdge(edge.id, "to", b.id, "bottom"), false);
 });
 
 test("reconnectEdge moves one endpoint to another card", async () => {

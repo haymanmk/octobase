@@ -46,7 +46,7 @@ export function EdgeLayer({
     const a = rectOf(edge.fromCardId);
     const b = rectOf(edge.toCardId);
     if (!a || !b) return [];
-    return [{ edge, geo: edgePath(a, b) }];
+    return [{ edge, geo: edgePath(a, b, edge.fromSide ?? null, edge.toSide ?? null) }];
   });
 
   return (
