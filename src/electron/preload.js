@@ -54,6 +54,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pdfTextSave: (file, markdown) => ipcRenderer.invoke('pdftext:save', { file, markdown }),
   pdfTextLoad: (file) => ipcRenderer.invoke('pdftext:load', file),
 
+  // In-app AI: key vault + streaming chat (the key never enters this process).
+  aiStatus: () => ipcRenderer.invoke('ai:status'),
+  aiSetKey: (key) => ipcRenderer.invoke('ai:set-key', key),
+  aiSetModel: (model) => ipcRenderer.invoke('ai:set-model', model),
+  aiTest: () => ipcRenderer.invoke('ai:test'),
+  aiChat: (reqId, messages) => ipcRenderer.invoke('ai:chat', { reqId, messages }),
+  aiChatAbort: (reqId) => ipcRenderer.send('ai:chat-abort', reqId),
+  onAiChatDelta: (callback) => {
+    ipcRenderer.removeAllListeners('ai:chat-delta');
+    ipcRenderer.on('ai:chat-delta', (_event, data) => callback(data));
+  },
+
   browserNavigate: (input) => ipcRenderer.send('browser:navigate', input),
   browserBack: () => ipcRenderer.send('browser:back'),
   browserForward: () => ipcRenderer.send('browser:forward'),

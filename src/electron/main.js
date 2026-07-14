@@ -8,7 +8,7 @@
  * `overlayView` is attached on top only while a highlight drag is in flight.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, WebContentsView } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, WebContentsView } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStore } from './highlights-store.js';
 import { createCaptureServer } from './capture-server.js';
 import { normalizeAddress } from './url-normalize.js';
+import { chatRequestInit, createDeltaParser, DEFAULT_MODEL, OPENAI_CHAT_URL } from './openai-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -320,6 +321,116 @@ app.whenReady().then(() => {
       return fs.readFileSync(pdfTextPath(file), 'utf8');
     } catch {
       return null; // not parsed yet
+    }
+  });
+
+  // ── AI: OpenAI key vault + streaming chat ─────────────────────────────────
+  // The API key lives ONLY in main: pasted once over IPC, encrypted with
+  // safeStorage (macOS Keychain-backed), persisted to userData/ai.json. All
+  // OpenAI calls run here — the renderer sees deltas, never the key.
+  const aiFile = path.join(app.getPath('userData'), 'ai.json');
+  const loadAiConfig = () => {
+    try {
+      return JSON.parse(fs.readFileSync(aiFile, 'utf8'));
+    } catch {
+      return {};
+    }
+  };
+  const saveAiConfig = (cfg) => {
+    try {
+      fs.writeFileSync(aiFile, JSON.stringify(cfg), 'utf8');
+    } catch (err) {
+      dlog('ai config save failed:', err);
+    }
+  };
+  const aiKey = () => {
+    const cfg = loadAiConfig();
+    if (!cfg.keyEncrypted) return null;
+    try {
+      return safeStorage.decryptString(Buffer.from(cfg.keyEncrypted, 'base64'));
+    } catch (err) {
+      dlog('ai key decrypt failed:', err);
+      return null;
+    }
+  };
+
+  ipcMain.handle('ai:status', () => {
+    const cfg = loadAiConfig();
+    return { hasKey: !!cfg.keyEncrypted, model: cfg.model || DEFAULT_MODEL };
+  });
+
+  ipcMain.handle('ai:set-key', (_event, key) => {
+    const cfg = loadAiConfig();
+    if (!key) {
+      delete cfg.keyEncrypted;
+    } else {
+      if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'OS keychain unavailable' };
+      cfg.keyEncrypted = safeStorage.encryptString(String(key)).toString('base64');
+    }
+    saveAiConfig(cfg);
+    return { ok: true };
+  });
+
+  ipcMain.handle('ai:set-model', (_event, model) => {
+    const cfg = loadAiConfig();
+    cfg.model = String(model || '').trim() || DEFAULT_MODEL;
+    saveAiConfig(cfg);
+    return { ok: true, model: cfg.model };
+  });
+
+  ipcMain.handle('ai:test', async () => {
+    const key = aiKey();
+    if (!key) return { ok: false, error: 'No API key configured' };
+    try {
+      const res = await fetch('https://api.openai.com/v1/models', {
+        headers: { authorization: `Bearer ${key}` },
+      });
+      if (res.ok) return { ok: true };
+      return { ok: false, error: `OpenAI answered ${res.status}${res.status === 401 ? ' (bad key)' : ''}` };
+    } catch (err) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  });
+
+  // Streaming chat: one in-flight request per reqId; deltas push to the app
+  // view as 'ai:chat-delta' events; the invoke resolves when the stream ends.
+  const aiAborts = new Map();
+  ipcMain.on('ai:chat-abort', (_event, reqId) => {
+    aiAborts.get(reqId)?.abort();
+  });
+
+  ipcMain.handle('ai:chat', async (_event, { reqId, messages }) => {
+    const key = aiKey();
+    if (!key) return { ok: false, error: 'No API key configured' };
+    const cfg = loadAiConfig();
+    const controller = new AbortController();
+    aiAborts.set(reqId, controller);
+    try {
+      const res = await fetch(OPENAI_CHAT_URL, {
+        ...chatRequestInit(key, cfg.model || DEFAULT_MODEL, messages),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        let msg = `OpenAI answered ${res.status}`;
+        try { msg = JSON.parse(detail).error.message ?? msg; } catch { /* keep status */ }
+        return { ok: false, error: msg };
+      }
+      const parse = createDeltaParser();
+      const decoder = new TextDecoder();
+      for await (const chunk of res.body) {
+        const { deltas, done } = parse(decoder.decode(chunk, { stream: true }));
+        for (const delta of deltas) {
+          appView?.webContents.send('ai:chat-delta', { reqId, delta });
+        }
+        if (done) break;
+      }
+      return { ok: true };
+    } catch (err) {
+      if (controller.signal.aborted) return { ok: false, error: 'aborted' };
+      return { ok: false, error: String(err?.message ?? err) };
+    } finally {
+      aiAborts.delete(reqId);
     }
   });
 

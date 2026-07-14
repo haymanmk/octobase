@@ -6,7 +6,8 @@ import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
+import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
+import { AiSettings } from "./AiSettings.tsx";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
@@ -59,6 +60,7 @@ function WorkspaceInner(): React.ReactElement {
   const [toast, setToast] = React.useState<ToastState | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
+  const [aiSettingsOpen, setAiSettingsOpen] = React.useState(false);
   const captureBridge = getCaptureBridge();
   const canvasRef = React.useRef<CanvasHandle>(null);
 
@@ -83,7 +85,7 @@ function WorkspaceInner(): React.ReactElement {
   // The native browser view always paints above our DOM, so it must yield
   // whenever a full-window overlay is up (⌘K palette, extension dialog) or
   // the divider is mid-drag. Reading and editing are panes now — not overlays.
-  const overlayUp = Boolean(cmdk.open || connectInfo);
+  const overlayUp = Boolean(cmdk.open || connectInfo || aiSettingsOpen);
   React.useEffect(() => saveViewerLayout(viewer), [viewer]);
   // Re-clamp when the window shrinks or the library opens so the panes can't
   // squeeze out the board.
@@ -512,6 +514,12 @@ function WorkspaceInner(): React.ReactElement {
                     <span className="ws-dd-ico">📄</span> Open PDF…
                   </div>
                 )}
+                {getAiBridge() && (
+                  <div className="ws-dd-item" role="menuitem"
+                    onClick={() => { setMenuOpen(false); setAiSettingsOpen(true); }}>
+                    <span className="ws-dd-ico">✦</span> AI settings
+                  </div>
+                )}
                 {captureBridge && (
                   <>
                     <div className="ws-dd-sep" />
@@ -651,6 +659,8 @@ function WorkspaceInner(): React.ReactElement {
           </div>
         </div>
       )}
+
+      {aiSettingsOpen && <AiSettings onClose={() => setAiSettingsOpen(false)} />}
 
       {connectInfo && (
         <div className="ws-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectInfo(null); }}>

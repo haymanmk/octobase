@@ -167,3 +167,28 @@ export function getPdfBridge(): OctobasePdfBridge | undefined {
 export function pdfUrl(file: string): string {
   return `octobase-pdf://p/${file}`;
 }
+
+// ---- in-app AI --------------------------------------------------------------
+
+export interface AiChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface OctobaseAiBridge {
+  aiStatus: () => Promise<{ hasKey: boolean; model: string }>;
+  aiSetKey: (key: string | null) => Promise<{ ok: boolean; error?: string }>;
+  aiSetModel: (model: string) => Promise<{ ok: boolean; model?: string }>;
+  aiTest: () => Promise<{ ok: boolean; error?: string }>;
+  /** Streams via onAiChatDelta; resolves when the stream ends. */
+  aiChat: (reqId: string, messages: AiChatMessage[]) => Promise<{ ok: boolean; error?: string }>;
+  aiChatAbort: (reqId: string) => void;
+  onAiChatDelta: (cb: (d: { reqId: string; delta: string }) => void) => void;
+}
+
+/** Present only inside the Electron renderer (exposed by preload.js). */
+export function getAiBridge(): OctobaseAiBridge | undefined {
+  const api = (window as unknown as { electronAPI?: Partial<OctobaseAiBridge> })
+    .electronAPI;
+  return api?.aiChat ? (api as OctobaseAiBridge) : undefined;
+}
