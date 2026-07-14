@@ -168,7 +168,7 @@ function WorkspaceInner(): React.ReactElement {
         showToast({ message: `Added “${card.title}”` });
       } else {
         applyHighlightDrop(store, d, null);
-        showToast({ message: "Highlight saved to inbox" });
+        showToast({ message: "Highlight saved to the Library" });
       }
     });
     return () => bridge.removeHighlightDroppedListener();
@@ -429,7 +429,7 @@ function WorkspaceInner(): React.ReactElement {
     store.removePlacement(p.id);
     setSelectedCardIds((ids) => ids.filter((id) => id !== cardId));
     showToast({
-      message: "Moved to inbox",
+      message: "Removed from board — still in the Library",
       actionLabel: "Undo",
       onAction: () => { store.placeCard(p.whiteboardId, cardId, p.x, p.y, p.w, p.h); setToast(null); },
     });
@@ -616,7 +616,7 @@ function WorkspaceInner(): React.ReactElement {
             </div>
           )}
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>
-            <span className="ws-ctx-ico">⇤</span> Move to inbox
+            <span className="ws-ctx-ico">⇤</span> Remove from board
           </div>
           <div className="ws-ctx-sep" />
           <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>

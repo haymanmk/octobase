@@ -61,7 +61,7 @@ export function Sidebar({
       window.alert("Keep at least one whiteboard.");
       return;
     }
-    if (!window.confirm(`Delete “${name}”? Its cards move to the inbox.`)) return;
+    if (!window.confirm(`Delete “${name}”? Its cards stay in the Library.`)) return;
     store.deleteWhiteboard(id);
     if (activeBoardId === id) {
       const next = store.getWhiteboards()[0];
