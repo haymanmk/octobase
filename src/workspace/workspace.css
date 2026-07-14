@@ -1397,6 +1397,44 @@
   line-height: 1;
 }
 
+/* ── Slash menu (card editor block palette) ─────────────────────────────── */
+.ws-slash {
+  position: fixed;
+  z-index: 80;
+  width: 250px;
+  padding: 6px;
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  border-radius: 10px;
+  box-shadow: var(--ws-shadow-lg);
+  font: 500 13px var(--ws-font-ui);
+  color: var(--ws-ink);
+}
+.ws-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.ws-slash-item.sel { background: rgba(79, 125, 201, 0.1); }
+.ws-slash-ico { width: 20px; text-align: center; opacity: 0.7; flex: none; }
+.ws-slash-hint { margin-left: auto; font-size: 11px; color: #a6aab2; }
+
+/* Live math (KaTeX) in the editor: rendered in place; the expression the
+   caret is inside reveals its LaTeX source instead. */
+.ws-card-md-edit .Tiptap-mathematics-editor {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.9em;
+  background: rgba(240, 200, 60, 0.18);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.ws-card-md-edit .Tiptap-mathematics-render--editable { cursor: pointer; }
+.ws-md .katex-display { margin: 0.35em 0; }
+.ws-md .katex { font-size: 1.05em; }
+
 /* ── PDF reader ──────────────────────────────────────────────────────────── */
 .ws-pdf-pane {
   position: absolute;

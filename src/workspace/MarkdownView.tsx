@@ -1,6 +1,9 @@
 import * as React from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import type { Card } from "../lib/model/types.ts";
 import { clipUrl } from "./electron-bridge.ts";
 
@@ -105,7 +108,8 @@ export function MarkdownView({
   return (
     <div className="ws-md">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         urlTransform={(url) =>
           url.startsWith(WIKI_SCHEME) || url.startsWith(EMBED_SCHEME)
             ? url

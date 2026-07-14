@@ -6,6 +6,9 @@ import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
 import { CardEmbedNode } from "./card-embed-node.ts";
+import { CardMath, MathAwareText } from "./math-extension.ts";
+import { SlashMenu } from "./slash-menu.ts";
+import "katex/dist/katex.min.css";
 
 export interface CardMarkdownEditorProps {
   /** Initial markdown body (the editing session owns it afterwards). */
@@ -32,7 +35,10 @@ export function CardMarkdownEditor({ value, onChange }: CardMarkdownEditorProps)
       TaskList,
       TaskItem.configure({ nested: true }),
       CardEmbedNode,
-      Placeholder.configure({ placeholder: "Write markdown…" }),
+      CardMath,
+      MathAwareText, // after StarterKit: replaces its "text" node's serializer
+      SlashMenu,
+      Placeholder.configure({ placeholder: "Write markdown… (/ for blocks)" }),
       Markdown.configure({ html: false, linkify: false, breaks: false }),
     ],
     content: value,
