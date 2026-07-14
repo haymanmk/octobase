@@ -151,6 +151,9 @@ export interface OctobasePdfBridge {
   /** Persist a renderer-cropped PNG data URL; returns the clip file ref. */
   clipSave: (payload: { dataUrl: string; w: number; h: number }) =>
     Promise<{ file: string; w: number; h: number } | null>;
+  /** Cache of parsed whole-document PDF markdown (for the in-app AI). */
+  pdfTextSave: (file: string, markdown: string) => Promise<boolean>;
+  pdfTextLoad: (file: string) => Promise<string | null>;
 }
 
 /** Present only inside the Electron renderer (exposed by preload.js). */

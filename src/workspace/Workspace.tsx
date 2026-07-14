@@ -246,7 +246,10 @@ function WorkspaceInner(): React.ReactElement {
       const { loadPdf } = await import("./reader/pdf-doc.ts");
       pages = (await loadPdf(pdfUrl(imp.file))).numPages;
     } catch { /* unreadable — keep 0; the reader will surface the error */ }
-    return store.createPdfCard({ title: imp.name, file: imp.file, pages });
+    const card = store.createPdfCard({ title: imp.name, file: imp.file, pages });
+    // Parse the full text in the background so the AI has it ready.
+    void import("./pdf-text-cache.ts").then(({ ensurePdfText }) => ensurePdfText(card));
+    return card;
   };
 
   const openPdfFromDialog = async () => {

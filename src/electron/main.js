@@ -286,14 +286,40 @@ app.whenReady().then(() => {
     }
   });
 
-  // Deleting a pdf card deletes its imported copy.
+  // Deleting a pdf card deletes its imported copy (and its parsed text).
   ipcMain.handle('pdf:delete', (_event, file) => {
     try {
       fs.rmSync(path.join(pdfsDir, path.basename(String(file))), { force: true });
+      fs.rmSync(path.join(pdfTextDir, `${path.basename(String(file))}.md`), { force: true });
       return true;
     } catch (err) {
       dlog('pdf delete failed:', err);
       return false;
+    }
+  });
+
+  // Parsed whole-document text (markdown) for the in-app AI, cached beside
+  // the PDFs. The renderer extracts (pdf.js lives there); main persists.
+  // PDFs are immutable after import, so a cache entry never invalidates.
+  const pdfTextDir = path.join(app.getPath('userData'), 'pdf-text');
+  fs.mkdirSync(pdfTextDir, { recursive: true });
+  const pdfTextPath = (file) => path.join(pdfTextDir, `${path.basename(String(file))}.md`);
+
+  ipcMain.handle('pdftext:save', (_event, { file, markdown }) => {
+    try {
+      fs.writeFileSync(pdfTextPath(file), String(markdown), 'utf8');
+      return true;
+    } catch (err) {
+      dlog('pdf text save failed:', err);
+      return false;
+    }
+  });
+
+  ipcMain.handle('pdftext:load', (_event, file) => {
+    try {
+      return fs.readFileSync(pdfTextPath(file), 'utf8');
+    } catch {
+      return null; // not parsed yet
     }
   });
 

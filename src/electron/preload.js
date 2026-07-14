@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pdfImport: (absPath) => ipcRenderer.invoke('pdf:import', absPath),
   // Persist a renderer-cropped PNG (PDF clip) into the clips store.
   clipSave: (payload) => ipcRenderer.invoke('clip:save', payload),
+  // Parsed whole-document PDF text (markdown) for the in-app AI.
+  pdfTextSave: (file, markdown) => ipcRenderer.invoke('pdftext:save', { file, markdown }),
+  pdfTextLoad: (file) => ipcRenderer.invoke('pdftext:load', file),
 
   browserNavigate: (input) => ipcRenderer.send('browser:navigate', input),
   browserBack: () => ipcRenderer.send('browser:back'),
