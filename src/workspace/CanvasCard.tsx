@@ -254,6 +254,16 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
               }
             }}
           />
+          {card.kind === "image" && (
+            <div className="ws-card-imgwrap">
+              <img
+                className="ws-card-img"
+                src={clipUrl(card.image.file)}
+                alt={card.title}
+                draggable={false}
+              />
+            </div>
+          )}
           <CardMarkdownEditor
             value={card.body}
             onChange={(md) => { bodyDraft.current = md; growToFit(); }}

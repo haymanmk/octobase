@@ -1276,12 +1276,15 @@
 
 /* ── WYSIWYG in-place markdown editor (TipTap) ───────────────────────────── */
 /* Stretch only the EditorContent wrapper — not the keyboard hint. */
-.ws-card-edit > div:not(.ws-card-edit-hint) {
+.ws-card-edit > div:not(.ws-card-edit-hint):not(.ws-card-imgwrap) {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
+/* Clip image stays visible while its note is edited; the editor gets the
+   remaining space. */
+.ws-card-edit .ws-card-imgwrap { margin: 0; max-height: 55%; }
 .ws-card-md-edit {
   flex: 1;
   min-height: 0;

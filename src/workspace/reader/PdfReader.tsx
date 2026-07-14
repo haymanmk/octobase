@@ -382,6 +382,50 @@ export function PdfReader({
     return highlightAtOffset(placedRef.current.get(n) ?? [], off);
   };
 
+  /** The clip frame (if any) under the pointer — frames are pointer-events:
+   *  none so text under them stays selectable; hit-test geometrically. */
+  const clipAtPoint = (clientX: number, clientY: number): ImageCard | null => {
+    const n = pageAt(clientX, clientY);
+    const host = n ? pageRefs.current.get(n) : null;
+    if (!n || !host) return null;
+    const b = host.getBoundingClientRect();
+    const x = clientX - b.left;
+    const y = clientY - b.top;
+    return (
+      clips.find((c) => {
+        const r = c.clip!;
+        return (
+          r.page === n &&
+          x >= r.x * scale && x <= (r.x + r.w) * scale &&
+          y >= r.y * scale && y <= (r.y + r.h) * scale
+        );
+      }) ?? null
+    );
+  };
+
+  /** Hold-to-drag (shared by highlights and clip frames): after HOLD_MS the
+   *  card follows the pointer as a ghost; release hands it to the workspace. */
+  const startHoldDrag = (cardId: string, ghost: { text: string; color: HighlightColor }, start: { x: number; y: number }) => {
+    const timer = setTimeout(() => {
+      draggedRef.current = true;
+      setSelToolbar(null);
+      window.getSelection()?.removeAllRanges();
+      setDragGhost({ text: ghost.text, color: ghost.color, x: start.x, y: start.y });
+      const onMove = (me: PointerEvent) =>
+        setDragGhost((g) => (g ? { ...g, x: me.clientX, y: me.clientY } : g));
+      const onUp = (ue: PointerEvent) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        setDragGhost(null);
+        onDropHighlight?.(cardId, ue.clientX, ue.clientY);
+        setTimeout(() => { draggedRef.current = false; }, 0);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    }, HOLD_MS);
+    hold.current = { cardId, sx: start.x, sy: start.y, timer };
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (clipMode) {
       const n = pageAt(e.clientX, e.clientY);
@@ -389,29 +433,15 @@ export function PdfReader({
       return;
     }
     if (e.button !== 0 || !onDropHighlight) return;
-    const hit = highlightAtPoint(e.clientX, e.clientY);
-    if (!hit) return;
     const start = { x: e.clientX, y: e.clientY };
-    const timer = setTimeout(() => {
+    const hit = highlightAtPoint(e.clientX, e.clientY);
+    if (hit) {
       const h = store.getCard(hit.cardId) as HighlightCard | undefined;
-      if (!h) return;
-      draggedRef.current = true;
-      setSelToolbar(null);
-      window.getSelection()?.removeAllRanges();
-      setDragGhost({ text: h.anchor.exact, color: h.color, x: start.x, y: start.y });
-      const onMove = (me: PointerEvent) =>
-        setDragGhost((g) => (g ? { ...g, x: me.clientX, y: me.clientY } : g));
-      const onUp = (ue: PointerEvent) => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        setDragGhost(null);
-        onDropHighlight(hit.cardId, ue.clientX, ue.clientY);
-        setTimeout(() => { draggedRef.current = false; }, 0);
-      };
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-    }, HOLD_MS);
-    hold.current = { cardId: hit.cardId, sx: start.x, sy: start.y, timer };
+      if (h) startHoldDrag(h.id, { text: h.anchor.exact, color: h.color }, start);
+      return;
+    }
+    const clip = clipAtPoint(e.clientX, e.clientY);
+    if (clip) startHoldDrag(clip.id, { text: clip.title, color: clip.color }, start);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
