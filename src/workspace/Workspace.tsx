@@ -61,6 +61,8 @@ function WorkspaceInner(): React.ReactElement {
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
   const [aiSettingsOpen, setAiSettingsOpen] = React.useState(false);
+  /** Nonce asking the viewer to open the chat drawer for its active tab. */
+  const [chatNonce, setChatNonce] = React.useState<{ at: number } | null>(null);
   const captureBridge = getCaptureBridge();
   const canvasRef = React.useRef<CanvasHandle>(null);
 
@@ -599,6 +601,8 @@ function WorkspaceInner(): React.ReactElement {
             focusHighlight={focusHl}
             focusClip={focusClip}
             onDropHighlight={dropHighlightFromReader}
+            openChatNonce={chatNonce}
+            onOpenAiSettings={() => setAiSettingsOpen(true)}
             suspended={dividerDrag || overlayUp}
           />
         </>
@@ -624,6 +628,15 @@ function WorkspaceInner(): React.ReactElement {
           {canRead(ctx.cardId) && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
               <span className="ws-ctx-ico">📖</span> Read
+            </div>
+          )}
+          {canRead(ctx.cardId) && getAiBridge() && (
+            <div className="ws-ctx-item" onClick={() => {
+              readCard(ctx.cardId);
+              setChatNonce({ at: Date.now() });
+              setCtx(null);
+            }}>
+              <span className="ws-ctx-ico">✦</span> Ask AI
             </div>
           )}
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>

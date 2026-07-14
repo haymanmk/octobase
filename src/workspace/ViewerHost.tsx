@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  getAiBridge,
   getClipBridge,
   getViewerBridge,
   type BrowserState,
@@ -8,6 +9,8 @@ import {
 import { BROWSER_TAB } from "./viewer-layout.ts";
 import { Reader } from "./reader/Reader.tsx";
 import { PdfReader } from "./reader/PdfReader.tsx";
+import { ChatDrawer } from "./ChatDrawer.tsx";
+import { useWorkspace } from "./store-context.ts";
 
 export interface ViewerTabInfo {
   cardId: string;
@@ -38,6 +41,10 @@ export interface ViewerHostProps {
   focusClip?: { id: string; at: number } | null;
   /** A highlight was hold-dragged out of the reader and dropped at (x, y). */
   onDropHighlight?: (cardId: string, clientX: number, clientY: number) => void;
+  /** Open the ask-about-this-card chat drawer (nonce re-fires repeats). */
+  openChatNonce?: { at: number } | null;
+  /** The chat's no-key nudge opens the AI settings popover. */
+  onOpenAiSettings: () => void;
   /**
    * While the divider is being dragged the native view must get out of the
    * way (it paints above the DOM and would swallow pointer events), so the
@@ -56,8 +63,11 @@ export function ViewerHost({
   focusHighlight,
   focusClip,
   onDropHighlight,
+  openChatNonce,
+  onOpenAiSettings,
   suspended,
 }: ViewerHostProps): React.ReactElement {
+  const store = useWorkspace();
   const bridge = React.useMemo<OctobaseViewerBridge | undefined>(() => getViewerBridge(), []);
   const slotRef = React.useRef<HTMLDivElement>(null);
   const urlInputRef = React.useRef<HTMLInputElement>(null);
@@ -67,6 +77,29 @@ export function ViewerHost({
   const [confirmNav, setConfirmNav] = React.useState<string | null>(null);
 
   const browserActive = activeTab === BROWSER_TAB;
+
+  // Ask-about-this-card drawer: scoped to the active reader tab's card.
+  const [chatOpen, setChatOpen] = React.useState(false);
+  const [chatHeight, setChatHeight] = React.useState(280);
+  const activeCard = !browserActive ? store.getCard(activeTab) : undefined;
+  React.useEffect(() => {
+    if (openChatNonce) setChatOpen(true);
+  }, [openChatNonce]);
+
+  const startChatResize = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = chatHeight;
+    const onMove = (me: PointerEvent) =>
+      setChatHeight(Math.min(600, Math.max(140, startH + (startY - me.clientY))));
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const navigateBrowserTab = (url: string) => {
     bridge?.browserNavigate(url);
@@ -171,6 +204,14 @@ export function ViewerHost({
           );
         })}
         <div className="ws-topbar-spacer" />
+        {getAiBridge() && !browserActive && activeCard && (
+          <button
+            className={`ws-icon-btn${chatOpen ? " active" : ""}`}
+            title="Ask AI about this tab"
+            aria-pressed={chatOpen}
+            onClick={() => setChatOpen((o) => !o)}
+          >✦</button>
+        )}
         <button className="ws-icon-btn" title="Close viewer pane" onClick={onClose}>✕</button>
       </div>
 
@@ -228,6 +269,20 @@ export function ViewerHost({
           )
         )}
       </div>
+
+      {chatOpen && activeCard && (
+        <>
+          <div className="ws-chat-resize" title="Drag to resize" onPointerDown={startChatResize} />
+          <div style={{ height: chatHeight, flex: "none", minHeight: 140, display: "flex" }}>
+            <ChatDrawer
+              key={activeCard.id}
+              card={activeCard}
+              onClose={() => setChatOpen(false)}
+              onOpenSettings={onOpenAiSettings}
+            />
+          </div>
+        </>
+      )}
 
       {confirmNav && (
         <div className="ws-pane-confirm" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmNav(null); }}>
