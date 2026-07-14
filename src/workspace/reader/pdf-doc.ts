@@ -42,13 +42,22 @@ export async function renderPage(
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.floor(viewport.width * dpr);
   canvas.height = Math.floor(viewport.height * dpr);
-  canvas.style.width = `${viewport.width}px`;
-  canvas.style.height = `${viewport.height}px`;
+  // 100% of the host, not viewport px: the host div is sized to the same
+  // viewport size when this render lands, and if the scale changes before the
+  // next render completes the stale bitmap stretches with the div instead of
+  // detaching from the overlay geometry (highlight bands, clip frames).
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
   const ctx = canvas.getContext("2d")!;
-  // The transform upscales onto the HiDPI backing store.
+  // The transform upscales onto the HiDPI backing store. intent "print":
+  // display-intent tasks step via requestAnimationFrame, which Chromium
+  // freezes for occluded windows — a render started (or interrupted) while
+  // the window is hidden would hang indefinitely, wedging the page at a
+  // stale scale. Print-intent tasks step via microtasks and always finish.
   await page.render({
     canvasContext: ctx,
     viewport,
+    intent: "print",
     transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
   }).promise;
 

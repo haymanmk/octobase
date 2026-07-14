@@ -234,11 +234,18 @@ export function PdfReader({
           await renderPage(page, canvas, textDiv, scale);
           renderedRef.current.set(n, scale);
           setRenderTick((t) => t + 1); // triggers band relocation
-        } catch { /* page render can fail on teardown; ignore */ }
-        finally { renderingRef.current.delete(n); }
+        } catch (err) {
+          console.error(`pdf page ${n} render failed:`, err);
+        } finally { renderingRef.current.delete(n); }
       })();
     }
-  }, [doc, visible, scale, version]);
+    // renderTick must be a dep: if the scale changes while a page is mid-render,
+    // that pass skips it (renderingRef); the finished render bumps the tick so
+    // this effect re-runs and re-renders the page at the now-current scale.
+    // Without it the page sticks at the old scale — canvas content drifts from
+    // the div-based overlay geometry (bands, clip frames) and its highlights
+    // vanish (the locate pass skips pages whose rendered scale is stale).
+  }, [doc, visible, scale, version, renderTick]);
 
   // Track the page shown at the viewport middle for the toolbar.
   const onScroll = () => {
