@@ -5,8 +5,54 @@
  * TipTap Suggestion wiring, the DOM popup, and what each item inserts.
  */
 import { Extension, type Editor, type Range } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import Suggestion, { type SuggestionProps, type SuggestionKeyDownProps } from "@tiptap/suggestion";
 import { filterSlashItems, type SlashItem } from "./slash-items.ts";
+
+/**
+ * Doc positions of "/" characters typed during this editing session. The menu
+ * only triggers on these: a leftover slash saved in the body must not pop the
+ * menu when the card is re-opened for editing — it stays plain text until the
+ * user deletes and retypes it. Registered before Suggestion so its state is
+ * already updated when Suggestion's `allow` reads it.
+ */
+const typedSlashKey = new PluginKey<number[]>("ws-typed-slashes");
+
+const TypedSlashTracker = new Plugin<number[]>({
+  key: typedSlashKey,
+  state: {
+    init: () => [],
+    apply(tr, positions) {
+      const next: number[] = [];
+      for (const p of positions) {
+        const r = tr.mapping.mapResult(p);
+        if (!r.deleted) next.push(r.pos);
+      }
+      const uiEvent = tr.getMeta("uiEvent") as string | undefined;
+      if (tr.docChanged && uiEvent !== "paste" && uiEvent !== "drop") {
+        // Record any "/" inside ranges this transaction inserted (each step's
+        // inserted range, mapped through the remaining steps to the final doc).
+        tr.mapping.maps.forEach((stepMap, i) => {
+          const rest = tr.mapping.slice(i + 1);
+          stepMap.forEach((_os, _oe, newStart, newEnd) => {
+            const from = rest.map(newStart, 1);
+            const to = rest.map(newEnd, -1);
+            if (to <= from) return;
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (!node.isText || !node.text) return;
+              const s = Math.max(from, pos);
+              const e = Math.min(to, pos + node.text.length);
+              for (let idx = s; idx < e; idx++) {
+                if (node.text[idx - pos] === "/") next.push(idx);
+              }
+            });
+          });
+        });
+      }
+      return next;
+    },
+  },
+});
 
 /** Run one item. `range` covers the "/query" text, which every action removes. */
 function runItem(id: string, editor: Editor, range: Range): void {
@@ -41,6 +87,8 @@ class SlashPopup {
   private items: SlashItem[] = [];
   private sel = 0;
   private command: (item: SlashItem) => void = () => {};
+  /** Esc hides the menu for the rest of this trigger without ending the edit. */
+  private dismissed = false;
 
   constructor() {
     this.el = document.createElement("div");
@@ -79,8 +127,13 @@ class SlashPopup {
     return !!item;
   }
 
+  dismiss(): void {
+    this.dismissed = true;
+    this.render();
+  }
+
   private render(): void {
-    this.el.style.display = this.items.length ? "block" : "none";
+    this.el.style.display = this.items.length && !this.dismissed ? "block" : "none";
     this.el.innerHTML = "";
     this.items.forEach((it, i) => {
       const row = document.createElement("div");
@@ -109,34 +162,55 @@ class SlashPopup {
   }
 }
 
-export const SlashMenu = Extension.create({
+export const SlashMenu = Extension.create<Record<string, never>, { popup: SlashPopup | null }>({
   name: "slashMenu",
 
+  addStorage() {
+    return { popup: null };
+  },
+
+  // Suggestion doesn't fire onExit when the editor itself is destroyed (e.g.
+  // Esc cancels the edit session), which would leak the popup element.
+  onDestroy() {
+    this.storage.popup?.destroy();
+    this.storage.popup = null;
+  },
+
   addProseMirrorPlugins() {
-    let popup: SlashPopup | null = null;
+    const storage = this.storage;
     return [
+      TypedSlashTracker,
       Suggestion<SlashItem>({
         editor: this.editor,
         char: "/",
+        allow: ({ state, range }) =>
+          (typedSlashKey.getState(state) ?? []).includes(range.from),
         items: ({ query }) => filterSlashItems(query),
         command: ({ editor, range, props: item }) => runItem(item.id, editor, range),
         render: () => ({
           onStart: (props) => {
-            popup = new SlashPopup();
-            popup.update(props);
+            storage.popup = new SlashPopup();
+            storage.popup.update(props);
           },
-          onUpdate: (props) => popup?.update(props),
+          onUpdate: (props) => storage.popup?.update(props),
           onKeyDown: (props: SuggestionKeyDownProps) => {
+            const popup = storage.popup;
             if (!popup) return false;
             if (props.event.key === "ArrowDown") { popup.move(1); return true; }
             if (props.event.key === "ArrowUp") { popup.move(-1); return true; }
             if (props.event.key === "Enter") return popup.pick();
-            if (props.event.key === "Escape") return false; // let Suggestion close
+            if (props.event.key === "Escape") {
+              // Close only the menu. stopPropagation keeps the event from the
+              // card's React handler, which would cancel the edit session.
+              props.event.stopPropagation();
+              popup.dismiss();
+              return true;
+            }
             return false;
           },
           onExit: () => {
-            popup?.destroy();
-            popup = null;
+            storage.popup?.destroy();
+            storage.popup = null;
           },
         }),
       }),
