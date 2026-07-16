@@ -75,12 +75,18 @@ const findWikilinkMatch: SuggestionOptions<LinkRow>["findSuggestionMatch"] = ({ 
 
 /** Insert the picked card as a [[link]] — or an embed if triggered by "![[". */
 function insertRow(editor: Editor, range: Range, row: LinkRow): void {
-  const before = editor.state.doc.textBetween(Math.max(0, range.from - 1), range.from);
+  const doc = editor.state.doc;
+  const before = doc.textBetween(Math.max(0, range.from - 1), range.from);
+  // Consume closing brackets already sitting after the caret — the /embed
+  // scaffold ("![[card]]" with the placeholder selected) leaves its "]]"
+  // there, and a hand-typed "]" mustn't double up either.
+  const following = doc.textBetween(range.to, Math.min(doc.content.size, range.to + 2));
+  const to = range.to + (following === "]]" ? 2 : following.startsWith("]") ? 1 : 0);
   if (before === "!") {
     editor
       .chain()
       .focus()
-      .deleteRange({ from: range.from - 1, to: range.to })
+      .deleteRange({ from: range.from - 1, to })
       .insertContent([
         { type: "cardEmbed", attrs: { target: row.title } },
         { type: "text", text: " " },
@@ -93,7 +99,7 @@ function insertRow(editor: Editor, range: Range, row: LinkRow): void {
   editor
     .chain()
     .focus()
-    .deleteRange(range)
+    .deleteRange({ from: range.from, to })
     .insertContent({ type: "text", text: `[[${row.title}]] ` })
     .run();
 }
