@@ -6,6 +6,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import type { Card } from "../lib/model/types.ts";
 import { clipUrl } from "./electron-bridge.ts";
+import { parseClipRef, resolveClipSrc } from "./clip-ref.ts";
 
 const EMBED_RE = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
@@ -111,7 +112,7 @@ export function MarkdownView({
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         urlTransform={(url) =>
-          url.startsWith(WIKI_SCHEME) || url.startsWith(EMBED_SCHEME)
+          url.startsWith(WIKI_SCHEME) || url.startsWith(EMBED_SCHEME) || parseClipRef(url)
             ? url
             : defaultUrlTransform(url)
         }
@@ -128,7 +129,7 @@ export function MarkdownView({
                 />
               );
             }
-            return <img src={src} alt={alt} />;
+            return <img src={typeof src === "string" ? resolveClipSrc(src) : src} alt={alt} />;
           },
           a({ href, children }) {
             if (href && href.startsWith(WIKI_SCHEME)) {

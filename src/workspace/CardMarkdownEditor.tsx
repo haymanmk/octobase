@@ -4,11 +4,26 @@ import StarterKit from "@tiptap/starter-kit";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
+import { mergeAttributes } from "@tiptap/core";
 import { Markdown } from "tiptap-markdown";
 import { CardEmbedNode } from "./card-embed-node.ts";
 import { CardMath, MathAwareText } from "./math-extension.ts";
 import { SlashMenu } from "./slash-menu.ts";
+import { clipRef, resolveClipSrc } from "./clip-ref.ts";
+import { imageFileOf, savePastedImage } from "./image-paste.ts";
 import "katex/dist/katex.min.css";
+
+/**
+ * Image node whose stored src may be a clip: ref — the document (and the
+ * serialized markdown) keeps the portable ref; only the rendered <img>
+ * resolves it to the octobase-clip:// URL.
+ */
+const ClipImage = Image.extend({
+  renderHTML({ HTMLAttributes }) {
+    return ["img", mergeAttributes(HTMLAttributes, { src: resolveClipSrc(HTMLAttributes.src ?? "") })];
+  },
+});
 
 export interface CardMarkdownEditorProps {
   /** Initial markdown body (the editing session owns it afterwards). */
@@ -38,6 +53,7 @@ export function CardMarkdownEditor({ value, onChange }: CardMarkdownEditorProps)
       CardMath,
       MathAwareText, // after StarterKit: replaces its "text" node's serializer
       SlashMenu,
+      ClipImage,
       Placeholder.configure({ placeholder: "Write markdown… (/ for blocks)" }),
       Markdown.configure({ html: false, linkify: false, breaks: false }),
     ],
@@ -50,6 +66,17 @@ export function CardMarkdownEditor({ value, onChange }: CardMarkdownEditorProps)
         // ⌘↵ ends the edit session (parent handles it) — keep the default
         // hard-break binding from swallowing it.
         event.key === "Enter" && (event.metaKey || event.ctrlKey),
+      handlePaste: (view, event) => {
+        const file = imageFileOf(event.clipboardData);
+        if (!file) return false;
+        event.preventDefault();
+        void savePastedImage(file).then((saved) => {
+          if (!saved || view.isDestroyed) return;
+          const node = view.state.schema.nodes.image.create({ src: clipRef(saved.file) });
+          view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+        });
+        return true;
+      },
     },
   }, []);
 

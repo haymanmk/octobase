@@ -1399,6 +1399,14 @@
   line-height: 1;
 }
 
+/* Pasted note images (clip: refs) — keep them inside the card. */
+.ws-md img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.ws-card-md-edit img.ProseMirror-selectednode { outline: 2px solid var(--ws-accent); }
+
 /* ── Slash menu (card editor block palette) ─────────────────────────────── */
 .ws-slash {
   position: fixed;

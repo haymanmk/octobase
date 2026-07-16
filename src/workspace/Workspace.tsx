@@ -9,6 +9,7 @@ import { CommandPalette } from "./CommandPalette.tsx";
 import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { AiSettings } from "./AiSettings.tsx";
 import { applyHighlightDrop } from "./drop-highlight.ts";
+import { imageFileOf, savePastedImage } from "./image-paste.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
   SIDEBAR_W,
@@ -209,6 +210,40 @@ function WorkspaceInner(): React.ReactElement {
       });
     });
   }, [store, showToast]);
+
+  // ⌘V with an image on the clipboard drops it on the board as an image card
+  // (the note editor consumes its own paste and preventDefaults first).
+  React.useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (e.defaultPrevented || !activeBoardId) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input, textarea, [contenteditable=true]")) return;
+      const file = imageFileOf(e.clipboardData);
+      if (!file) return;
+      e.preventDefault();
+      void (async () => {
+        const saved = await savePastedImage(file);
+        if (!saved) { showToast({ message: "Couldn’t save the pasted image" }); return; }
+        const card = store.createImageCard({
+          title: "Pasted image",
+          sourceUrl: "",
+          image: saved,
+        });
+        const el = document.querySelector(".ws-canvas");
+        const canvas = canvasRef.current;
+        if (el && canvas) {
+          const r = el.getBoundingClientRect();
+          const { x, y } = canvas.screenToWorld(r.left + r.width / 2, r.top + r.height / 2);
+          store.placeCard(activeBoardId, card.id, x - 130, y - 90);
+          selectOne(card.id);
+        }
+        showToast({ message: "Image pasted" });
+      })();
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBoardId]);
 
   const board = store.getWhiteboard(activeBoardId);
 
