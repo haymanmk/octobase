@@ -34,6 +34,8 @@ export interface CanvasHandle {
   containsPoint: (clientX: number, clientY: number) => boolean;
   /** Recenter/zoom the view so every placed card is visible. */
   zoomToFit: () => void;
+  /** Pan (animated) so this world rect is centered; zoom stays, clamped ≥0.5. */
+  centerOn: (rect: { x: number; y: number; w: number; h: number }) => void;
 }
 
 export { CARD_DRAG_MIME } from "./dnd.ts";
@@ -113,6 +115,40 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     };
   };
 
+  // Pan (tweened) so a world rect sits centered in the viewport — the TOC's
+  // jump-to-card. Keeps the current zoom, but never lands below a readable
+  // minimum. A new jump cancels the tween in flight.
+  const centerTweenRef = React.useRef(0);
+  const centerOn = React.useCallback(
+    (r: { x: number; y: number; w: number; h: number }) => {
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      cancelAnimationFrame(centerTweenRef.current);
+      const from = viewRef.current;
+      const scale = Math.max(from.scale, 0.5);
+      const to = {
+        scale,
+        tx: rect.width / 2 - (r.x + r.w / 2) * scale,
+        ty: rect.height / 2 - (r.y + r.h / 2) * scale,
+      };
+      const t0 = performance.now();
+      const DUR = 260;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - t0) / DUR);
+        const e = 1 - (1 - t) ** 3; // ease-out cubic
+        setView({
+          scale: from.scale + (to.scale - from.scale) * e,
+          tx: from.tx + (to.tx - from.tx) * e,
+          ty: from.ty + (to.ty - from.ty) * e,
+        });
+        if (t < 1) centerTweenRef.current = requestAnimationFrame(step);
+      };
+      centerTweenRef.current = requestAnimationFrame(step);
+    },
+    [],
+  );
+
   // Recenter/zoom so the bounding box of all placements fits the viewport.
   const zoomToFit = React.useCallback(() => {
     const el = ref.current;
@@ -158,10 +194,11 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         );
       },
       zoomToFit,
+      centerOn,
     }),
     // screenToCanvas closes over `view`; refresh the handle when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view, zoomToFit],
+    [view, zoomToFit, centerOn],
   );
 
   // Reset edge UI when switching boards.

@@ -1407,6 +1407,96 @@
 }
 .ws-card-md-edit img.ProseMirror-selectednode { outline: 2px solid var(--ws-accent); }
 
+/* ── Board table of contents (floating over the canvas right edge) ──────── */
+.ws-toc {
+  position: absolute;
+  top: 68px;
+  right: 14px;
+  width: 262px;
+  max-height: calc(100% - 140px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  border-radius: 12px;
+  box-shadow: var(--ws-shadow-md);
+  z-index: 5;
+  font-family: var(--ws-font-ui);
+}
+.ws-toc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 14px 6px;
+}
+.ws-toc-title {
+  font-family: var(--ws-font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+.ws-toc-count { font-size: 11px; color: #9aa0a8; font-family: var(--ws-font-mono); }
+.ws-toc-close {
+  all: unset;
+  margin-left: auto;
+  cursor: pointer;
+  color: #9aa0a8;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+.ws-toc-close:hover { background: rgba(0, 0, 0, 0.06); color: var(--ws-ink); }
+.ws-toc-filter {
+  margin: 2px 12px 8px;
+  border: 1px solid var(--ws-line);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font: 12.5px var(--ws-font-ui);
+  color: var(--ws-ink);
+  background: var(--ws-paper);
+  outline: none;
+}
+.ws-toc-filter:focus { border-color: var(--ws-accent-soft); background: #fff; }
+.ws-toc-list { overflow-y: auto; padding: 0 6px 10px; min-height: 0; }
+.ws-toc-list::-webkit-scrollbar { width: 8px; }
+.ws-toc-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 8px; }
+.ws-toc-group {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 8px 8px 3px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ws-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-toc-group:hover { color: var(--ws-accent); }
+.ws-toc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3.5px 8px 3.5px 20px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--ws-ink-soft);
+  cursor: pointer;
+}
+.ws-toc-item.lone { padding-left: 8px; }
+.ws-toc-item.child { padding-left: 36px; position: relative; }
+.ws-toc-item.child::before {
+  content: "└";
+  position: absolute;
+  left: 22px;
+  color: #c4c8cf;
+}
+.ws-toc-item:hover { background: rgba(79, 125, 201, 0.1); color: var(--ws-ink); }
+.ws-toc-glyph { width: 15px; text-align: center; opacity: 0.65; font-size: 11px; flex: none; }
+.ws-toc-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-toc-empty { padding: 10px 12px; font-size: 12px; color: #9aa0a8; font-style: italic; }
+
 /* ── Slash menu (card editor block palette) ─────────────────────────────── */
 .ws-slash {
   position: fixed;

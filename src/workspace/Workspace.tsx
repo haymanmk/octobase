@@ -4,6 +4,7 @@ import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
 import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
+import { TocPanel } from "./TocPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
@@ -84,6 +85,13 @@ function WorkspaceInner(): React.ReactElement {
   React.useEffect(() => {
     localStorage.setItem("octobase.library.open", libraryOpen ? "1" : "0");
   }, [libraryOpen]);
+  // Board table of contents (floating over the canvas); open state persists.
+  const [tocOpen, setTocOpen] = React.useState(
+    () => localStorage.getItem("octobase.toc.open") === "1",
+  );
+  React.useEffect(() => {
+    localStorage.setItem("octobase.toc.open", tocOpen ? "1" : "0");
+  }, [tocOpen]);
   const viewerOpen = viewer.open && (viewerAvailable || viewer.readerTabs.length > 0);
   // The native browser view always paints above our DOM, so it must yield
   // whenever a full-window overlay is up (⌘K palette, extension dialog) or
@@ -540,6 +548,12 @@ function WorkspaceInner(): React.ReactElement {
             onClick={() => canvasRef.current?.zoomToFit()}
           >⌖</button>
           <button
+            className={`ws-icon-btn${tocOpen ? " active" : ""}`}
+            title={tocOpen ? "Hide table of contents" : "Table of contents"}
+            aria-pressed={tocOpen}
+            onClick={() => setTocOpen((o) => !o)}
+          >☰</button>
+          <button
             className={`ws-icon-btn${viewerOpen ? " active" : ""}`}
             title={viewerOpen ? "Hide viewer pane" : "Show viewer pane"}
             aria-pressed={viewerOpen}
@@ -606,6 +620,21 @@ function WorkspaceInner(): React.ReactElement {
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
             onEmbed={embedIntoCard}
+          />
+        )}
+
+        {tocOpen && activeBoardId && (
+          <TocPanel
+            boardId={activeBoardId}
+            onClose={() => setTocOpen(false)}
+            onJump={(cardId) => {
+              const p = store
+                .getPlacements(activeBoardId)
+                .find((pl) => pl.cardId === cardId);
+              if (!p) return;
+              canvasRef.current?.centerOn(p);
+              selectOne(cardId);
+            }}
           />
         )}
 
