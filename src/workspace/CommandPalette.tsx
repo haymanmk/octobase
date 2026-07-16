@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
+import { CARD_DRAG_MIME } from "./dnd.ts";
 import type { Card } from "../lib/model/types.ts";
 
 export interface CommandPaletteProps {
@@ -78,6 +79,16 @@ export function CommandPalette({ seed, onClose, onPick }: CommandPaletteProps): 
                 className={`ws-cmdk-item${i === active ? " active" : ""}`}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => onPick(r.card)}
+                title="Open · drag onto the board or into a note"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(CARD_DRAG_MIME, r.card.id);
+                  e.dataTransfer.effectAllowed = "copy";
+                  // Close the palette so the drag can reach the canvas — but
+                  // only after this tick: removing the source element inside
+                  // dragstart makes Chromium cancel the drag outright.
+                  setTimeout(onClose, 0);
+                }}
               >
                 <span className="ws-dotmark" style={{ background: PALETTE[r.card.color].underline }} />
                 <span className="ws-cmdk-title">{r.card.title || "Untitled"}</span>

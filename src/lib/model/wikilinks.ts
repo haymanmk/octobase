@@ -54,3 +54,13 @@ export function parseEmbeds(body: string): ParsedWikilink[] {
 export function normalizeTitle(title: string): string {
   return title.trim().toLowerCase();
 }
+
+/**
+ * Undo the markdown serializer's bracket escaping for wikilink/embed pairs:
+ * tiptap-markdown turns "[[Title]]" into "\[\[Title\]\]" on every commit,
+ * which kills the link. Escaped double-brackets are only ever wikilink
+ * syntax; single escaped brackets (task lists etc.) stay untouched.
+ */
+export function unescapeWikilinks(markdown: string): string {
+  return markdown.replace(/\\\[\\\[/g, "[[").replace(/\\\]\\\]/g, "]]");
+}

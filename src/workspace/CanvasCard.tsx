@@ -266,6 +266,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           )}
           <CardMarkdownEditor
             value={card.body}
+            cardId={card.id}
             onChange={(md) => { bodyDraft.current = md; growToFit(); }}
           />
           <div className="ws-card-edit-hint" aria-hidden="true">

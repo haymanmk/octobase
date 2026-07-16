@@ -15,7 +15,7 @@ import type {
 } from "../model/types.ts";
 import { ID } from "../model/ids.ts";
 import { describeAnchor } from "../anchor/text-anchor.ts";
-import { normalizeTitle, parseEmbeds, parseWikilinks } from "../model/wikilinks.ts";
+import { normalizeTitle, parseEmbeds, parseWikilinks, unescapeWikilinks } from "../model/wikilinks.ts";
 import type { PersistenceBackend } from "./persistence.ts";
 
 type Listener = () => void;
@@ -61,6 +61,7 @@ export class WorkspaceStore {
     this.data.edges ??= []; // pre-edges documents
     const fresh = !loaded;
     this.migrateHighlightBodies();
+    this.migrateEscapedWikilinks();
     if (!this.data.whiteboards.some((w) => !w.deletedAt)) {
       // Guarantee at least one board to land on.
       const wb = this.createWhiteboard(seed ? "Welcome" : "My first whiteboard", { silent: true });
@@ -76,6 +77,17 @@ export class WorkspaceStore {
    * the title already carries the text, so bodies now hold only the note.
    * Strip the legacy quote from persisted cards once on load.
    */
+  /**
+   * The editor's markdown serializer used to escape "[[" pairs on commit,
+   * breaking every saved wikilink; repair persisted bodies once on load.
+   */
+  private migrateEscapedWikilinks(): void {
+    for (const c of this.data.cards) {
+      const fixed = unescapeWikilinks(c.body);
+      if (fixed !== c.body) c.body = fixed;
+    }
+  }
+
   private migrateHighlightBodies(): void {
     for (const c of this.data.cards) {
       if (c.kind !== "highlight") continue;

@@ -51,6 +51,19 @@ test("embedCard appends the embed block and refuses self/duplicates", async () =
   assert.equal(store.getCard(empty.id)!.body, "![[Child]]");
 });
 
+test("bodies with serializer-escaped wikilinks are repaired on load", async () => {
+  const backend = new MemoryPersistence();
+  const store = new WorkspaceStore(backend);
+  await store.init({ seed: false });
+  store.createNoteCard({ title: "Damaged", body: "see \\[\\[Alpha\\]\\] and !\\[\\[Beta\\]\\]" });
+  await new Promise((r) => setTimeout(r, 200));
+
+  const reopened = new WorkspaceStore(backend);
+  await reopened.init({ seed: false });
+  const card = reopened.getCards().find((c) => c.title === "Damaged")!;
+  assert.equal(card.body, "see [[Alpha]] and ![[Beta]]");
+});
+
 test("embeds count as outgoing links for the graph", async () => {
   const store = await freshStore();
   const child = store.createNoteCard({ title: "Child" });
