@@ -24,6 +24,12 @@ export interface CanvasProps {
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
   /** Nest a card into a note (library-tile drop, or ⌥-release of a card drag). */
   onEmbed: (hostCardId: string, childCardId: string, opts: { removePlacement: boolean }) => void;
+  /**
+   * A reference (embed mini-card / wikilink) inside a card body was clicked.
+   * `near` is a world position close to the host card, for placing targets
+   * that aren't on the board yet.
+   */
+  onOpenRef: (cardId: string, near: { x: number; y: number }) => void;
 }
 
 /** Imperative surface for callers that receive screen-space points (drops). */
@@ -62,6 +68,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   onContextMenu,
   onBackgroundContextMenu,
   onEmbed,
+  onOpenRef,
 }: CanvasProps, handleRef): React.ReactElement {
   const store = useWorkspace();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -599,13 +606,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
               onOpen={onOpen}
               onContextMenu={onContextMenu}
               resolve={resolve}
-              onOpenCard={(c) => {
-                // Ensure the linked card is on this board, then open it.
-                if (!store.getPlacements(boardId).some((pl) => pl.cardId === c.id)) {
-                  store.placeCard(boardId, c.id, p.x + 40, p.y + 40);
-                }
-                onOpen(c.id);
-              }}
+              onOpenCard={(c) => onOpenRef(c.id, { x: p.x + 40, y: p.y + 40 })}
               onCreateLink={(title) => {
                 const created = store.createNoteOnBoard(boardId, p.x + 40, p.y + 60, { title });
                 onOpen(created.card.id);

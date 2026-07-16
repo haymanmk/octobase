@@ -58,24 +58,28 @@ function CardEmbed({
   title,
   resolve,
   onOpenCard,
+  onCreateLink,
   depth,
 }: {
   title: string;
   resolve?: (title: string) => Card | undefined;
   onOpenCard?: (card: Card) => void;
+  onCreateLink?: (title: string) => void;
   depth: number;
 }): React.ReactElement {
   const target = resolve?.(title);
   if (!target || depth > 0) {
     // Unresolved or nested-inside-an-embed: a plain chip. Cycles die here too.
+    // Clicking an unresolved chip creates the card, like wikilinks do.
     return (
       <span
         className={`ws-embed-chip${target ? "" : " unresolved"}`}
-        title={target ? `Open “${title}”` : `“${title}” has no card yet`}
+        title={target ? `Open “${title}”` : `Create “${title}”`}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           if (target) onOpenCard?.(target);
+          else onCreateLink?.(title);
         }}
       >⊞ {title}</span>
     );
@@ -125,6 +129,7 @@ export function MarkdownView({
                   title={title}
                   resolve={resolve}
                   onOpenCard={onOpenCard}
+                  onCreateLink={onCreateLink}
                   depth={depth}
                 />
               );

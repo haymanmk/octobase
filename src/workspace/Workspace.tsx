@@ -358,6 +358,32 @@ function WorkspaceInner(): React.ReactElement {
     if (opts.edit !== false) setEditingCardId(cardId);
   };
 
+  /**
+   * A reference (embed mini-card or wikilink) was clicked — open the most
+   * useful view for the card's kind: readable things go to the reader at the
+   * right spot; notes and sourceless images jump to the card on the board
+   * (placing it near `near` if it isn't placed yet), panning the canvas so
+   * the click is never invisible.
+   */
+  const openReference = (cardId: string, near?: { x: number; y: number }) => {
+    const card = store.getCard(cardId);
+    if (!card) return;
+    if (card.kind === "article" || card.kind === "pdf" || card.kind === "highlight") {
+      readCard(cardId);
+      return;
+    }
+    if (card.kind === "image" && card.sourceUrl.startsWith("pdf:") && card.clip) {
+      readCard(cardId);
+      return;
+    }
+    if (!activeBoardId) return;
+    const placed =
+      store.getPlacements(activeBoardId).find((p) => p.cardId === cardId) ??
+      store.placeCard(activeBoardId, cardId, near?.x ?? 120, near?.y ?? 120);
+    selectOne(cardId);
+    canvasRef.current?.centerOn({ x: placed.x, y: placed.y, w: placed.w, h: placed.h });
+  };
+
   const readCard = (cardId: string) => {
     const card = store.getCard(cardId);
     if (!card) return;
@@ -615,6 +641,7 @@ function WorkspaceInner(): React.ReactElement {
               if (editingCardId) setEditingCardId(null);
             }}
             onOpen={openCard}
+            onOpenRef={openReference}
             onDropCard={dropCardOnCanvas}
             onDropFiles={(files, wx, wy) => void dropFilesOnCanvas(files, wx, wy)}
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
@@ -674,7 +701,7 @@ function WorkspaceInner(): React.ReactElement {
             onSelectTab={(id) => setViewer((v) => ({ ...v, activeTab: id }))}
             onCloseTab={closeReaderTab}
             onClose={() => setViewer((v) => ({ ...v, open: false }))}
-            onOpenCard={(id) => openCard(id, { edit: false })}
+            onOpenCard={(id) => openReference(id)}
             focusHighlight={focusHl}
             focusClip={focusClip}
             onDropHighlight={dropHighlightFromReader}
