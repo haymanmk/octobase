@@ -29,6 +29,16 @@ declare global {
       listTags: () => Promise<string[]>;
       onHighlightUpdated: (callback: (h: Highlight) => void) => void;
       onHighlightDeleted: (callback: (data: { id: string }) => void) => void;
+      onClipEditForm?: (callback: (d: {
+        file: string;
+        rect: { x: number; y: number; width: number; height: number };
+      }) => void) => void;
+      clipAnnotate?: (data: {
+        file: string;
+        color?: HighlightColor;
+        tags?: string[];
+        note?: string;
+      }) => void;
     };
   }
 }
@@ -189,6 +199,67 @@ function closeEditPanel(): void {
   editPanelTargetId = null;
   editPanelLocal = null;
 }
+
+// === Post-clip edit form (offered right after ✂ clipping a region) ===
+// Same affordances as a highlight — color, tags, note — writing to the clip's
+// image card in the workspace via clip:annotate. One shot: Esc or an outside
+// click dismisses it; nothing persists on the page.
+let clipFormEl: HTMLElement | null = null;
+
+async function openClipForm(d: {
+  file: string;
+  rect: { x: number; y: number; width: number; height: number };
+}): Promise<void> {
+  clipFormEl?.remove();
+  clipFormEl = null;
+  closeEditPanel();
+
+  const form = document.createElement('octo-edit-form') as HTMLElement & {
+    color: HighlightColor | null;
+    tags: string[];
+    notes: string;
+    suggestions: string[];
+    showDelete: boolean;
+  };
+  form.color = 'blue'; // image cards default to blue
+  form.tags = [];
+  form.notes = '';
+  form.suggestions = (await window.electronAPI?.listTags()) ?? [];
+  form.showDelete = false;
+  form.style.position = 'fixed';
+  form.style.left = `${Math.min(Math.max(8, d.rect.x), window.innerWidth - 330)}px`;
+  form.style.top = `${Math.min(d.rect.y + d.rect.height + 8, window.innerHeight - 260)}px`;
+  form.style.zIndex = '2147483647';
+
+  const send = (patch: { color?: HighlightColor; tags?: string[]; note?: string }) =>
+    window.electronAPI?.clipAnnotate?.({ file: d.file, ...patch });
+  form.addEventListener('color-changed', (e: Event) => send({ color: (e as CustomEvent).detail.color }));
+  form.addEventListener('tags-changed', (e: Event) => send({ tags: (e as CustomEvent).detail.tags }));
+  form.addEventListener('notes-changed', (e: Event) => send({ note: (e as CustomEvent).detail.notes }));
+
+  const dismiss = () => {
+    document.removeEventListener('mousedown', onOutside, true);
+    document.removeEventListener('keydown', onEsc, true);
+    clipFormEl?.remove();
+    clipFormEl = null;
+  };
+  const onOutside = (ev: MouseEvent) => {
+    if (clipFormEl && !ev.composedPath().includes(clipFormEl)) dismiss();
+  };
+  const onEsc = (ev: KeyboardEvent) => {
+    if (ev.key === 'Escape') dismiss();
+  };
+  // Next tick, so the pointerup that finished the clip drag can't dismiss it.
+  setTimeout(() => {
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('keydown', onEsc, true);
+  }, 0);
+
+  document.body.appendChild(form);
+  clipFormEl = form;
+}
+
+window.electronAPI?.onClipEditForm?.((d) => { void openClipForm(d); });
 
 async function persistEdit(): Promise<void> {
   // Snapshot before any await — the panel may close (and clear these globals)

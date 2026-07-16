@@ -195,6 +195,19 @@ function WorkspaceInner(): React.ReactElement {
       showToast({ message: `Clipped “${card.title}” to the library` });
     });
     bridge.onClipCancelled(() => { /* nothing to clean up — button is stateless */ });
+    // Edits made in the page's post-clip form (color · tags · note) land on
+    // the clip's image card, keyed by its file.
+    bridge.onClipAnnotated((d) => {
+      const target = store
+        .getCards()
+        .find((c) => c.kind === "image" && c.image.file === d.file);
+      if (!target) return;
+      store.updateCard(target.id, {
+        ...(d.color ? { color: d.color } : {}),
+        ...(d.tags ? { tags: d.tags } : {}),
+        ...(d.note !== undefined ? { body: d.note } : {}),
+      });
+    });
   }, [store, showToast]);
 
   const board = store.getWhiteboard(activeBoardId);

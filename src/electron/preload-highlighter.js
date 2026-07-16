@@ -9,6 +9,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // region clipping (the injected overlay reports back through these)
   clipRegion: (rect) => ipcRenderer.send('clip:region', rect),
   clipCancel: () => ipcRenderer.send('clip:cancel'),
+  // post-clip edit form: main asks the page to show it; edits flow back
+  onClipEditForm: (callback) => {
+    ipcRenderer.removeAllListeners('clip:edit-form');
+    ipcRenderer.on('clip:edit-form', (_event, data) => callback(data));
+  },
+  clipAnnotate: (data) => ipcRenderer.send('clip:annotate', data),
 
   // new persistence APIs
   loadHighlights: (url) => ipcRenderer.invoke('highlights:load', { url }),

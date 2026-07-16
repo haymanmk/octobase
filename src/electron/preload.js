@@ -41,6 +41,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('clip:cancelled');
     ipcRenderer.on('clip:cancelled', (_event, data) => callback(data));
   },
+  onClipAnnotated: (callback) => {
+    ipcRenderer.removeAllListeners('clip:annotated');
+    ipcRenderer.on('clip:annotated', (_event, data) => callback(data));
+  },
 
   // PDF import: native picker, or import a dropped file by absolute path.
   pdfOpen: () => ipcRenderer.invoke('pdf:open'),

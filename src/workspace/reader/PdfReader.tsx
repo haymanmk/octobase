@@ -103,6 +103,12 @@ export function PdfReader({
   const pendingSel = React.useRef<{ range: Range; page: number } | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
   const [dragGhost, setDragGhost] = React.useState<{ text: string; color: HighlightColor; x: number; y: number } | null>(null);
+  const ghostUp = !!dragGhost;
+  React.useEffect(() => {
+    if (!ghostUp) return;
+    document.body.style.cursor = "grabbing";
+    return () => { document.body.style.cursor = ""; };
+  }, [ghostUp]);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
@@ -361,8 +367,9 @@ export function PdfReader({
 
   if (!card) return null;
 
+  // The popover edits highlights and clip frames alike (note/tags/color).
   const editCard = editPop
-    ? (store.getCard(editPop.cardId) as HighlightCard | undefined)
+    ? (store.getCard(editPop.cardId) as HighlightCard | ImageCard | undefined)
     : undefined;
 
   // ---- pointer plumbing (page hit tests, pill, popover, hold-drag) ----------
@@ -481,7 +488,13 @@ export function PdfReader({
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
     const hit = highlightAtPoint(e.clientX, e.clientY);
-    if (hit) setEditPop({ cardId: hit.cardId, x: e.clientX, y: e.clientY + 12 });
+    if (hit) {
+      setEditPop({ cardId: hit.cardId, x: e.clientX, y: e.clientY + 12 });
+      return;
+    }
+    // Clip frames edit like highlights do: click opens the same popover.
+    const clip = clipAtPoint(e.clientX, e.clientY);
+    if (clip) setEditPop({ cardId: clip.id, x: e.clientX, y: e.clientY + 12 });
   };
 
   const onMouseUp = () => {
@@ -518,18 +531,29 @@ export function PdfReader({
     if (at) setEditPop({ cardId: created.id, x: at.x, y: at.y });
   };
 
-  const updateHighlight = (patch: { color?: HighlightColor; note?: string }) => {
+  const updateEditCard = (patch: { color?: HighlightColor; note?: string }) => {
     if (!editCard) return;
-    // upsert's update branch spreads the previous card, so `page` survives.
-    store.upsertHighlight({
-      id: editCard.id,
-      text: editCard.anchor.exact,
-      sourceUrl: editCard.sourceUrl,
-      anchor: editCard.anchor,
-      color: patch.color ?? editCard.color,
-      note: patch.note ?? noteOfHighlight(editCard),
+    if (editCard.kind === "highlight") {
+      // upsert's update branch spreads the previous card, so `page` survives.
+      store.upsertHighlight({
+        id: editCard.id,
+        text: editCard.anchor.exact,
+        sourceUrl: editCard.sourceUrl,
+        anchor: editCard.anchor,
+        color: patch.color ?? editCard.color,
+        note: patch.note ?? noteOfHighlight(editCard),
+      });
+      return;
+    }
+    // Clip frame: the image card's body is its note.
+    store.updateCard(editCard.id, {
+      ...(patch.color ? { color: patch.color } : {}),
+      ...(patch.note !== undefined ? { body: patch.note } : {}),
     });
   };
+
+  const noteOfEditCard = (c: HighlightCard | ImageCard): string =>
+    c.kind === "highlight" ? noteOfHighlight(c) : c.body;
 
   // ---- clipping --------------------------------------------------------------
 
@@ -743,6 +767,7 @@ export function PdfReader({
 
       {editPop && editCard && (
         <div
+          key={editPop.cardId}
           className="octo-pop"
           style={{ position: "fixed", left: editPop.x, top: editPop.y, transform: "translateX(-50%)", zIndex: 61 }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -753,7 +778,7 @@ export function PdfReader({
                 className={`octo-swatch${editCard.color === c ? " current" : ""}`}
                 title={c}
                 style={{ background: PALETTE[c].fill }}
-                onClick={() => updateHighlight({ color: c })} />
+                onClick={() => updateEditCard({ color: c })} />
             ))}
           </div>
           <input
@@ -770,8 +795,8 @@ export function PdfReader({
             className="octo-pop-input"
             placeholder="Add a note…"
             rows={2}
-            defaultValue={noteOfHighlight(editCard)}
-            onBlur={(e) => updateHighlight({ note: e.target.value.trim() })}
+            defaultValue={noteOfEditCard(editCard)}
+            onBlur={(e) => updateEditCard({ note: e.target.value.trim() })}
           />
           <div className="octo-pop-foot">
             <button className="octo-pop-delete"

@@ -82,6 +82,12 @@ export function Reader({
   const pendingRange = React.useRef<Range | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
   const [dragGhost, setDragGhost] = React.useState<{ cardId: string; text: string; color: HighlightColor; x: number; y: number } | null>(null);
+  const ghostUp = !!dragGhost;
+  React.useEffect(() => {
+    if (!ghostUp) return;
+    document.body.style.cursor = "grabbing";
+    return () => { document.body.style.cursor = ""; };
+  }, [ghostUp]);
   const [bands, setBands] = React.useState<HighlightBand[]>([]);
   const [reflowTick, setReflowTick] = React.useState(0);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);

@@ -449,6 +449,11 @@ app.whenReady().then(() => {
 
   ipcMain.on('clip:cancel', () => appView?.webContents.send('clip:cancelled'));
 
+  // The in-page edit form annotates the just-created clip card (by file).
+  ipcMain.on('clip:annotate', (_event, data) => {
+    appView?.webContents.send('clip:annotated', data);
+  });
+
   ipcMain.on('clip:region', async (_event, rect) => {
     try {
       if (!browserView || !rect || rect.width < 4 || rect.height < 4) {
@@ -472,6 +477,9 @@ app.whenReady().then(() => {
         sourceUrl: wc.getURL(),
         title: wc.getTitle(),
       });
+      // Offer the highlighter-style edit form (color · tags · note) in the
+      // page, anchored at the clipped region — one shot, nothing persists.
+      wc.send('clip:edit-form', { file, rect });
     } catch (err) {
       dlog('clip capture failed:', err);
       appView?.webContents.send('clip:cancelled');

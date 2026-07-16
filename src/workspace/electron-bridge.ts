@@ -116,10 +116,19 @@ export interface ClipCapturedPayload {
   title: string;
 }
 
+/** An edit made in the page's post-clip form, keyed by the clip file. */
+export interface ClipAnnotatedPayload {
+  file: string;
+  color?: HighlightColor;
+  tags?: string[];
+  note?: string;
+}
+
 export interface OctobaseClipBridge {
   clipStart: () => void;
   onClipCaptured: (cb: (d: ClipCapturedPayload) => void) => void;
   onClipCancelled: (cb: () => void) => void;
+  onClipAnnotated: (cb: (d: ClipAnnotatedPayload) => void) => void;
 }
 
 /** Present only inside the Electron renderer (exposed by preload.js). */

@@ -332,7 +332,9 @@
   padding: 9px 11px 4px;
   cursor: grab;
 }
-.ws-card.dragging .ws-card-head { cursor: grabbing; }
+/* Cards drag from anywhere on their face — the whole card (and everything
+   on it) shows the grabbing cursor while a move is in flight. */
+.ws-card.dragging, .ws-card.dragging * { cursor: grabbing; }
 .ws-card-kind {
   font-size: 9px;
   text-transform: uppercase;
