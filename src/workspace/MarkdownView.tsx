@@ -1,5 +1,5 @@
 import * as React from "react";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -101,6 +101,62 @@ function CardEmbed({
   );
 }
 
+// The `components` overrides must keep the same function identity across
+// renders: react-markdown uses them as element *types*, so a fresh object per
+// render makes React remount every embed/link. A remount mid-gesture
+// (pointerdown selects the card → store bump → re-render) replaces the DOM
+// node between mousedown and mouseup and the browser never fires the click.
+// The overrides are module constants; per-render props reach them via context.
+const MdContext = React.createContext<Omit<MarkdownViewProps, "body">>({});
+
+const MdImg: NonNullable<Components["img"]> = ({ src, alt }) => {
+  const { resolve, onOpenCard, onCreateLink, depth = 0 } = React.useContext(MdContext);
+  if (typeof src === "string" && src.startsWith(EMBED_SCHEME)) {
+    const title = decodeURIComponent(src.slice(EMBED_SCHEME.length));
+    return (
+      <CardEmbed
+        title={title}
+        resolve={resolve}
+        onOpenCard={onOpenCard}
+        onCreateLink={onCreateLink}
+        depth={depth}
+      />
+    );
+  }
+  return <img src={typeof src === "string" ? resolveClipSrc(src) : src} alt={alt} />;
+};
+
+const MdAnchor: NonNullable<Components["a"]> = ({ href, children }) => {
+  const { resolve, onOpenCard, onCreateLink } = React.useContext(MdContext);
+  if (href && href.startsWith(WIKI_SCHEME)) {
+    const title = decodeURIComponent(href.slice(WIKI_SCHEME.length));
+    const target = resolve?.(title);
+    const resolved = !!target;
+    return (
+      <span
+        className={`ws-wikilink${resolved ? "" : " unresolved"}`}
+        title={resolved ? `Open “${title}”` : `Create “${title}”`}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          if (target) onOpenCard?.(target);
+          else onCreateLink?.(title);
+        }}
+      >
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+};
+
+const MD_COMPONENTS: Partial<Components> = { img: MdImg, a: MdAnchor };
+
 export function MarkdownView({
   body,
   resolve,
@@ -109,64 +165,27 @@ export function MarkdownView({
   depth = 0,
 }: MarkdownViewProps): React.ReactElement {
   const processed = React.useMemo(() => preprocess(body), [body]);
+  const ctx = React.useMemo(
+    () => ({ resolve, onOpenCard, onCreateLink, depth }),
+    [resolve, onOpenCard, onCreateLink, depth],
+  );
 
   return (
     <div className="ws-md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        urlTransform={(url) =>
-          url.startsWith(WIKI_SCHEME) || url.startsWith(EMBED_SCHEME) || parseClipRef(url)
-            ? url
-            : defaultUrlTransform(url)
-        }
-        components={{
-          img({ src, alt }) {
-            if (typeof src === "string" && src.startsWith(EMBED_SCHEME)) {
-              const title = decodeURIComponent(src.slice(EMBED_SCHEME.length));
-              return (
-                <CardEmbed
-                  title={title}
-                  resolve={resolve}
-                  onOpenCard={onOpenCard}
-                  onCreateLink={onCreateLink}
-                  depth={depth}
-                />
-              );
-            }
-            return <img src={typeof src === "string" ? resolveClipSrc(src) : src} alt={alt} />;
-          },
-          a({ href, children }) {
-            if (href && href.startsWith(WIKI_SCHEME)) {
-              const title = decodeURIComponent(href.slice(WIKI_SCHEME.length));
-              const target = resolve?.(title);
-              const resolved = !!target;
-              return (
-                <span
-                  className={`ws-wikilink${resolved ? "" : " unresolved"}`}
-                  title={resolved ? `Open “${title}”` : `Create “${title}”`}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    if (target) onOpenCard?.(target);
-                    else onCreateLink?.(title);
-                  }}
-                >
-                  {children}
-                </span>
-              );
-            }
-            return (
-              <a href={href} target="_blank" rel="noreferrer">
-                {children}
-              </a>
-            );
-          },
-        }}
-      >
-        {processed}
-      </ReactMarkdown>
+      <MdContext.Provider value={ctx}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          urlTransform={(url) =>
+            url.startsWith(WIKI_SCHEME) || url.startsWith(EMBED_SCHEME) || parseClipRef(url)
+              ? url
+              : defaultUrlTransform(url)
+          }
+          components={MD_COMPONENTS}
+        >
+          {processed}
+        </ReactMarkdown>
+      </MdContext.Provider>
     </div>
   );
 }
