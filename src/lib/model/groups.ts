@@ -39,9 +39,12 @@ export function hiddenCardIds(groups: Group[], placements: Placement[]): Set<str
   return hidden;
 }
 
-/** World-space size of a collapsed group's chip (must match .ws-group-chip). */
-export const CHIP_W = 200;
-export const CHIP_H = 26;
+/**
+ * Fallback world-space chip size for edge routing, used only until the
+ * rendered chip reports its measured bounds (the pill sizes to its label).
+ */
+export const CHIP_W = 90;
+export const CHIP_H = 28;
 
 export interface EdgeRouting {
   /** Collapsed group whose chip stands in for this end; null = card visible. */

@@ -14,6 +14,12 @@ export interface GroupLayerProps {
   onStartMove: (g: Group, e: React.PointerEvent) => void;
   onStartResize: (g: Group, e: React.PointerEvent) => void;
   onMenu: (g: Group, x: number, y: number) => void;
+  /**
+   * A collapsed chip's rendered size in world units (layout px map 1:1 onto
+   * placement units), so edges can anchor on the pill the user actually
+   * sees, not a guessed box. null = the chip unmounted (group expanded).
+   */
+  onChipSize: (groupId: string, size: { w: number; h: number } | null) => void;
 }
 
 function NamePill({
@@ -80,6 +86,44 @@ function NamePill({
   );
 }
 
+/** A collapsed group's chip: the pill alone, measured for edge routing. */
+function Chip({
+  group,
+  count,
+  renaming,
+  props,
+}: {
+  group: Group;
+  count: number;
+  renaming: boolean;
+  props: GroupLayerProps;
+}): React.ReactElement {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const { onChipSize } = props;
+  // Re-measure when the label content changes; report unmount so edges fall
+  // back cleanly instead of anchoring on a stale box.
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) onChipSize(group.id, { w: el.offsetWidth, h: el.offsetHeight });
+  }, [group.id, group.name, count, renaming, onChipSize]);
+  React.useEffect(() => () => onChipSize(group.id, null), [group.id, onChipSize]);
+  return (
+    <div
+      ref={ref}
+      className="ws-group-chip"
+      style={{ left: group.x, top: group.y }}
+      title="Click to expand · drag to move"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        props.onMenu(group, e.clientX, e.clientY);
+      }}
+    >
+      <NamePill group={group} count={count} renaming={renaming} collapsed props={props} />
+    </div>
+  );
+}
+
 /**
  * Named frames and their collapsed chips, rendered behind edges and cards.
  * The frame's interior deliberately ignores the pointer so the canvas keeps
@@ -94,19 +138,7 @@ export function GroupLayer(props: GroupLayerProps): React.ReactElement {
         const renaming = props.renamingId === g.id;
         if (g.collapsed) {
           return (
-            <div
-              key={g.id}
-              className="ws-group-chip"
-              style={{ left: g.x, top: g.y }}
-              title="Click to expand · drag to move"
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                props.onMenu(g, e.clientX, e.clientY);
-              }}
-            >
-              <NamePill group={g} count={count} renaming={renaming} collapsed props={props} />
-            </div>
+            <Chip key={g.id} group={g} count={count} renaming={renaming} props={props} />
           );
         }
         return (

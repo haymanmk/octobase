@@ -1826,13 +1826,14 @@
 .ws-group-chip {
   position: absolute;
   z-index: 1;
-  /* The pill positions itself relative to this box; give it a body. */
-  width: 200px;
-  height: 26px;
+  /* Sized by the pill inside — edges anchor to the measured box. */
+  display: inline-flex;
 }
 .ws-group-chip .ws-group-pill {
-  top: 0;
-  left: 0;
+  position: static;
+  /* The frame rule caps the pill at its parent's width; the chip's width IS
+     the pill, so that cap would truncate the name circularly. */
+  max-width: 320px;
   padding: 4px 12px;
   font-size: 12.5px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);

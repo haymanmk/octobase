@@ -94,6 +94,24 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   // Group state: inline rename and the frame context menu.
   const [renamingGroupId, setRenamingGroupId] = React.useState<string | null>(null);
   const [groupMenu, setGroupMenu] = React.useState<null | { groupId: string; x: number; y: number }>(null);
+  // Measured sizes of collapsed chips (world units), so rerouted edges anchor
+  // on the pill the user sees; CHIP_W/H are only the pre-measure fallback.
+  const [chipSizes, setChipSizes] = React.useState<Map<string, { w: number; h: number }>>(
+    () => new Map(),
+  );
+  const reportChipSize = React.useCallback(
+    (groupId: string, size: { w: number; h: number } | null) => {
+      setChipSizes((prev) => {
+        const cur = prev.get(groupId);
+        if (size ? cur && cur.w === size.w && cur.h === size.h : !cur) return prev;
+        const next = new Map(prev);
+        if (size) next.set(groupId, size);
+        else next.delete(groupId);
+        return next;
+      });
+    },
+    [],
+  );
   // Window-level drag handlers need the live view, not the closed-over one.
   const viewRef = React.useRef(view);
   viewRef.current = view;
@@ -662,6 +680,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           onStartMove={startGroupMove}
           onStartResize={startGroupResize}
           onMenu={(g, x, y) => setGroupMenu({ groupId: g.id, x, y })}
+          onChipSize={reportChipSize}
         />
         <EdgeLayer
           // Edges into a collapsed group stay visible, redrawn (dashed) to the
@@ -689,7 +708,10 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
             const p = placements.find((pl) => pl.cardId === cardId);
             if (!p) return null;
             const g = groupOf(p, groups);
-            if (g?.collapsed) return { x: g.x, y: g.y, w: CHIP_W, h: CHIP_H };
+            if (g?.collapsed) {
+              const size = chipSizes.get(g.id);
+              return { x: g.x, y: g.y, w: size?.w ?? CHIP_W, h: size?.h ?? CHIP_H };
+            }
             return { x: p.x, y: p.y, w: p.w, h: p.h };
           }}
           selectedEdgeId={selectedEdgeId}
