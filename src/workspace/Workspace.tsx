@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Plug, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Plug, Plus, Search, Settings, Sparkles, Trash2 } from "lucide-react";
 import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
@@ -11,6 +11,8 @@ import { groupOf } from "../lib/model/groups.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { AiSettings } from "./AiSettings.tsx";
+import { AppSettings } from "./AppSettings.tsx";
+import { applyTheme, loadThemePref, resolveTheme, saveThemePref, type ThemePref } from "./theme.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { imageFileOf, savePastedImage } from "./image-paste.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
@@ -65,6 +67,16 @@ function WorkspaceInner(): React.ReactElement {
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
   const [aiSettingsOpen, setAiSettingsOpen] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  // Theme: stamp the resolved theme on <html>; "system" tracks the OS live.
+  const [themePref, setThemePref] = React.useState<ThemePref>(loadThemePref);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => applyTheme(resolveTheme(themePref, mq.matches));
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [themePref]);
   /** Nonce asking the viewer to open the chat drawer for its active tab. */
   const [chatNonce, setChatNonce] = React.useState<{ at: number } | null>(null);
   const captureBridge = getCaptureBridge();
@@ -98,7 +110,7 @@ function WorkspaceInner(): React.ReactElement {
   // The native browser view always paints above our DOM, so it must yield
   // whenever a full-window overlay is up (⌘K palette, extension dialog) or
   // the divider is mid-drag. Reading and editing are panes now — not overlays.
-  const overlayUp = Boolean(cmdk.open || connectInfo || aiSettingsOpen);
+  const overlayUp = Boolean(cmdk.open || connectInfo || aiSettingsOpen || settingsOpen);
   React.useEffect(() => saveViewerLayout(viewer), [viewer]);
   // Re-clamp when the window shrinks or the library opens so the panes can't
   // squeeze out the board.
@@ -620,6 +632,10 @@ function WorkspaceInner(): React.ReactElement {
                     <span className="ws-dd-ico"><FileText size={15} strokeWidth={2} aria-hidden /></span> Open PDF…
                   </div>
                 )}
+                <div className="ws-dd-item" role="menuitem"
+                  onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}>
+                  <span className="ws-dd-ico"><Settings size={15} strokeWidth={2} aria-hidden /></span> Settings
+                </div>
                 {getAiBridge() && (
                   <div className="ws-dd-item" role="menuitem"
                     onClick={() => { setMenuOpen(false); setAiSettingsOpen(true); }}>
@@ -795,6 +811,13 @@ function WorkspaceInner(): React.ReactElement {
       )}
 
       {aiSettingsOpen && <AiSettings onClose={() => setAiSettingsOpen(false)} />}
+      {settingsOpen && (
+        <AppSettings
+          themePref={themePref}
+          onThemeChange={(pref) => { setThemePref(pref); saveThemePref(pref); }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {connectInfo && (
         <div className="ws-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectInfo(null); }}>

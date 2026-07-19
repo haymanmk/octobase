@@ -227,7 +227,7 @@
   gap: 14px;
   padding: 0 22px;
   border-bottom: 1px solid var(--ws-line);
-  background: rgba(245, 246, 247, 0.86);
+  background: color-mix(in srgb, var(--ws-paper) 86%, transparent);
   backdrop-filter: blur(8px);
   /* Above the inspector (z 6) so the ⋯ dropdown isn't covered by it. */
   z-index: 7;
@@ -272,10 +272,10 @@
   box-shadow: var(--ws-shadow-sm);
   transition: transform 0.08s, box-shadow 0.15s, background 0.15s;
 }
-.ws-btn:hover { background: #fff; box-shadow: var(--ws-shadow-md); }
+.ws-btn:hover { background: var(--ws-card); box-shadow: var(--ws-shadow-md); }
 .ws-btn:active { transform: translateY(1px); }
 .ws-btn.primary { background: var(--ws-ink); color: var(--ws-paper); border-color: var(--ws-ink); }
-.ws-btn.primary:hover { background: #343943; }
+.ws-btn.primary:hover { background: var(--ws-ink-soft); }
 .ws-btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
 .ws-btn.ghost:hover { background: rgba(0,0,0,0.05); }
 
@@ -1019,8 +1019,16 @@
 .ws-hl-layer { position: absolute; inset: 0; pointer-events: none; }
 .ws-hl-band {
   position: absolute;
+  background: var(--hl-fill);
   mix-blend-mode: multiply;
   border-radius: 1px;
+}
+/* Dark theme: pastel-multiply vanishes on dark paper — use the deep fill
+   with screen blending (band lightens the paper, glyphs stay light). The
+   PDF reader keeps the light treatment: its pages render white regardless. */
+[data-theme="dark"] .ws-reader-body .ws-hl-band {
+  background: var(--hl-darkfill);
+  mix-blend-mode: screen;
 }
 
 /* Selection pill + highlight edit popover: shared octo-* classes from
@@ -1193,7 +1201,7 @@
   top: calc(100% + 6px);
   right: 0;
   min-width: 224px;
-  background: #fff;
+  background: var(--ws-card);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(24, 27, 34, 0.08), 0 10px 32px rgba(24, 27, 34, 0.16);
@@ -1248,7 +1256,7 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.ws-vtab:hover { background: rgba(255, 255, 255, 0.55); }
+.ws-vtab:hover { background: color-mix(in srgb, var(--ws-card) 55%, transparent); }
 .ws-vtab.active {
   background: var(--ws-paper);
   border-color: var(--ws-line);
@@ -1301,7 +1309,7 @@
   border: 1px solid var(--ws-line);
   border-radius: 8px;
   outline: none;
-  background: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--ws-card) 70%, transparent);
   padding: 8px 9px;
   font: 400 12.5px/1.55 var(--ws-font-mono);
   color: var(--ws-ink);
@@ -1488,7 +1496,7 @@
   background: var(--ws-paper);
   outline: none;
 }
-.ws-toc-filter:focus { border-color: var(--ws-accent-soft); background: #fff; }
+.ws-toc-filter:focus { border-color: var(--ws-accent-soft); background: var(--ws-card); }
 .ws-toc-list { overflow-y: auto; padding: 0 6px 10px; min-height: 0; }
 .ws-toc-list::-webkit-scrollbar { width: 8px; }
 .ws-toc-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 8px; }
@@ -1668,7 +1676,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--ws-card) 92%, transparent);
   backdrop-filter: blur(8px);
   border: 1px solid var(--ws-line);
   border-radius: 22px;
@@ -1709,7 +1717,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: #fff;
+  background: var(--ws-card);
   border: 1px solid var(--ws-line);
   border-radius: 12px;
   box-shadow: var(--ws-shadow-md);
@@ -1733,7 +1741,7 @@
   bottom: 62px;
   width: min(260px, 70%);
   overflow-y: auto;
-  background: #fff;
+  background: var(--ws-card);
   border: 1px solid var(--ws-line);
   border-radius: 12px;
   box-shadow: var(--ws-shadow-md);
@@ -1897,3 +1905,30 @@
 [data-theme="dark"] .ws-kind-pdf { color: #9db9c4; }
 /* Inlined lucide-static SVGs (wikilink popup) size via their container. */
 .ws-slash-hint.ws-kind-ico svg { width: 13px; height: 13px; display: block; }
+
+/* ---- app settings: theme segmented control ---- */
+.ws-theme-seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ws-line);
+  border-radius: 10px;
+  background: var(--ws-paper-2);
+}
+.ws-theme-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font: 500 12.5px var(--ws-font-ui);
+  color: var(--ws-ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+.ws-theme-opt.active {
+  background: var(--ws-card);
+  color: var(--ws-ink);
+  box-shadow: var(--ws-shadow-sm);
+}

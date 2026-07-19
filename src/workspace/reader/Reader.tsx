@@ -323,7 +323,11 @@ export function Reader({
             <div className="ws-hl-layer" aria-hidden="true">
               {bands.map((b, i) => (
                 <div key={`${b.cardId}-${i}`} className="ws-hl-band"
-                  style={{ left: b.x, top: b.y, width: b.w, height: b.h, background: PALETTE[b.color].fill }} />
+                  style={{
+                    left: b.x, top: b.y, width: b.w, height: b.h,
+                    "--hl-fill": PALETTE[b.color].fill,
+                    "--hl-darkfill": PALETTE[b.color].darkFill,
+                  } as React.CSSProperties} />
               ))}
             </div>
           </div>

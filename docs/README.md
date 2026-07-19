@@ -14,6 +14,11 @@ is built on. Skim `architecture.md` first; the rest can be read in any order.
 | [`persistence.md`](persistence.md) | Renderer workspace store (localStorage) + main-process JSON files, schemas, sync rules |
 | [`build.md`](build.md) | Build chain: type-check, app + highlighter Vite bundles, extension bundle, Vite gotchas |
 
+The `design/ui-unification/` subdirectory is the 2026-07 visual-design
+handoff (tokens, palette, icon mapping, reference mockups) that the current
+UI implements — `HANDOFF.md` there is the authoritative style spec, and
+`Octobase UI.dc.html` opens in a browser (final sections 4a–4e).
+
 The `superpowers/` subdirectory holds historical specs and implementation
 plans (highlighter widget redesign, the 2026-06 knowledge-base core, and the
 capture/reader work). They are still useful when considering changes near the
