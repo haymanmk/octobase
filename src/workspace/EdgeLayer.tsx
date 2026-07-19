@@ -23,6 +23,8 @@ export interface EdgeLayerProps {
   onEndpointDown: (edgeId: string, end: "from" | "to", e: React.PointerEvent) => void;
   /** Edge being rewired right now — its resting path renders dimmed. */
   rewiringEdgeId: string | null;
+  /** Edges with an end rerouted to a collapsed group's chip — drawn dashed. */
+  indirectEdgeIds?: Set<string>;
 }
 
 /**
@@ -41,6 +43,7 @@ export function EdgeLayer({
   preview,
   onEndpointDown,
   rewiringEdgeId,
+  indirectEdgeIds,
 }: EdgeLayerProps): React.ReactElement {
   const drawn = edges.flatMap((edge) => {
     const a = rectOf(edge.fromCardId);
@@ -67,10 +70,11 @@ export function EdgeLayer({
         {drawn.map(({ edge, geo }) => {
           const selected = edge.id === selectedEdgeId;
           const rewiring = edge.id === rewiringEdgeId;
+          const indirect = indirectEdgeIds?.has(edge.id) ?? false;
           return (
             <g key={edge.id}>
               <path
-                className={`ws-edge${selected ? " selected" : ""}${rewiring ? " rewiring" : ""}`}
+                className={`ws-edge${selected ? " selected" : ""}${rewiring ? " rewiring" : ""}${indirect ? " indirect" : ""}`}
                 d={geo.d}
                 markerEnd={edge.directed ? `url(#ws-arrow${selected ? "-sel" : ""})` : undefined}
               />

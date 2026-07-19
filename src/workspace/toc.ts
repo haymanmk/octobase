@@ -1,14 +1,16 @@
 /**
  * Whiteboard table of contents — pure derivation, no store or React.
  *
- * Hierarchy (design option A): cards whose rectangles sit near each other
- * form spatial clusters ("islands"), ordered in reading order and labeled by
- * their anchor card (largest note, falling back to the largest card). Inside
- * a cluster, a card ![[embedded]] in another member's body indents under its
- * host. Isolated cards render as bare label-less single-row groups, so a
- * board with no clusters degrades to the flat spatial list.
+ * Named groups (frames) claim their member cards first and use the group
+ * name as a stable heading. Remaining cards fall back to spatial clusters
+ * ("islands"), ordered in reading order and labeled by their anchor card
+ * (largest note, falling back to the largest card). Inside either unit, a
+ * card ![[embedded]] in another member's body indents under its host.
+ * Isolated cards render as bare label-less single-row groups, so a board
+ * with no clusters degrades to the flat spatial list.
  */
-import type { Card, Placement } from "../lib/model/types.ts";
+import type { Card, Group, Placement } from "../lib/model/types.ts";
+import { groupOf } from "../lib/model/groups.ts";
 
 export interface TocEntry {
   card: Card;
@@ -24,11 +26,15 @@ export interface TocRow {
 }
 
 export interface TocGroup {
-  /** Anchor card's title for real clusters; null for isolated cards. */
+  /** Group name for frames, anchor card's title for real clusters, null for isolated cards. */
   label: string | null;
   /** Jump target when the group header is clicked. */
   anchorCardId: string;
   rows: TocRow[];
+  /** Set when this heading is a named frame on the board. */
+  groupId?: string;
+  /** Mirrors the frame's collapsed state (frames only). */
+  collapsed?: boolean;
 }
 
 /** Rects whose gap is under this (world px) belong to the same cluster. */
@@ -88,58 +94,94 @@ function anchorOf(cluster: TocEntry[]): TocEntry {
   return pool.reduce((best, e) => (area(e) > area(best) ? e : best));
 }
 
+/** Reading-ordered rows for one unit (frame or island): embeds indent. */
+function rowsOf(cluster: TocEntry[], embeds: Map<string, string[]>): TocRow[] {
+  const members = new Map(cluster.map((e) => [e.card.id, e]));
+  const childIds = new Set<string>();
+  for (const e of cluster) {
+    for (const id of embeds.get(e.card.id) ?? []) {
+      if (id !== e.card.id && members.has(id)) childIds.add(id);
+    }
+  }
+  const tops = readingOrder(
+    cluster.filter((e) => !childIds.has(e.card.id)),
+    (e) => e.placement.y,
+    (e) => e.placement.x,
+  );
+  const rows: TocRow[] = [];
+  const emitted = new Set<string>();
+  for (const e of tops) {
+    rows.push({ cardId: e.card.id, title: e.card.title, kind: e.card.kind, depth: 0 });
+    emitted.add(e.card.id);
+    for (const id of embeds.get(e.card.id) ?? []) {
+      const child = members.get(id);
+      if (!child || emitted.has(id) || id === e.card.id) continue;
+      rows.push({ cardId: id, title: child.card.title, kind: child.card.kind, depth: 1 });
+      emitted.add(id);
+    }
+  }
+  // Children whose host got consumed as someone else's child: keep them
+  // reachable as plain rows rather than dropping them.
+  for (const e of cluster) {
+    if (!emitted.has(e.card.id)) {
+      rows.push({ cardId: e.card.id, title: e.card.title, kind: e.card.kind, depth: 0 });
+    }
+  }
+  return rows;
+}
+
 /**
  * Build the TOC. `embeds` maps a host card id to the card ids its body
  * ![[embeds]], in body order (the caller resolves titles against the store).
+ * `groups` are the board's named frames; their members leave the spatial
+ * clustering and sit under the frame's name instead.
  */
-export function buildToc(entries: TocEntry[], embeds: Map<string, string[]>): TocGroup[] {
-  const clusters = clusterEntries(entries);
-  const bounds = clusters.map((c) => ({
-    cluster: c,
-    top: Math.min(...c.map((e) => e.placement.y)),
-    left: Math.min(...c.map((e) => e.placement.x)),
-  }));
-  const ordered = readingOrder(bounds, (b) => b.top, (b) => b.left);
+export function buildToc(
+  entries: TocEntry[],
+  embeds: Map<string, string[]>,
+  groups: Group[] = [],
+): TocGroup[] {
+  const byGroup = new Map<string, TocEntry[]>();
+  const ungrouped: TocEntry[] = [];
+  for (const e of entries) {
+    const g = groupOf(e.placement, groups);
+    if (g) byGroup.set(g.id, [...(byGroup.get(g.id) ?? []), e]);
+    else ungrouped.push(e);
+  }
 
-  return ordered.map(({ cluster }) => {
-    const members = new Map(cluster.map((e) => [e.card.id, e]));
-    const childIds = new Set<string>();
-    for (const e of cluster) {
-      for (const id of embeds.get(e.card.id) ?? []) {
-        if (id !== e.card.id && members.has(id)) childIds.add(id);
-      }
-    }
-    const tops = readingOrder(
-      cluster.filter((e) => !childIds.has(e.card.id)),
-      (e) => e.placement.y,
-      (e) => e.placement.x,
-    );
-    const rows: TocRow[] = [];
-    const emitted = new Set<string>();
-    for (const e of tops) {
-      rows.push({ cardId: e.card.id, title: e.card.title, kind: e.card.kind, depth: 0 });
-      emitted.add(e.card.id);
-      for (const id of embeds.get(e.card.id) ?? []) {
-        const child = members.get(id);
-        if (!child || emitted.has(id) || id === e.card.id) continue;
-        rows.push({ cardId: id, title: child.card.title, kind: child.card.kind, depth: 1 });
-        emitted.add(id);
-      }
-    }
-    // Children whose host got consumed as someone else's child: keep them
-    // reachable as plain rows rather than dropping them.
-    for (const e of cluster) {
-      if (!emitted.has(e.card.id)) {
-        rows.push({ cardId: e.card.id, title: e.card.title, kind: e.card.kind, depth: 0 });
-      }
-    }
+  type Unit = { top: number; left: number; toGroup: () => TocGroup };
+  const units: Unit[] = [];
+
+  for (const g of groups) {
+    const members = byGroup.get(g.id);
+    if (!members) continue; // empty frames stay out of the TOC
+    units.push({
+      top: g.y,
+      left: g.x,
+      toGroup: () => ({
+        label: g.name || "Untitled",
+        anchorCardId: anchorOf(members).card.id,
+        rows: rowsOf(members, embeds),
+        groupId: g.id,
+        collapsed: g.collapsed,
+      }),
+    });
+  }
+
+  for (const cluster of clusterEntries(ungrouped)) {
     const anchor = anchorOf(cluster);
-    return {
-      label: cluster.length > 1 ? anchor.card.title || "Untitled" : null,
-      anchorCardId: anchor.card.id,
-      rows,
-    };
-  });
+    units.push({
+      top: Math.min(...cluster.map((e) => e.placement.y)),
+      left: Math.min(...cluster.map((e) => e.placement.x)),
+      toGroup: () => ({
+        label: cluster.length > 1 ? anchor.card.title || "Untitled" : null,
+        anchorCardId: anchor.card.id,
+        rows: rowsOf(cluster, embeds),
+      }),
+    });
+  }
+
+  return readingOrder(units, (u) => u.top, (u) => u.left).map((u) => u.toGroup());
 }
 
 /**

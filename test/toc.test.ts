@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildToc, filterToc, type TocEntry } from "../src/workspace/toc.ts";
-import type { Card, Placement } from "../src/lib/model/types.ts";
+import type { Card, Group, Placement } from "../src/lib/model/types.ts";
+
+function frame(name: string, x: number, y: number, w: number, h: number, collapsed = false): Group {
+  return { id: `g_${name}`, whiteboardId: "wb", name, x, y, w, h, collapsed };
+}
 
 let seq = 0;
 function entry(
@@ -76,6 +80,51 @@ test("isolated cards have no group label and jump to themselves", () => {
   assert.equal(g.label, null);
   assert.equal(g.anchorCardId, solo.card.id);
   assert.equal(g.rows[0].depth, 0);
+});
+
+test("named groups claim their members and use the group name as label", () => {
+  const inA = entry("First", 20, 20);
+  const inB = entry("Second", 20, 220);
+  const loose = entry("Loose", 2000, 20);
+  const g = frame("Research", 0, 0, 400, 500);
+  const groups = buildToc([loose, inB, inA], new Map(), [g]);
+  assert.deepEqual(
+    groups.map((x) => [x.label, x.groupId ?? null, x.rows.map((r) => r.title)]),
+    [
+      ["Research", "g_Research", ["First", "Second"]],
+      [null, null, ["Loose"]],
+    ],
+  );
+});
+
+test("group headings interleave with islands in reading order of frame position", () => {
+  const island = entry("Island note", 0, 0, { w: 300, h: 200 });
+  const member = entry("Member", 820, 20);
+  const g = frame("Later", 800, 0, 400, 300);
+  const groups = buildToc([member, island], new Map(), [g]);
+  // Island starts at x=0, frame at x=800 → island first.
+  assert.deepEqual(groups.map((x) => x.label), [null, "Later"]);
+});
+
+test("embeds still indent inside a named group", () => {
+  // Host and child are farther apart than the spatial-cluster gap, so only
+  // the frame (not proximity) puts them in one TOC group.
+  const host = entry("Host", 20, 20);
+  const child = entry("Child", 600, 20);
+  const g = frame("Pack", 0, 0, 900, 300);
+  const embeds = new Map([[host.card.id, [child.card.id]]]);
+  const [tg] = buildToc([host, child], embeds, [g]);
+  assert.deepEqual(tg.rows.map((r) => [r.title, r.depth]), [["Host", 0], ["Child", 1]]);
+});
+
+test("collapsed groups carry the collapsed flag; empty groups are omitted", () => {
+  const member = entry("Inside", 20, 20);
+  const shut = frame("Shut", 0, 0, 300, 300, true);
+  const empty = frame("Empty", 900, 900, 200, 200);
+  const groups = buildToc([member], new Map(), [shut, empty]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].collapsed, true);
+  assert.equal(groups[0].label, "Shut");
 });
 
 test("filter keeps structure: matching child retains its host row", () => {

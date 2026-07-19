@@ -21,4 +21,5 @@ export const ID = {
   placement: () => newId("pl"),
   link: () => newId("ln"),
   edge: () => newId("ed"),
+  group: () => newId("gr"),
 };

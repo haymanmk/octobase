@@ -3,6 +3,7 @@ import type {
   Card,
   Edge,
   EdgeSide,
+  Group,
   HighlightCard,
   HighlightColor,
   ImageCard,
@@ -16,6 +17,7 @@ import type {
 import { ID } from "../model/ids.ts";
 import { describeAnchor } from "../anchor/text-anchor.ts";
 import { normalizeTitle, parseEmbeds, parseWikilinks, unescapeWikilinks } from "../model/wikilinks.ts";
+import { membersOf } from "../model/groups.ts";
 import type { PersistenceBackend } from "./persistence.ts";
 
 type Listener = () => void;
@@ -25,7 +27,7 @@ function now(): number {
 }
 
 function emptyData(): WorkspaceData {
-  return { version: 1, cards: [], whiteboards: [], placements: [], edges: [] };
+  return { version: 1, cards: [], whiteboards: [], placements: [], edges: [], groups: [] };
 }
 
 export interface SearchHit {
@@ -59,6 +61,7 @@ export class WorkspaceStore {
     const loaded = await this.backend.load();
     this.data = loaded ?? emptyData();
     this.data.edges ??= []; // pre-edges documents
+    this.data.groups ??= []; // pre-groups documents
     const fresh = !loaded;
     this.migrateHighlightBodies();
     this.migrateEscapedWikilinks();
@@ -560,6 +563,7 @@ export class WorkspaceStore {
       (p) => p.whiteboardId !== id,
     );
     this.data.edges = this.data.edges.filter((e) => e.whiteboardId !== id);
+    this.data.groups = (this.data.groups ?? []).filter((g) => g.whiteboardId !== id);
     this.touch();
   }
 
@@ -747,6 +751,62 @@ export class WorkspaceStore {
     const before = this.data.edges.length;
     this.data.edges = this.data.edges.filter((e) => e.id !== id);
     if (this.data.edges.length !== before) this.touch();
+  }
+
+  // ---- groups --------------------------------------------------------------
+
+  getGroups(whiteboardId: string): Group[] {
+    return (this.data.groups ?? []).filter((g) => g.whiteboardId === whiteboardId);
+  }
+
+  createGroup(
+    whiteboardId: string,
+    init: { name: string; x: number; y: number; w: number; h: number },
+  ): Group {
+    const group: Group = { id: ID.group(), whiteboardId, collapsed: false, ...init };
+    (this.data.groups ??= []).push(group);
+    this.touch();
+    return group;
+  }
+
+  updateGroup(
+    id: string,
+    patch: Partial<Pick<Group, "name" | "x" | "y" | "w" | "h" | "collapsed">>,
+  ): void {
+    const groups = this.data.groups ?? [];
+    const idx = groups.findIndex((g) => g.id === id);
+    if (idx < 0) return;
+    groups[idx] = { ...groups[idx], ...patch };
+    this.touch();
+  }
+
+  /**
+   * Move a frame and its member placements together. Membership is derived
+   * against the pre-move bounds, so this behaves identically while collapsed
+   * (hidden members ride along and expand exactly where they were).
+   */
+  moveGroup(id: string, dx: number, dy: number): void {
+    const group = (this.data.groups ?? []).find((g) => g.id === id);
+    if (!group || (dx === 0 && dy === 0)) return;
+    const members = membersOf(
+      group,
+      this.getPlacements(group.whiteboardId),
+      this.getGroups(group.whiteboardId),
+    );
+    for (const m of members) {
+      const idx = this.data.placements.findIndex((p) => p.id === m.id);
+      this.data.placements[idx] = { ...m, x: m.x + dx, y: m.y + dy };
+    }
+    group.x += dx;
+    group.y += dy;
+    this.touch();
+  }
+
+  /** Ungroup: the frame goes away; member cards and placements are untouched. */
+  deleteGroup(id: string): void {
+    const before = this.data.groups?.length ?? 0;
+    this.data.groups = (this.data.groups ?? []).filter((g) => g.id !== id);
+    if (this.data.groups.length !== before) this.touch();
   }
 
   // ---- link graph ----------------------------------------------------------

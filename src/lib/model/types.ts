@@ -142,6 +142,23 @@ export interface Edge {
   toSide?: EdgeSide | null;
 }
 
+/**
+ * A named, collapsible frame on a whiteboard. Membership is derived, never
+ * stored: a placement belongs to the group whose bounds contain its center
+ * (smallest area wins when frames overlap). Flat — groups don't nest.
+ */
+export interface Group {
+  id: string;
+  whiteboardId: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Collapsed groups render as a chip; member cards stay placed but hidden. */
+  collapsed: boolean;
+}
+
 /** The full serialized workspace persisted as one document. */
 export interface WorkspaceData {
   version: 1;
@@ -149,6 +166,8 @@ export interface WorkspaceData {
   whiteboards: Whiteboard[];
   placements: Placement[];
   edges: Edge[];
+  /** Absent on documents saved before groups existed; loads as []. */
+  groups?: Group[];
 }
 
 export function isCard(value: unknown): value is Card {

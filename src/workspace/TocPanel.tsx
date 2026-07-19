@@ -46,7 +46,7 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
         .filter((id): id is string => !!id);
       if (ids.length > 0) embeds.set(e.card.id, ids);
     }
-    return buildToc(entries, embeds);
+    return buildToc(entries, embeds, store.getGroups(boardId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, boardId, version]);
 
@@ -73,6 +73,11 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
           <React.Fragment key={`${g.anchorCardId}-${gi}`}>
             {g.label !== null && (
               <div className="ws-toc-group" onClick={() => onJump(g.anchorCardId)}>
+                {g.groupId && (
+                  <span className="ws-toc-fold" title={g.collapsed ? "Collapsed on the board" : undefined}>
+                    {g.collapsed ? "▸" : "▾"}
+                  </span>
+                )}
                 {g.label}
                 <span className="ws-toc-count">{g.rows.length}</span>
               </div>

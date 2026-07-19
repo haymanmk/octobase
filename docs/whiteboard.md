@@ -104,6 +104,31 @@ as plain chips, which is also where cycles die. Inside the TipTap editor
 the block is an inert atom node (`src/workspace/card-embed-node.ts`) that
 round-trips to the same markdown.
 
+## Groups (named collapsible frames)
+
+**⌘G** wraps the selected cards in a named frame (`Group` entity in
+`types.ts`; CRUD + `moveGroup` in the store). Membership is **derived,
+never stored**: a placement belongs to the frame whose bounds contain its
+center — smallest frame wins on overlap (`src/lib/model/groups.ts`). Drag
+a card in or out to change membership; groups are flat (no nesting).
+
+The frame's interior is `pointer-events: none`, so marquee/pan/double-click
+still work inside it. Interactions live on the **name pill** (drag moves
+the frame *and* its members via `moveGroup`; double-click renames; chevron
+collapses; right-click opens rename/collapse/ungroup) and a corner resize
+handle. Ungroup deletes the frame only.
+
+**Collapse** hides member cards, leaving a compact chip (name + count) at
+the frame position; placements are untouched, so expanding restores the
+exact layout. An edge from an outside card to a hidden member **stays
+visible, redrawn dashed to the chip** (`routeEdge`; the pinned side is
+dropped for the substituted end — it belongs to the card, not the chip);
+only edges fully inside one collapsed group disappear. Any jump to a
+hidden card — TOC row, ⌘K, wikilink/embed click — auto-expands the group
+first (`expandGroupOf` in `Workspace.tsx`). The TOC lists frames as
+top-level headings (name, fold marker) ahead of spatial islands; see
+`toc.ts`.
+
 ## Drops onto the canvas
 
 All card drags share one HTML5 payload, `CARD_DRAG_MIME` (`src/workspace/dnd.ts`).

@@ -6,6 +6,7 @@ import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
 import { TocPanel } from "./TocPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
+import { groupOf } from "../lib/model/groups.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { AiSettings } from "./AiSettings.tsx";
@@ -341,12 +342,25 @@ function WorkspaceInner(): React.ReactElement {
   // ---- card opening ---------------------------------------------------------
 
   /**
+   * A jump is about to land on this card — if it sits inside a collapsed
+   * group on the active board, expand the group so the landing is visible.
+   */
+  const expandGroupOf = (cardId: string) => {
+    if (!activeBoardId) return;
+    const p = store.getPlacements(activeBoardId).find((pl) => pl.cardId === cardId);
+    if (!p) return;
+    const g = groupOf(p, store.getGroups(activeBoardId));
+    if (g?.collapsed) store.updateGroup(g.id, { collapsed: false });
+  };
+
+  /**
    * Open a card: articles get a reader tab; notes/highlights are brought onto
    * the active board (if not already there) and edited in place.
    */
   const openCard = (cardId: string, opts: { edit?: boolean } = {}) => {
     const card = store.getCard(cardId);
     if (!card) return;
+    expandGroupOf(cardId);
     selectOne(cardId);
     if (card.kind === "article" || card.kind === "pdf") {
       openReaderTab(cardId);
@@ -377,6 +391,7 @@ function WorkspaceInner(): React.ReactElement {
       return;
     }
     if (!activeBoardId) return;
+    expandGroupOf(cardId);
     const placed =
       store.getPlacements(activeBoardId).find((p) => p.cardId === cardId) ??
       store.placeCard(activeBoardId, cardId, near?.x ?? 120, near?.y ?? 120);
@@ -659,6 +674,7 @@ function WorkspaceInner(): React.ReactElement {
                 .getPlacements(activeBoardId)
                 .find((pl) => pl.cardId === cardId);
               if (!p) return;
+              expandGroupOf(cardId);
               canvasRef.current?.centerOn(p);
               selectOne(cardId);
             }}

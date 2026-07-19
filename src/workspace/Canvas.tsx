@@ -2,8 +2,10 @@ import * as React from "react";
 import { useWorkspace } from "./store-context.ts";
 import { CanvasCard } from "./CanvasCard.tsx";
 import { EdgeLayer } from "./EdgeLayer.tsx";
+import { GroupLayer } from "./GroupLayer.tsx";
 import { edgePath, nearestSide, sideMidpoint, type Anchor, type Point, type Side } from "./edge-geometry.ts";
-import type { Card } from "../lib/model/types.ts";
+import type { Card, Group } from "../lib/model/types.ts";
+import { CHIP_H, CHIP_W, groupOf, hiddenCardIds, membersOf, routeEdge } from "../lib/model/groups.ts";
 
 export interface CanvasProps {
   boardId: string;
@@ -89,6 +91,9 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   const [rewiringEdgeId, setRewiringEdgeId] = React.useState<string | null>(null);
   const [edgeTargetId, setEdgeTargetId] = React.useState<string | null>(null);
   const edgeDragRef = React.useRef<null | { fromCardId: string; from: Anchor }>(null);
+  // Group state: inline rename and the frame context menu.
+  const [renamingGroupId, setRenamingGroupId] = React.useState<string | null>(null);
+  const [groupMenu, setGroupMenu] = React.useState<null | { groupId: string; x: number; y: number }>(null);
   // Window-level drag handlers need the live view, not the closed-over one.
   const viewRef = React.useRef(view);
   viewRef.current = view;
@@ -100,6 +105,12 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
 
   const version = store.getVersion();
   const placements = store.getPlacements(boardId);
+  const groups = store.getGroups(boardId);
+  // Members of collapsed frames stay in the data but leave the render.
+  const hiddenIds = hiddenCardIds(groups, placements);
+  const visiblePlacements = hiddenIds.size === 0
+    ? placements
+    : placements.filter((p) => !hiddenIds.has(p.cardId));
   const cardById = React.useMemo(() => {
     const m = new Map<string, Card>();
     for (const c of store.getCards()) m.set(c.id, c);
@@ -264,7 +275,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     const w = toWorld(me);
     const pad = 14 / viewRef.current.scale;
     let best: { id: string; z: number } | null = null;
-    for (const p of store.getPlacements(boardId)) {
+    for (const p of visiblePlacements) {
       if (
         w.x >= p.x - pad && w.x <= p.x + p.w + pad &&
         w.y >= p.y - pad && w.y <= p.y + p.h + pad
@@ -379,6 +390,92 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
     return { x: clientX - rect.left, y: clientY - rect.top };
   };
 
+  // ---- group interactions ---------------------------------------------------
+
+  /** Drag a frame pill or collapsed chip; a motionless chip click expands. */
+  const startGroupMove = (group: Group, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let last = toWorld(e.nativeEvent);
+    let moved = false;
+    const onMove = (me: PointerEvent) => {
+      if (!moved && Math.abs(me.clientX - sx) + Math.abs(me.clientY - sy) <= 3) return;
+      moved = true;
+      const w = toWorld(me);
+      store.moveGroup(group.id, w.x - last.x, w.y - last.y);
+      last = w;
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (!moved && group.collapsed) store.updateGroup(group.id, { collapsed: false });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const startGroupResize = (group: Group, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const start = toWorld(e.nativeEvent);
+    const { w: ow, h: oh } = group;
+    const onMove = (me: PointerEvent) => {
+      const w = toWorld(me);
+      store.updateGroup(group.id, {
+        w: Math.max(160, ow + (w.x - start.x)),
+        h: Math.max(100, oh + (w.y - start.y)),
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  // ⌘G wraps the current selection in a new named frame, name ready to type.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "g") return;
+      const t = e.target as HTMLElement;
+      if (t.closest?.("input, textarea, [contenteditable=true]")) return;
+      const selected = placements.filter((p) => selectedCardIds.includes(p.cardId));
+      if (selected.length === 0) return;
+      e.preventDefault();
+      const minX = Math.min(...selected.map((p) => p.x));
+      const minY = Math.min(...selected.map((p) => p.y));
+      const maxX = Math.max(...selected.map((p) => p.x + p.w));
+      const maxY = Math.max(...selected.map((p) => p.y + p.h));
+      // Extra headroom on top so the name pill doesn't sit on a card.
+      const g = store.createGroup(boardId, {
+        name: "Group",
+        x: minX - 24,
+        y: minY - 48,
+        w: maxX - minX + 48,
+        h: maxY - minY + 72,
+      });
+      setRenamingGroupId(g.id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCardIds, boardId, store, version]);
+
+  // Dismiss the group menu on any outside press (same pattern as edge menu).
+  React.useEffect(() => {
+    if (!groupMenu) return;
+    const close = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest?.(".ws-ctx")) return;
+      setGroupMenu(null);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [groupMenu]);
+
   // Right-drag pans from anywhere (even over cards); left-drag on empty
   // canvas rubber-bands a selection. Plain right-click opens the menu on
   // release (macOS fires contextmenu on press, so menus are deferred here).
@@ -464,7 +561,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         const maxX = Math.max(a.x, b.x);
         const minY = Math.min(a.y, b.y);
         const maxY = Math.max(a.y, b.y);
-        const hit = placements
+        const hit = visiblePlacements
           .filter((p) => p.x < maxX && p.x + p.w > minX && p.y < maxY && p.y + p.h > minY)
           .map((p) => p.cardId);
         onSelectMany(hit);
@@ -554,11 +651,46 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         className="ws-canvas-surface"
         style={{ transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}
       >
+        <GroupLayer
+          groups={groups}
+          memberCount={(g) => membersOf(g, placements, groups).length}
+          renamingId={renamingGroupId}
+          onBeginRename={(g) => setRenamingGroupId(g.id)}
+          onCommitRename={(g, name) => store.updateGroup(g.id, { name: name.trim() || "Untitled" })}
+          onEndRename={() => setRenamingGroupId(null)}
+          onToggleCollapse={(g) => store.updateGroup(g.id, { collapsed: !g.collapsed })}
+          onStartMove={startGroupMove}
+          onStartResize={startGroupResize}
+          onMenu={(g, x, y) => setGroupMenu({ groupId: g.id, x, y })}
+        />
         <EdgeLayer
-          edges={store.getEdges(boardId)}
+          // Edges into a collapsed group stay visible, redrawn (dashed) to the
+          // chip; only edges fully inside one collapsed group disappear. A
+          // rerouted end drops its pinned side — the pin belongs to the card,
+          // not the chip standing in for it.
+          edges={store.getEdges(boardId).flatMap((e) => {
+            const r = routeEdge(e.fromCardId, e.toCardId, groups, placements);
+            if (r.hidden) return [];
+            return [{
+              ...e,
+              fromSide: r.fromChip ? null : e.fromSide,
+              toSide: r.toChip ? null : e.toSide,
+            }];
+          })}
+          indirectEdgeIds={new Set(
+            store.getEdges(boardId)
+              .filter((e) => {
+                const r = routeEdge(e.fromCardId, e.toCardId, groups, placements);
+                return !r.hidden && (r.fromChip || r.toChip);
+              })
+              .map((e) => e.id),
+          )}
           rectOf={(cardId) => {
             const p = placements.find((pl) => pl.cardId === cardId);
-            return p ? { x: p.x, y: p.y, w: p.w, h: p.h } : null;
+            if (!p) return null;
+            const g = groupOf(p, groups);
+            if (g?.collapsed) return { x: g.x, y: g.y, w: CHIP_W, h: CHIP_H };
+            return { x: p.x, y: p.y, w: p.w, h: p.h };
           }}
           selectedEdgeId={selectedEdgeId}
           editingLabelEdgeId={labelEdgeId}
@@ -568,7 +700,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
           onEndpointDown={startEndpointDrag}
           rewiringEdgeId={rewiringEdgeId}
         />
-        {placements.map((p) => {
+        {visiblePlacements.map((p) => {
           const card = cardById.get(p.cardId);
           if (!card) return null;
           return (
@@ -649,6 +781,29 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
             <div className="ws-ctx-sep" />
             <div className="ws-ctx-item danger" onClick={() => { store.deleteEdge(edge.id); setSelectedEdgeId(null); setEdgeMenu(null); }}>
               <span className="ws-ctx-ico">🗑</span> Delete connection
+            </div>
+          </div>
+        );
+      })()}
+
+      {groupMenu && (() => {
+        const group = groups.find((g) => g.id === groupMenu.groupId);
+        if (!group) return null;
+        return (
+          <div
+            className="ws-ctx"
+            style={{ left: groupMenu.x, top: groupMenu.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="ws-ctx-item" onClick={() => { setRenamingGroupId(group.id); setGroupMenu(null); }}>
+              <span className="ws-ctx-ico">✎</span> Rename group
+            </div>
+            <div className="ws-ctx-item" onClick={() => { store.updateGroup(group.id, { collapsed: !group.collapsed }); setGroupMenu(null); }}>
+              <span className="ws-ctx-ico">{group.collapsed ? "▾" : "▸"}</span> {group.collapsed ? "Expand" : "Collapse"}
+            </div>
+            <div className="ws-ctx-sep" />
+            <div className="ws-ctx-item danger" onClick={() => { store.deleteGroup(group.id); setGroupMenu(null); }}>
+              <span className="ws-ctx-ico">⌫</span> Ungroup (keep cards)
             </div>
           </div>
         );
