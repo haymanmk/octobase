@@ -205,6 +205,7 @@ function closeEditPanel(): void {
 // image card in the workspace via clip:annotate. One shot: Esc or an outside
 // click dismisses it; nothing persists on the page.
 let clipFormEl: HTMLElement | null = null;
+let clipFrameEl: HTMLElement | null = null;
 
 async function openClipForm(d: {
   file: string;
@@ -212,7 +213,29 @@ async function openClipForm(d: {
 }): Promise<void> {
   clipFormEl?.remove();
   clipFormEl = null;
+  clipFrameEl?.remove();
+  clipFrameEl = null;
   closeEditPanel();
+
+  // Mark the clipped region while the form is up — the capture overlay had
+  // to remove itself before capturePage, so without this the user loses
+  // sight of what they just clipped. One shot: it leaves with the form
+  // (live pages reflow, so nothing may persist).
+  const frame = document.createElement('div');
+  Object.assign(frame.style, {
+    position: 'fixed',
+    left: `${d.rect.x}px`,
+    top: `${d.rect.y}px`,
+    width: `${d.rect.width}px`,
+    height: `${d.rect.height}px`,
+    border: '1.5px dashed #ef476f',
+    borderRadius: '3px',
+    boxShadow: '0 0 0 1px rgba(255,255,255,0.55)',
+    pointerEvents: 'none',
+    zIndex: '2147483646',
+  });
+  document.body.appendChild(frame);
+  clipFrameEl = frame;
 
   const form = document.createElement('octo-edit-form') as HTMLElement & {
     color: HighlightColor | null;
@@ -242,6 +265,8 @@ async function openClipForm(d: {
     document.removeEventListener('keydown', onEsc, true);
     clipFormEl?.remove();
     clipFormEl = null;
+    clipFrameEl?.remove();
+    clipFrameEl = null;
   };
   const onOutside = (ev: MouseEvent) => {
     if (clipFormEl && !ev.composedPath().includes(clipFormEl)) dismiss();

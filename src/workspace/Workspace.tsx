@@ -435,6 +435,18 @@ function WorkspaceInner(): React.ReactElement {
         return;
       }
     }
+    // A live-browser clip: trace back to its source page — the browser pane
+    // in Electron, a plain new tab otherwise.
+    if (card.kind === "image" && /^https?:/.test(card.sourceUrl)) {
+      const viewerBridge = getViewerBridge();
+      if (viewerBridge) {
+        viewerBridge.browserNavigate(card.sourceUrl);
+        setViewer((v) => ({ ...v, open: true, activeTab: BROWSER_TAB }));
+      } else {
+        window.open(card.sourceUrl, "_blank", "noreferrer");
+      }
+      return;
+    }
     // For a PDF clip, open the PDF and scroll to the clip's frame.
     if (card.kind === "image" && card.sourceUrl.startsWith("pdf:") && card.clip) {
       const pdfId = card.sourceUrl.slice(4);
@@ -452,7 +464,9 @@ function WorkspaceInner(): React.ReactElement {
     const c = store.getCard(cardId);
     if (!c) return false;
     if (c.kind === "highlight" || c.kind === "article") return true;
-    return c.kind === "image" && c.sourceUrl.startsWith("pdf:") && !!c.clip;
+    if (c.kind !== "image") return false;
+    // PDF clips open the PDF at their frame; web clips trace back to the page.
+    return (c.sourceUrl.startsWith("pdf:") && !!c.clip) || /^https?:/.test(c.sourceUrl);
   };
 
   /** A highlight hold-dragged out of the reader was released at (x, y). */

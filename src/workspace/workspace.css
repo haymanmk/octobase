@@ -1243,7 +1243,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 0 1 auto;
+  /* Tabs share the strip evenly: equal basis, capped at max-width. The high
+     grow factor outweighs the right-side spacer so tabs fill first. */
+  flex: 12 1 0;
   min-width: 0;
   max-width: 190px;
   padding: 6px 10px;

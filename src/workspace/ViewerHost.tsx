@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, FileText, Globe, RotateCw, Scissors, X } from "lucide-react";
+import { BookOpen, FileText, Globe, RotateCw, Scissors, Sparkles, X } from "lucide-react";
 import {
   getAiBridge,
   getClipBridge,
@@ -211,7 +211,7 @@ export function ViewerHost({
             title="Ask AI about this tab"
             aria-pressed={chatOpen}
             onClick={() => setChatOpen((o) => !o)}
-          >✦</button>
+          ><Sparkles size={15} strokeWidth={2} aria-hidden /></button>
         )}
         <button className="ws-icon-btn" title="Close viewer pane" onClick={onClose}><X size={15} strokeWidth={2} aria-hidden /></button>
       </div>
