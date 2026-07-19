@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ExternalLink } from "lucide-react";
 import { useWorkspace } from "../store-context.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
 import { PALETTE } from "../../components/highlighter/colors.ts";
@@ -294,7 +295,7 @@ export function Reader({
               if (onOpenOriginal) onOpenOriginal(sourceUrl);
               else window.open(sourceUrl, "_blank", "noreferrer");
             }}
-          >↗</button>
+          ><ExternalLink size={15} strokeWidth={2} aria-hidden /></button>
         )}
       </div>
 

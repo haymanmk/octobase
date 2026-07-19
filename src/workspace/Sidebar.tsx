@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ChevronDown, ChevronRight, Frame, Library, Plus, Search, X } from "lucide-react";
 import { useWorkspace } from "./store-context.ts";
 
 export interface SidebarProps {
@@ -36,7 +37,7 @@ export function Sidebar({
     });
   const sectionHead = (key: string, label: string, extra?: React.ReactNode) => (
     <div className="ws-section-label clickable" onClick={() => toggleSection(key)}>
-      <span><span className="ws-chevron">{closed[key] ? "›" : "⌄"}</span>{label}</span>
+      <span><span className="ws-chevron">{closed[key] ? <ChevronRight size={11} strokeWidth={2} aria-hidden /> : <ChevronDown size={11} strokeWidth={2} aria-hidden />}</span>{label}</span>
       <span onClick={(e) => e.stopPropagation()}>{extra}</span>
     </div>
   );
@@ -76,13 +77,13 @@ export function Sidebar({
       </div>
 
       <div className="ws-search-trigger" onClick={() => onOpenSearch()}>
-        <span>⌕</span>
+        <span><Search size={14} strokeWidth={2} aria-hidden /></span>
         <span>Search everything</span>
         <kbd>⌘K</kbd>
       </div>
 
       <nav className="ws-nav">
-        {sectionHead("boards", "Whiteboards", <button title="New whiteboard" onClick={addBoard}>+</button>)}
+        {sectionHead("boards", "Whiteboards", <button title="New whiteboard" onClick={addBoard}><Plus size={13} strokeWidth={2} aria-hidden /></button>)}
         {!closed.boards && boards.map((b) => {
           const count = store.getPlacements(b.id).length;
           const active = b.id === activeBoardId;
@@ -93,7 +94,7 @@ export function Sidebar({
               onClick={() => onSelectBoard(b.id)}
               onDoubleClick={() => startRename(b.id, b.name)}
             >
-              <span className="ws-ico">▦</span>
+              <span className="ws-ico"><Frame size={14} strokeWidth={2} aria-hidden /></span>
               {renamingId === b.id ? (
                 <input
                   autoFocus
@@ -117,7 +118,7 @@ export function Sidebar({
                     className="ws-kebab"
                     title="Delete whiteboard"
                     onClick={(e) => { e.stopPropagation(); deleteBoard(b.id, b.name); }}
-                  >×</span>
+                  ><X size={13} strokeWidth={2} aria-hidden /></span>
                 </>
               )}
             </div>
@@ -132,7 +133,7 @@ export function Sidebar({
           onClick={onToggleLibrary}
           title={libraryOpen ? "Close the card library" : "Browse all cards"}
         >
-          <span className="ws-ico">🗂</span>
+          <span className="ws-ico"><Library size={15} strokeWidth={2} aria-hidden /></span>
           <span>Library</span>
           {inbox.length > 0 && <span className="ws-count" title="Unplaced cards">{inbox.length}</span>}
         </div>

@@ -3,27 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <style>
-      :root { --ink:#211d17; --paper:#f4efe6; --accent:#b8893b; --line:#ddd3c1; }
+      :root { --ink:#212123; --paper:#f7f7f7; --card:#ffffff;
+              --accent:#4f7dc9; --line:#e3e3e3; --muted:#8e8e91; --soft:#56565a; }
       * { box-sizing: border-box; }
-      body { width: 300px; margin: 0; font-family: system-ui, sans-serif; background: var(--paper); color: var(--ink); }
+      body { width: 300px; margin: 0; font-family: "Spline Sans", system-ui, sans-serif; background: var(--paper); color: var(--ink); }
       header { padding: 14px 16px 10px; }
-      h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+      h1 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 18px; margin: 0; letter-spacing: -0.01em; }
       h1 .dot { color: var(--accent); }
-      .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 0 16px 12px; color: #6f654f; }
+      .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 0 16px 12px; color: var(--soft); }
       .led { width: 9px; height: 9px; border-radius: 50%; background: #c2c2c2; }
-      .led.on { background: #16a34a; }
+      .led.on { background: #0aa87e; }
       .led.off { background: #b4452f; }
       .body { padding: 0 16px 16px; }
-      button { font: 500 13px system-ui; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: #fff; cursor: pointer; width: 100%; }
+      button { font: 500 13px system-ui; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); cursor: pointer; width: 100%; }
       button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       .row { display: flex; gap: 8px; margin-top: 8px; }
       details { margin-top: 14px; font-size: 12.5px; }
-      summary { cursor: pointer; color: #6f654f; }
-      label { display: block; margin: 8px 0 3px; color: #6f654f; }
-      input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font: 13px system-ui; }
-      .hint { font-size: 11px; color: #998d77; margin-top: 6px; line-height: 1.5; }
-      .queue { font-size: 11.5px; color: #998d77; margin-top: 10px; }
+      summary { cursor: pointer; color: var(--soft); }
+      label { display: block; margin: 8px 0 3px; color: var(--soft); }
+      input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font: 13px "JetBrains Mono", ui-monospace, monospace; }
+      .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+      .queue { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
     </style>
   </head>
   <body>

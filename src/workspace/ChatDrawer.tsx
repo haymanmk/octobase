@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Sparkles, X } from "lucide-react";
 import "./chat.css";
 import { useWorkspace } from "./store-context.ts";
 import { buildCardContext } from "./ai-context.ts";
@@ -117,10 +118,10 @@ export function ChatDrawer({ card, onClose, onOpenSettings }: ChatDrawerProps): 
   return (
     <div className="ws-chat">
       <div className="ws-chat-head">
-        <span className="ws-chat-title">✦ Ask · {card.title || "Untitled"}</span>
+        <span className="ws-chat-title"><Sparkles size={13} strokeWidth={2} aria-hidden /> Ask · {card.title || "Untitled"}</span>
         {truncated && <span className="ws-chat-flag" title="The card content exceeded the context limit">context truncated</span>}
         <span className="ws-topbar-spacer" />
-        <button className="ws-icon-btn" title="Close chat" onClick={onClose}>✕</button>
+        <button className="ws-icon-btn" title="Close chat" onClick={onClose}><X size={15} strokeWidth={2} aria-hidden /></button>
       </div>
       <div ref={scrollRef} className="ws-chat-scroll">
         {bubbles.length === 0 && (

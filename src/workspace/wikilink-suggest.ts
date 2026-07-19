@@ -104,12 +104,16 @@ function insertRow(editor: Editor, range: Range, row: LinkRow): void {
     .run();
 }
 
-const KIND_GLYPH: Record<string, string> = {
-  note: "✎",
-  highlight: "▂",
-  article: "¶",
-  image: "▣",
-  pdf: "📄",
+// Lucide SVG strings (lucide-static): this popup builds plain DOM, so the
+// icons inline as innerHTML instead of React components. Sized via CSS.
+import { StickyNote, Highlighter, Newspaper, Image, FileText } from "lucide-static";
+
+const KIND_SVG: Record<string, string> = {
+  note: StickyNote,
+  highlight: Highlighter,
+  article: Newspaper,
+  image: Image,
+  pdf: FileText,
 };
 
 /** Caret-anchored popup; same chrome as the slash menu (shared CSS classes). */
@@ -179,7 +183,12 @@ class LinkPopup {
       label.textContent = row.title;
       const hint = document.createElement("span");
       hint.className = "ws-slash-hint";
-      hint.textContent = row.isNew ? "new" : (KIND_GLYPH[row.kind] ?? "");
+      if (row.isNew) {
+        hint.textContent = "new";
+      } else {
+        hint.classList.add("ws-kind-ico", `ws-kind-${row.kind}`);
+        hint.innerHTML = KIND_SVG[row.kind] ?? "";
+      }
       el.append(dot, label, hint);
       el.addEventListener("mousedown", (e) => {
         e.preventDefault(); // keep the editor focused

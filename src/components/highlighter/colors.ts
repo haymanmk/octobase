@@ -6,16 +6,21 @@ import type { HighlightColor } from "../../types/highlight.ts";
  * light (dark-themed pages) — a pastel band behind white glyphs makes them
  * unreadable, a deep band keeps them crisp.
  */
+/**
+ * The "Sunset retreat" (5a) palette from the 2026-07 UI unification.
+ * `underline` doubles as the card-kind accent: yellow=note, blue=highlight,
+ * green=article, pink=clip, purple=pdf, orange=extra.
+ */
 export const PALETTE: Record<
   HighlightColor,
   { fill: string; darkFill: string; underline: string }
 > = {
-  yellow: { fill: "#fff3b0", darkFill: "#7a5901", underline: "#f59e0b" },
-  green:  { fill: "#c8e6c9", darkFill: "#14532d", underline: "#16a34a" },
-  pink:   { fill: "#fbcfe8", darkFill: "#831843", underline: "#ec4899" },
-  blue:   { fill: "#bfdbfe", darkFill: "#1e3a8a", underline: "#2563eb" },
-  purple: { fill: "#e9d5ff", darkFill: "#581c87", underline: "#9333ea" },
-  orange: { fill: "#fed7aa", darkFill: "#7c2d12", underline: "#ea580c" },
+  yellow: { fill: "#ffedbd", darkFill: "#7a5f14", underline: "#ffd166" },
+  blue:   { fill: "#c3e5f1", darkFill: "#0d5f7a", underline: "#118ab2" },
+  green:  { fill: "#c1f5e7", darkFill: "#045d46", underline: "#06d6a0" },
+  pink:   { fill: "#fbd0da", darkFill: "#7d1330", underline: "#ef476f" },
+  purple: { fill: "#c8dbe2", darkFill: "#0b4f66", underline: "#073b4c" },
+  orange: { fill: "#fde2d8", darkFill: "#8a3c22", underline: "#f78c6b" },
 };
 
 export function classNameFor(color: HighlightColor): string {

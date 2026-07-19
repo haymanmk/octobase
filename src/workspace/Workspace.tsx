@@ -1,4 +1,5 @@
 import * as React from "react";
+import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Plug, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
@@ -573,7 +574,7 @@ function WorkspaceInner(): React.ReactElement {
             title={viewer.sidebarOpen ? "Hide sidebar" : "Show sidebar"}
             aria-pressed={viewer.sidebarOpen}
             onClick={() => setViewer((v) => ({ ...v, sidebarOpen: !v.sidebarOpen }))}
-          >▦</button>
+          ><PanelLeft size={17} strokeWidth={2} aria-hidden /></button>
           <div className="ws-topbar-heading">
             <h2 className="ws-board-title">{board?.name ?? "octobase"}</h2>
             {board && (
@@ -587,42 +588,42 @@ function WorkspaceInner(): React.ReactElement {
             className="ws-icon-btn"
             title="Zoom to fit"
             onClick={() => canvasRef.current?.zoomToFit()}
-          >⌖</button>
+          ><Focus size={17} strokeWidth={2} aria-hidden /></button>
           <button
             className={`ws-icon-btn${tocOpen ? " active" : ""}`}
             title={tocOpen ? "Hide table of contents" : "Table of contents"}
             aria-pressed={tocOpen}
             onClick={() => setTocOpen((o) => !o)}
-          >☰</button>
+          ><ListTree size={17} strokeWidth={2} aria-hidden /></button>
           <button
             className={`ws-icon-btn${viewerOpen ? " active" : ""}`}
             title={viewerOpen ? "Hide viewer pane" : "Show viewer pane"}
             aria-pressed={viewerOpen}
             onClick={() => setViewer((v) => ({ ...v, open: !viewerOpen }))}
-          >◫</button>
+          ><PanelRight size={17} strokeWidth={2} aria-hidden /></button>
           <div className="ws-menu-anchor" onPointerDown={(e) => e.stopPropagation()}>
             <button
               className={`ws-icon-btn${menuOpen ? " active" : ""}`}
               title="More"
               onClick={() => setMenuOpen((o) => !o)}
-            >⋯</button>
+            ><MoreHorizontal size={17} strokeWidth={2} aria-hidden /></button>
             {menuOpen && (
               <div className="ws-dd" role="menu">
                 <div className="ws-dd-item" role="menuitem"
                   onClick={() => { setMenuOpen(false); setCmdk({ open: true }); }}>
-                  <span className="ws-dd-ico">🔍</span> Search everything
+                  <span className="ws-dd-ico"><Search size={15} strokeWidth={2} aria-hidden /></span> Search everything
                   <span className="ws-dd-kbd">⌘K</span>
                 </div>
                 {getPdfBridge() && (
                   <div className="ws-dd-item" role="menuitem"
                     onClick={() => { setMenuOpen(false); void openPdfFromDialog(); }}>
-                    <span className="ws-dd-ico">📄</span> Open PDF…
+                    <span className="ws-dd-ico"><FileText size={15} strokeWidth={2} aria-hidden /></span> Open PDF…
                   </div>
                 )}
                 {getAiBridge() && (
                   <div className="ws-dd-item" role="menuitem"
                     onClick={() => { setMenuOpen(false); setAiSettingsOpen(true); }}>
-                    <span className="ws-dd-ico">✦</span> AI settings
+                    <span className="ws-dd-ico"><Sparkles size={15} strokeWidth={2} aria-hidden /></span> AI settings
                   </div>
                 )}
                 {captureBridge && (
@@ -630,7 +631,7 @@ function WorkspaceInner(): React.ReactElement {
                     <div className="ws-dd-sep" />
                     <div className="ws-dd-item" role="menuitem"
                       onClick={async () => { setMenuOpen(false); setConnectInfo(await captureBridge.getInfo()); }}>
-                      <span className="ws-dd-ico">🔌</span> Connect extension
+                      <span className="ws-dd-ico"><Plug size={15} strokeWidth={2} aria-hidden /></span> Connect extension
                     </div>
                   </>
                 )}
@@ -747,7 +748,7 @@ function WorkspaceInner(): React.ReactElement {
         >
           {canRead(ctx.cardId) && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
-              <span className="ws-ctx-ico">📖</span> Read
+              <span className="ws-ctx-ico"><BookOpen size={13} strokeWidth={2} aria-hidden /></span> Read
             </div>
           )}
           {canRead(ctx.cardId) && getAiBridge() && (
@@ -756,15 +757,15 @@ function WorkspaceInner(): React.ReactElement {
               setChatNonce({ at: Date.now() });
               setCtx(null);
             }}>
-              <span className="ws-ctx-ico">✦</span> Ask AI
+              <span className="ws-ctx-ico"><Sparkles size={13} strokeWidth={2} aria-hidden /></span> Ask AI
             </div>
           )}
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>
-            <span className="ws-ctx-ico">⇤</span> Remove from board
+            <span className="ws-ctx-ico"><CornerUpLeft size={13} strokeWidth={2} aria-hidden /></span> Remove from board
           </div>
           <div className="ws-ctx-sep" />
           <div className="ws-ctx-item danger" onClick={() => { deleteCard(ctx.cardId); setCtx(null); }}>
-            <span className="ws-ctx-ico">🗑</span> Delete card
+            <span className="ws-ctx-ico"><Trash2 size={13} strokeWidth={2} aria-hidden /></span> Delete card
           </div>
         </div>
       )}
@@ -777,7 +778,7 @@ function WorkspaceInner(): React.ReactElement {
         >
           <div className="ws-ctx-label">New card</div>
           <div className="ws-ctx-item" onClick={() => { newNoteAt(canvasMenu.wx, canvasMenu.wy); setCanvasMenu(null); }}>
-            <span className="ws-ctx-ico">＋</span> Blank note
+            <span className="ws-ctx-ico"><Plus size={13} strokeWidth={2} aria-hidden /></span> Blank note
           </div>
           <div className="ws-ctx-colors">
             {HIGHLIGHT_COLORS.map((c) => (

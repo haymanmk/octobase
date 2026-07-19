@@ -23,13 +23,8 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "pdf", label: "PDFs" },
 ];
 
-const KIND_GLYPH: Record<string, string> = {
-  note: "✎",
-  highlight: "▂",
-  article: "¶",
-  image: "▣",
-  pdf: "📄",
-};
+import { X } from "lucide-react";
+import { KindIcon } from "./kind-icons.tsx";
 
 /**
  * The card library: every live card, searchable and filterable, as a grid of
@@ -65,7 +60,7 @@ export function LibraryPanel({ onOpenCard, onClose }: LibraryPanelProps): React.
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); (e.target as HTMLElement).blur(); } }}
         />
-        <button className="ws-lib-close" title="Close library" onClick={onClose}>×</button>
+        <button className="ws-lib-close" title="Close library" onClick={onClose}><X size={13} strokeWidth={2} aria-hidden /></button>
       </div>
       <div className="ws-lib-chips">
         {FILTERS.map((f) => (
@@ -111,9 +106,11 @@ function LibraryTile({ card, onOpen }: { card: Card; onOpen: () => void }): Reac
           <img src={clipUrl(card.image.file)} alt="" draggable={false} />
         </div>
       )}
-      <div className="ws-lib-title">{card.title || "Untitled"}</div>
+      <div className="ws-lib-title">
+        <KindIcon kind={card.kind} size={12} />
+        <span className="ws-lib-title-text">{card.title || "Untitled"}</span>
+      </div>
       {text && <div className="ws-lib-snippet">{text}</div>}
-      <div className="ws-lib-kind">{KIND_GLYPH[card.kind] ?? "•"}</div>
     </div>
   );
 }

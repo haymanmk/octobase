@@ -1,4 +1,6 @@
 import * as React from "react";
+import { Link } from "lucide-react";
+import { KindIcon } from "./kind-icons.tsx";
 import type { Card, Placement } from "../lib/model/types.ts";
 import type { Side } from "./edge-geometry.ts";
 import { clipUrl } from "./electron-bridge.ts";
@@ -230,6 +232,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       <div className="ws-card-clip">
       <div className="ws-card-accent" style={{ background: palette.underline }} />
       <div className="ws-card-head">
+        <KindIcon kind={card.kind} size={13} />
         <span className="ws-card-kind">{kindLabel}</span>
         <span
           className="ws-card-menu-btn"
@@ -280,7 +283,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           </div>
           {card.kind === "pdf" && (
             <div className="ws-card-pdfmeta">
-              📄 {card.pages > 0 ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "PDF"}
+              <KindIcon kind="pdf" size={13} /> {card.pages > 0 ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "PDF"}
               <span className="ws-card-pdfhint">double-click to read</span>
             </div>
           )}
@@ -312,7 +315,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         </div>
       )}
       {card.kind !== "note" && "sourceUrl" in card && card.sourceUrl && (
-        <div className="ws-card-source">◉ {hostOf(card.sourceUrl)}</div>
+        <div className="ws-card-source"><Link size={11} strokeWidth={2} aria-hidden /> {hostOf(card.sourceUrl)}</div>
       )}
       </div>
       {!editing &&

@@ -1,6 +1,7 @@
 import * as React from "react";
+import { Search } from "lucide-react";
+import { KindIcon } from "./kind-icons.tsx";
 import { useWorkspace } from "./store-context.ts";
-import { PALETTE } from "../components/highlighter/colors.ts";
 import { CARD_DRAG_MIME } from "./dnd.ts";
 import type { Card } from "../lib/model/types.ts";
 
@@ -62,6 +63,8 @@ export function CommandPalette({ seed, onClose, onPick }: CommandPaletteProps): 
   return (
     <div className="ws-cmdk-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ws-cmdk" role="dialog" aria-label="Search">
+        <div className="ws-cmdk-inputrow">
+        <Search className="ws-cmdk-searchico" size={17} strokeWidth={2} aria-hidden />
         <input
           ref={inputRef}
           value={query}
@@ -69,6 +72,7 @@ export function CommandPalette({ seed, onClose, onPick }: CommandPaletteProps): 
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
         />
+        </div>
         <div className="ws-cmdk-results">
           {results.length === 0 ? (
             <div className="ws-cmdk-empty">No cards match “{query}”.</div>
@@ -90,7 +94,7 @@ export function CommandPalette({ seed, onClose, onPick }: CommandPaletteProps): 
                   setTimeout(onClose, 0);
                 }}
               >
-                <span className="ws-dotmark" style={{ background: PALETTE[r.card.color].underline }} />
+                <KindIcon kind={r.card.kind} size={15} />
                 <span className="ws-cmdk-title">{r.card.title || "Untitled"}</span>
                 <span className="ws-cmdk-snip">{snippet(r.card, query)}</span>
                 <span className="ws-cmdk-kind">{r.card.kind}</span>

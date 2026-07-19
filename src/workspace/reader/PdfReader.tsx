@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ChevronLeft, ChevronRight, Minus, Plus, Scissors, Search } from "lucide-react";
 import { useWorkspace } from "../store-context.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
@@ -692,7 +693,7 @@ export function PdfReader({
 
       {/* Floating toolbar */}
       <div className="ws-pdf-toolbar">
-        <button className="ws-tb-btn" title="Previous page" onClick={() => gotoPage(currentPage - 1)}>‹</button>
+        <button className="ws-tb-btn" title="Previous page" onClick={() => gotoPage(currentPage - 1)}><ChevronLeft size={15} strokeWidth={2} aria-hidden /></button>
         <input
           key={currentPage}
           className="ws-pdf-pageinput"
@@ -703,21 +704,21 @@ export function PdfReader({
           onFocus={(e) => e.target.select()}
         />
         <span className="ws-pdf-pagecount">/ {baseSizes.length || card.pages}</span>
-        <button className="ws-tb-btn" title="Next page" onClick={() => gotoPage(currentPage + 1)}>›</button>
+        <button className="ws-tb-btn" title="Next page" onClick={() => gotoPage(currentPage + 1)}><ChevronRight size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-tb-sep" />
-        <button className="ws-tb-btn" title="Zoom out" onClick={() => zoomTo(scale / 1.2)}>−</button>
+        <button className="ws-tb-btn" title="Zoom out" onClick={() => zoomTo(scale / 1.2)}><Minus size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-pdf-zoom">{Math.round(scale * 100)}%</span>
-        <button className="ws-tb-btn" title="Zoom in" onClick={() => zoomTo(scale * 1.2)}>＋</button>
+        <button className="ws-tb-btn" title="Zoom in" onClick={() => zoomTo(scale * 1.2)}><Plus size={15} strokeWidth={2} aria-hidden /></button>
         <button className={`ws-tb-btn${fitMode ? " active" : ""}`} title="Fit width"
           onClick={() => setFitMode(true)}>⇔</button>
         <span className="ws-tb-sep" />
         <button className={`ws-tb-btn${searchOpen ? " active" : ""}`} title="Search in PDF"
-          onClick={() => { setSearchOpen((o) => !o); setOutlineOpen(false); }}>🔍</button>
+          onClick={() => { setSearchOpen((o) => !o); setOutlineOpen(false); }}><Search size={15} strokeWidth={2} aria-hidden /></button>
         <button className={`ws-tb-btn${outlineOpen ? " active" : ""}`} title="Outline"
           disabled={outline.length === 0}
           onClick={() => { setOutlineOpen((o) => !o); setSearchOpen(false); }}>☰</button>
         <button className={`ws-tb-btn${clipMode ? " active" : ""}`} title="Clip a region"
-          onClick={() => { setClipMode((m) => !m); setClipRect(null); }}>✂</button>
+          onClick={() => { setClipMode((m) => !m); setClipRect(null); }}><Scissors size={15} strokeWidth={2} aria-hidden /></button>
       </div>
 
       {searchOpen && (
@@ -733,8 +734,8 @@ export function PdfReader({
             }}
           />
           <span className="ws-pdf-hits">{hits.length === 0 ? "0" : `${hitIdx + 1} / ${hits.length}`}</span>
-          <button className="ws-tb-btn" title="Previous match" onClick={() => step(-1)}>‹</button>
-          <button className="ws-tb-btn" title="Next match" onClick={() => step(1)}>›</button>
+          <button className="ws-tb-btn" title="Previous match" onClick={() => step(-1)}><ChevronLeft size={13} strokeWidth={2} aria-hidden /></button>
+          <button className="ws-tb-btn" title="Next match" onClick={() => step(1)}><ChevronRight size={13} strokeWidth={2} aria-hidden /></button>
         </div>
       )}
 

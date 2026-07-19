@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ArrowLeftRight, MousePointer2, Pencil, RotateCw, Trash2, Ungroup } from "lucide-react";
 import { useWorkspace } from "./store-context.ts";
 import { CanvasCard } from "./CanvasCard.tsx";
 import { EdgeLayer } from "./EdgeLayer.tsx";
@@ -787,22 +788,22 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="ws-ctx-item" onClick={() => { setLabelEdgeId(edge.id); setEdgeMenu(null); }}>
-              <span className="ws-ctx-ico">✎</span> {edge.label ? "Edit label" : "Add label"}
+              <span className="ws-ctx-ico"><Pencil size={13} strokeWidth={2} aria-hidden /></span> {edge.label ? "Edit label" : "Add label"}
             </div>
             <div className="ws-ctx-item" onClick={() => { store.flipEdge(edge.id); setEdgeMenu(null); }}>
-              <span className="ws-ctx-ico">⇄</span> Flip direction
+              <span className="ws-ctx-ico"><ArrowLeftRight size={13} strokeWidth={2} aria-hidden /></span> Flip direction
             </div>
             <div className="ws-ctx-item" onClick={() => { store.updateEdge(edge.id, { directed: !edge.directed }); setEdgeMenu(null); }}>
-              <span className="ws-ctx-ico">➤</span> {edge.directed ? "Hide arrowhead" : "Show arrowhead"}
+              <span className="ws-ctx-ico"><MousePointer2 size={13} strokeWidth={2} aria-hidden /></span> {edge.directed ? "Hide arrowhead" : "Show arrowhead"}
             </div>
             {(edge.fromSide || edge.toSide) && (
               <div className="ws-ctx-item" onClick={() => { store.updateEdge(edge.id, { fromSide: null, toSide: null }); setEdgeMenu(null); }}>
-                <span className="ws-ctx-ico">⟳</span> Route automatically
+                <span className="ws-ctx-ico"><RotateCw size={13} strokeWidth={2} aria-hidden /></span> Route automatically
               </div>
             )}
             <div className="ws-ctx-sep" />
             <div className="ws-ctx-item danger" onClick={() => { store.deleteEdge(edge.id); setSelectedEdgeId(null); setEdgeMenu(null); }}>
-              <span className="ws-ctx-ico">🗑</span> Delete connection
+              <span className="ws-ctx-ico"><Trash2 size={13} strokeWidth={2} aria-hidden /></span> Delete connection
             </div>
           </div>
         );
@@ -818,14 +819,14 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="ws-ctx-item" onClick={() => { setRenamingGroupId(group.id); setGroupMenu(null); }}>
-              <span className="ws-ctx-ico">✎</span> Rename group
+              <span className="ws-ctx-ico"><Pencil size={13} strokeWidth={2} aria-hidden /></span> Rename group
             </div>
             <div className="ws-ctx-item" onClick={() => { store.updateGroup(group.id, { collapsed: !group.collapsed }); setGroupMenu(null); }}>
               <span className="ws-ctx-ico">{group.collapsed ? "▾" : "▸"}</span> {group.collapsed ? "Expand" : "Collapse"}
             </div>
             <div className="ws-ctx-sep" />
             <div className="ws-ctx-item danger" onClick={() => { store.deleteGroup(group.id); setGroupMenu(null); }}>
-              <span className="ws-ctx-ico">⌫</span> Ungroup (keep cards)
+              <span className="ws-ctx-ico"><Ungroup size={13} strokeWidth={2} aria-hidden /></span> Ungroup (keep cards)
             </div>
           </div>
         );

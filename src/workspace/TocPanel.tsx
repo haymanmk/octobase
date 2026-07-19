@@ -3,13 +3,8 @@ import { useWorkspace } from "./store-context.ts";
 import { parseEmbeds, normalizeTitle } from "../lib/model/wikilinks.ts";
 import { buildToc, filterToc, type TocEntry } from "./toc.ts";
 
-const KIND_GLYPH: Record<string, string> = {
-  note: "✎",
-  highlight: "▂",
-  article: "¶",
-  image: "▣",
-  pdf: "📄",
-};
+import { X } from "lucide-react";
+import { KindIcon } from "./kind-icons.tsx";
 
 export interface TocPanelProps {
   boardId: string;
@@ -58,7 +53,7 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
       <div className="ws-toc-head">
         <span className="ws-toc-title">Contents</span>
         <span className="ws-toc-count">{total} card{total === 1 ? "" : "s"}</span>
-        <button className="ws-toc-close" title="Close" onClick={onClose}>×</button>
+        <button className="ws-toc-close" title="Close" onClick={onClose}><X size={13} strokeWidth={2} aria-hidden /></button>
       </div>
       <input
         className="ws-toc-filter"
@@ -89,7 +84,7 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
                 onClick={() => onJump(r.cardId)}
                 title={r.title || "Untitled"}
               >
-                <span className="ws-toc-glyph">{KIND_GLYPH[r.kind] ?? "•"}</span>
+                <span className="ws-toc-glyph"><KindIcon kind={r.kind} size={13} /></span>
                 <span className="ws-toc-label">{r.title || "Untitled"}</span>
               </div>
             ))}

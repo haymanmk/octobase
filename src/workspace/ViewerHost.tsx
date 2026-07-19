@@ -1,4 +1,5 @@
 import * as React from "react";
+import { BookOpen, FileText, Globe, RotateCw, Scissors, X } from "lucide-react";
 import {
   getAiBridge,
   getClipBridge,
@@ -179,7 +180,7 @@ export function ViewerHost({
           title={browser?.url || "Live browser"}
           onClick={() => onSelectTab(BROWSER_TAB)}
         >
-          <span className="ws-vtab-ico">🌐</span>
+          <span className="ws-vtab-ico"><Globe size={15} strokeWidth={2} aria-hidden /></span>
           <span className="ws-vtab-label">{browserTitle}</span>
         </button>
         {readerTabs.map((t) => {
@@ -193,13 +194,13 @@ export function ViewerHost({
               title={t.title}
               onClick={() => onSelectTab(t.cardId)}
             >
-              <span className="ws-vtab-ico">{t.kind === "pdf" ? "📄" : "📖"}</span>
+              <span className="ws-vtab-ico">{t.kind === "pdf" ? <FileText size={15} strokeWidth={2} aria-hidden /> : <BookOpen size={15} strokeWidth={2} aria-hidden />}</span>
               <span className="ws-vtab-label">{t.title}</span>
               <span
                 className="ws-vtab-close"
                 title="Close tab"
                 onClick={(e) => { e.stopPropagation(); onCloseTab(t.cardId); }}
-              >✕</span>
+              ><X size={13} strokeWidth={2} aria-hidden /></span>
             </button>
           );
         })}
@@ -212,7 +213,7 @@ export function ViewerHost({
             onClick={() => setChatOpen((o) => !o)}
           >✦</button>
         )}
-        <button className="ws-icon-btn" title="Close viewer pane" onClick={onClose}>✕</button>
+        <button className="ws-icon-btn" title="Close viewer pane" onClick={onClose}><X size={15} strokeWidth={2} aria-hidden /></button>
       </div>
 
       {browserActive && (
@@ -222,14 +223,14 @@ export function ViewerHost({
           <button className="ws-tb-btn" title="Forward" disabled={!browser?.canGoForward}
             onClick={() => bridge?.browserForward()}>→</button>
           <button className="ws-tb-btn" title="Reload" onClick={() => bridge?.browserReload()}>
-            {browser?.loading ? "…" : "⟳"}
+            {browser?.loading ? "…" : <RotateCw size={15} strokeWidth={2} aria-hidden />}
           </button>
           {getClipBridge() && (
             <button
               className="ws-tb-btn"
               title="Clip a region as an image card (drag a rectangle · esc cancels)"
               onClick={() => getClipBridge()?.clipStart()}
-            >✂</button>
+            ><Scissors size={15} strokeWidth={2} aria-hidden /></button>
           )}
           <input
             ref={urlInputRef}

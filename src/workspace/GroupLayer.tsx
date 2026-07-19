@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Group } from "../lib/model/types.ts";
 
 export interface GroupLayerProps {
@@ -57,7 +58,9 @@ function NamePill({
         title={collapsed ? "Expand" : "Collapse"}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); props.onToggleCollapse(group); }}
-      >{collapsed ? "▸" : "▾"}</span>
+      >{collapsed
+        ? <ChevronRight size={13} strokeWidth={2} aria-hidden />
+        : <ChevronDown size={13} strokeWidth={2} aria-hidden />}</span>
       {renaming ? (
         <input
           className="ws-group-name-input"
