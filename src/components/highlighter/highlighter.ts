@@ -188,6 +188,8 @@ async function openEditPanel(highlightId: string, anchorRect: DOMRect): Promise<
     closeEditPanel();
     await deleteHighlightWithUndo(id);
   });
+  // Field blurs (which persist) fire before the click lands on Done.
+  form.addEventListener('done-requested', () => closeEditPanel());
 
   document.body.appendChild(form);
   editPanelEl = form;
@@ -259,6 +261,7 @@ async function openClipForm(d: {
   form.addEventListener('color-changed', (e: Event) => send({ color: (e as CustomEvent).detail.color }));
   form.addEventListener('tags-changed', (e: Event) => send({ tags: (e as CustomEvent).detail.tags }));
   form.addEventListener('notes-changed', (e: Event) => send({ note: (e as CustomEvent).detail.notes }));
+  form.addEventListener('done-requested', () => dismiss());
 
   const dismiss = () => {
     document.removeEventListener('mousedown', onOutside, true);
@@ -644,6 +647,7 @@ export class HighlighterWidget extends LitElement {
         @color-changed=${this.onColorChangedFromForm}
         @tags-changed=${this.onTagsChanged}
         @notes-changed=${this.onNotesChanged}
+        @done-requested=${() => { this.hide(); this.reset(); }}
       ></octo-edit-form>`;
     }
     return html`

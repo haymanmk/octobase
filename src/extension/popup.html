@@ -7,7 +7,16 @@
               --accent:#4f7dc9; --line:#e3e3e3; --muted:#8e8e91; --soft:#56565a; }
       * { box-sizing: border-box; }
       body { width: 300px; margin: 0; font-family: "Spline Sans", system-ui, sans-serif; background: var(--paper); color: var(--ink); }
-      header { padding: 14px 16px 10px; }
+      header { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px; }
+      .om { width: 32px; height: 32px; border-radius: 7px; background: #073b4c;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; }
+      .om-eyes { display: flex; gap: 4.5px; animation: om-blink 3.2s infinite; }
+      .om-eyes span { width: 3.5px; height: 3.5px; border-radius: 50%; background: #ffd166; }
+      .om-mouthbox { height: 15px; display: flex; align-items: center; margin-top: 1.5px; }
+      .om-mouth { font: 600 18px/0.8 "Fraunces", Georgia, serif; color: #f7f7f7; display: block;
+                  animation: om-mouth 3.2s ease-in-out infinite; }
+      @keyframes om-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
+      @keyframes om-mouth { 0%, 55%, 100% { transform: scaleY(1); } 70%, 82% { transform: scaleY(1.28); } }
       h1 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 18px; margin: 0; letter-spacing: -0.01em; }
       h1 .dot { color: var(--accent); }
       .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 0 16px 12px; color: var(--soft); }
@@ -29,6 +38,10 @@
   </head>
   <body>
     <header>
+      <div class="om" aria-hidden="true">
+        <div class="om-eyes"><span></span><span></span></div>
+        <div class="om-mouthbox"><div class="om-mouth">O</div></div>
+      </div>
       <h1>octo<span class="dot">·</span>base</h1>
     </header>
     <div class="status">

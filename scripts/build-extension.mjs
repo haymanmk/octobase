@@ -40,5 +40,6 @@ await build({
 
 await cp(path.join(src, "manifest.json"), path.join(out, "manifest.json"));
 await cp(path.join(src, "popup.html"), path.join(out, "popup.html"));
+await cp(path.join(src, "icons"), path.join(out, "icons"), { recursive: true });
 
 console.log(`\nExtension built → ${path.relative(root, out)}/  (Load unpacked in chrome://extensions)`);
