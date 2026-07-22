@@ -12,12 +12,199 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   body { margin: 0; background: #e6e8ec; }
+  @keyframes om-mouth { 0%, 55%, 100% { transform: scaleY(1); } 70%, 82% { transform: scaleY(1.28); } }
+  @keyframes om-mouth-sm { 0%, 55%, 100% { transform: scaleY(1); } 70%, 82% { transform: scaleY(1.28); } }
+  @keyframes om-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
   a { color: #4f7dc9; text-decoration: none; }
   a:hover { color: #3b64a8; text-decoration: underline; }
 </style>
 </helmet>
 
 <section style="padding: 48px 56px 96px; font-family: 'Instrument Sans', sans-serif;">
+  <div style="max-width: 900px; margin-bottom: 28px;">
+    <div style="font: 500 11px 'JetBrains Mono', monospace; letter-spacing: 0.18em; color: #8f939c; text-transform: uppercase; margin-bottom: 8px;">Turn 8 · Animated “Ö”</div>
+    <div style="font: 600 26px 'Fraunces', serif; color: #1f2126;">The mouth opens</div>
+    <div style="font: 400 14px/1.6 'Instrument Sans', sans-serif; color: #4c505a; margin-top: 6px;">Both finalists from turn 7, animated: the “O” stays open, stretches wider — like a gasp — then releases back (with an occasional blink). The mouth is the actual Fraunces “O” glyph from <a href="#7b">7b</a>, so at rest the icon is exactly the static letterform. Loops every ~3.2s; in the real extension it would play once on click or on save-success.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-bottom: 72px;">
+
+    <!-- 8a animated teal/gold -->
+    <div id="8a" style="width: 320px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">8a</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">7b animated · gold eyes on teal</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="display: flex; gap: 18px; animation: om-blink 3.2s infinite;"><div style="width: 13px; height: 13px; border-radius: 50%; background: #ffd166;"></div><div style="width: 13px; height: 13px; border-radius: 50%; background: #ffd166;"></div></div><div style="height: 60px; display: flex; align-items: center; margin-top: 6px;"><span style="font: 600 74px/0.8 'Fraunces', serif; color: #f7f7f7; display: block; animation: om-mouth 3.2s ease-in-out infinite;">O</span></div></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="display: flex; gap: 7px; animation: om-blink 3.2s infinite;"><div style="width: 5px; height: 5px; border-radius: 50%; background: #ffd166;"></div><div style="width: 5px; height: 5px; border-radius: 50%; background: #ffd166;"></div></div><div style="height: 23px; display: flex; align-items: center; margin-top: 2px;"><span style="font: 600 27px/0.8 'Fraunces', serif; color: #f7f7f7; display: block; animation: om-mouth-sm 3.2s ease-in-out infinite;">O</span></div></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;"><div style="display: flex; gap: 2.5px;"><div style="width: 2px; height: 2px; border-radius: 50%; background: #ffd166;"></div><div style="width: 2px; height: 2px; border-radius: 50%; background: #ffd166;"></div></div><span style="font: 600 9px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">16px stays static — toolbar icons shouldn't move uninvited. Animation is reserved for 32px+ moments.</div>
+    </div>
+
+    <!-- 8b animated white/two-color -->
+    <div id="8b" style="width: 320px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">8b</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">7c animated · two-color eyes on white</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="display: flex; gap: 18px; animation: om-blink 3.2s infinite; animation-delay: 0.4s;"><div style="width: 13px; height: 13px; border-radius: 50%; background: #ef476f;"></div><div style="width: 13px; height: 13px; border-radius: 50%; background: #118ab2;"></div></div><div style="height: 60px; display: flex; align-items: center; margin-top: 6px;"><span style="font: 600 74px/0.8 'Fraunces', serif; color: #212123; display: block; animation: om-mouth 3.2s ease-in-out infinite; animation-delay: 0.4s;">O</span></div></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="display: flex; gap: 7px; animation: om-blink 3.2s infinite; animation-delay: 0.4s;"><div style="width: 5px; height: 5px; border-radius: 50%; background: #ef476f;"></div><div style="width: 5px; height: 5px; border-radius: 50%; background: #118ab2;"></div></div><div style="height: 23px; display: flex; align-items: center; margin-top: 2px;"><span style="font: 600 27px/0.8 'Fraunces', serif; color: #212123; display: block; animation: om-mouth-sm 3.2s ease-in-out infinite; animation-delay: 0.4s;">O</span></div></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;"><div style="display: flex; gap: 2.5px;"><div style="width: 2px; height: 2px; border-radius: 50%; background: #ef476f;"></div><div style="width: 2px; height: 2px; border-radius: 50%; background: #118ab2;"></div></div><span style="font: 600 9px/0.8 'Fraunces', serif; color: #212123;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Same choreography on the light tile; ink mouth keeps the editorial weight while it moves.</div>
+    </div>
+
+  </div>
+
+  <div style="max-width: 900px; margin-bottom: 28px;">
+    <div style="font: 500 11px 'JetBrains Mono', monospace; letter-spacing: 0.18em; color: #8f939c; text-transform: uppercase; margin-bottom: 8px;">Turn 7 · The “Ö” face</div>
+    <div style="font: 600 26px 'Fraunces', serif; color: #1f2126;">Ö — a monogram with eyes</div>
+    <div style="font: 400 14px/1.6 'Instrument Sans', sans-serif; color: #4c505a; margin-top: 6px;">Your umlaut idea: the diaeresis becomes eyes, the counter of the O a wide-open mouth. It keeps <a href="#6a">6a</a>'s editorial serif but gains a face — mascot energy with zero illustration. Three treatments at 128 / 48 / 16px.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-bottom: 72px;">
+
+    <!-- 7a ink Ö -->
+    <div id="7a" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">7a</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Fraunces “Ö” · ink on paper</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #212123; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;"><div style="display: flex; gap: 18px;"><div style="width: 13px; height: 13px; border-radius: 50%; background: #f7f7f7;"></div><div style="width: 13px; height: 13px; border-radius: 50%; background: #f7f7f7;"></div></div><span style="font: 600 74px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #212123; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;"><div style="display: flex; gap: 7px;"><div style="width: 5px; height: 5px; border-radius: 50%; background: #f7f7f7;"></div><div style="width: 5px; height: 5px; border-radius: 50%; background: #f7f7f7;"></div></div><span style="font: 600 27px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #212123; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;"><div style="display: flex; gap: 2.5px;"><div style="width: 2px; height: 2px; border-radius: 50%; background: #f7f7f7;"></div><div style="width: 2px; height: 2px; border-radius: 50%; background: #f7f7f7;"></div></div><span style="font: 600 9px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Straight swap of 6a. The face reads instantly; still perfectly serious in a toolbar.</div>
+    </div>
+
+    <!-- 7b gold eyes on teal -->
+    <div id="7b" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">7b</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Gold eyes · deep teal base</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;"><div style="display: flex; gap: 18px;"><div style="width: 13px; height: 13px; border-radius: 50%; background: #ffd166;"></div><div style="width: 13px; height: 13px; border-radius: 50%; background: #ffd166;"></div></div><span style="font: 600 74px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;"><div style="display: flex; gap: 7px;"><div style="width: 5px; height: 5px; border-radius: 50%; background: #ffd166;"></div><div style="width: 5px; height: 5px; border-radius: 50%; background: #ffd166;"></div></div><span style="font: 600 27px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #073b4c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;"><div style="display: flex; gap: 2.5px;"><div style="width: 2px; height: 2px; border-radius: 50%; background: #ffd166;"></div><div style="width: 2px; height: 2px; border-radius: 50%; background: #ffd166;"></div></div><span style="font: 600 9px/0.8 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">The 5a teal + gold pairing. Gold “eyes” give it life while the white mouth keeps contrast at 16px.</div>
+    </div>
+
+    <!-- 7c mismatched eyes, coral -->
+    <div id="7c" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">7c</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Two-color eyes · playful</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;"><div style="display: flex; gap: 18px;"><div style="width: 13px; height: 13px; border-radius: 50%; background: #ef476f;"></div><div style="width: 13px; height: 13px; border-radius: 50%; background: #118ab2;"></div></div><span style="font: 600 74px/0.8 'Fraunces', serif; color: #212123;">O</span></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;"><div style="display: flex; gap: 7px;"><div style="width: 5px; height: 5px; border-radius: 50%; background: #ef476f;"></div><div style="width: 5px; height: 5px; border-radius: 50%; background: #118ab2;"></div></div><span style="font: 600 27px/0.8 'Fraunces', serif; color: #212123;">O</span></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #ffffff; border: 1px solid #e3e3e3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;"><div style="display: flex; gap: 2.5px;"><div style="width: 2px; height: 2px; border-radius: 50%; background: #ef476f;"></div><div style="width: 2px; height: 2px; border-radius: 50%; background: #118ab2;"></div></div><span style="font: 600 9px/0.8 'Fraunces', serif; color: #212123;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Ink on white with coral + teal eyes — a wink at the multi-color card system. Lightest, friendliest read.</div>
+    </div>
+
+  </div>
+
+  <div style="max-width: 900px; margin-bottom: 28px;">
+    <div style="font: 500 11px 'JetBrains Mono', monospace; letter-spacing: 0.18em; color: #8f939c; text-transform: uppercase; margin-bottom: 8px;">Turn 6 · App icon explorations</div>
+    <div style="font: 600 26px 'Fraunces', serif; color: #1f2126;">A mark for Octobase</div>
+    <div style="font: 400 14px/1.6 'Instrument Sans', sans-serif; color: #4c505a; margin-top: 6px;">Six directions on the flat rounded-square format, each shown at 128 / 48 / 16px (Chrome toolbar size). All use the locked 5a palette + neutral greys. <a href="#6a">6a</a>–<a href="#6c">6c</a> are refined/editorial, <a href="#6d">6d</a>–<a href="#6f">6f</a> are friendly/playful.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-bottom: 72px;">
+
+    <!-- 6a serif O monogram -->
+    <div id="6a" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6a</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Fraunces “O” · ink on paper</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #212123; display: flex; align-items: center; justify-content: center;"><span style="font: 600 92px 'Fraunces', serif; color: #f7f7f7; margin-top: -6px;">O</span></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #212123; display: flex; align-items: center; justify-content: center;"><span style="font: 600 35px 'Fraunces', serif; color: #f7f7f7; margin-top: -2px;">O</span></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #212123; display: flex; align-items: center; justify-content: center;"><span style="font: 600 12px 'Fraunces', serif; color: #f7f7f7;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Quietest option. The serif carries the editorial voice; survives 16px perfectly.</div>
+    </div>
+
+    <!-- 6b O monogram + coral dot -->
+    <div id="6b" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6b</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">“O” + highlight tick · single accent</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #073b4c; position: relative; display: flex; align-items: center; justify-content: center;"><span style="font: 600 88px 'Fraunces', serif; color: #f7f7f7; margin-top: -6px;">O</span><div style="position: absolute; right: 22px; bottom: 24px; width: 30px; height: 30px; border-radius: 50%; background: #ef476f; border: 6px solid #073b4c;"></div></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #073b4c; position: relative; display: flex; align-items: center; justify-content: center;"><span style="font: 600 33px 'Fraunces', serif; color: #f7f7f7; margin-top: -2px;">O</span><div style="position: absolute; right: 7px; bottom: 8px; width: 12px; height: 12px; border-radius: 50%; background: #ef476f; border: 2.5px solid #073b4c;"></div></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #073b4c; position: relative; display: flex; align-items: center; justify-content: center;"><span style="font: 600 11px 'Fraunces', serif; color: #f7f7f7;">O</span><div style="position: absolute; right: 1.5px; bottom: 2px; width: 5px; height: 5px; border-radius: 50%; background: #ef476f; border: 1px solid #073b4c;"></div></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Deep-teal base from 5a; the coral dot reads as a highlight marker cap — and a nod to a notification badge.</div>
+    </div>
+
+    <!-- 6c marker stroke O -->
+    <div id="6c" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6c</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Highlighted “O” · marker swipe</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #ffffff; border: 1px solid #e3e3e3; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden;"><div style="position: absolute; left: 14px; right: 14px; top: 44px; height: 44px; background: #ffd166; border-radius: 6px; transform: rotate(-2deg);"></div><span style="font: 600 88px 'Fraunces', serif; color: #212123; position: relative; margin-top: -6px;">O</span></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #ffffff; border: 1px solid #e3e3e3; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden;"><div style="position: absolute; left: 5px; right: 5px; top: 17px; height: 16px; background: #ffd166; border-radius: 3px; transform: rotate(-2deg);"></div><span style="font: 600 33px 'Fraunces', serif; color: #212123; position: relative; margin-top: -2px;">O</span></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #ffffff; border: 1px solid #e3e3e3; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden;"><div style="position: absolute; left: 2px; right: 2px; top: 6px; height: 5px; background: #ffd166;"></div><span style="font: 600 11px 'Fraunces', serif; color: #212123; position: relative;">O</span></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Says exactly what the product does: text, highlighted. Gold swipe straight from the note color.</div>
+    </div>
+
+    <!-- 6d octopus tentacle -->
+    <div id="6d" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6d</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Tentacle curl · playful “Octo”</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #ef476f; display: flex; align-items: center; justify-content: center;"><svg width="84" height="84" viewBox="0 0 48 48" fill="none"><path d="M10 38 C10 20 18 8 30 8 C38 8 42 14 40 20 C38 25 32 26 29 22 C27 19 30 15 33 17" stroke="#ffffff" stroke-width="5" stroke-linecap="round"></path><circle cx="10" cy="38" r="3.4" fill="#ffffff"></circle></svg></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #ef476f; display: flex; align-items: center; justify-content: center;"><svg width="32" height="32" viewBox="0 0 48 48" fill="none"><path d="M10 38 C10 20 18 8 30 8 C38 8 42 14 40 20 C38 25 32 26 29 22 C27 19 30 15 33 17" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round"></path><circle cx="10" cy="38" r="3.6" fill="#ffffff"></circle></svg></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #ef476f; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 48 48" fill="none"><path d="M10 38 C10 20 18 8 30 8 C38 8 42 14 40 20 C38 25 32 26 29 22" stroke="#ffffff" stroke-width="7" stroke-linecap="round"></path></svg></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">One curling tentacle in the 2px-stroke spirit (scaled up for icon weight). Coral makes it warm, not corporate.</div>
+    </div>
+
+    <!-- 6e card stack -->
+    <div id="6e" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6e</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Card fan · multi-color 5a</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #212123; position: relative; overflow: hidden;"><div style="position: absolute; left: 24px; top: 40px; width: 56px; height: 68px; border-radius: 8px; background: #06d6a0; transform: rotate(-10deg);"></div><div style="position: absolute; left: 38px; top: 34px; width: 56px; height: 68px; border-radius: 8px; background: #118ab2; transform: rotate(-2deg);"></div><div style="position: absolute; left: 52px; top: 30px; width: 56px; height: 68px; border-radius: 8px; background: #ffd166; transform: rotate(7deg); box-shadow: -4px 0 10px rgba(0,0,0,0.25);"></div></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #212123; position: relative; overflow: hidden;"><div style="position: absolute; left: 9px; top: 15px; width: 21px; height: 26px; border-radius: 3px; background: #06d6a0; transform: rotate(-10deg);"></div><div style="position: absolute; left: 14px; top: 13px; width: 21px; height: 26px; border-radius: 3px; background: #118ab2; transform: rotate(-2deg);"></div><div style="position: absolute; left: 20px; top: 11px; width: 21px; height: 26px; border-radius: 3px; background: #ffd166; transform: rotate(7deg); box-shadow: -2px 0 4px rgba(0,0,0,0.25);"></div></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #212123; position: relative; overflow: hidden;"><div style="position: absolute; left: 3px; top: 5px; width: 7px; height: 9px; border-radius: 1px; background: #118ab2; transform: rotate(-6deg);"></div><div style="position: absolute; left: 7px; top: 4px; width: 7px; height: 9px; border-radius: 1px; background: #ffd166; transform: rotate(6deg);"></div></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">Your canvas of cards, literally. Shows the whole palette; busiest at 16px but still legible.</div>
+    </div>
+
+    <!-- 6f friendly octopus face -->
+    <div id="6f" style="width: 300px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <span style="font: 600 11px 'JetBrains Mono', monospace; background: #1f2126; color: #fff; padding: 3px 8px; border-radius: 5px;">6f</span>
+        <span style="font: 500 13px 'Instrument Sans', sans-serif; color: #4c505a;">Octo mascot · gold on teal</span>
+      </div>
+      <div style="background: #f7f7f7; border: 1px solid #e3e3e3; border-radius: 10px; padding: 24px; display: flex; align-items: flex-end; gap: 20px;">
+        <div style="width: 128px; height: 128px; border-radius: 28px; background: #118ab2; display: flex; align-items: center; justify-content: center;"><svg width="88" height="88" viewBox="0 0 48 48" fill="none"><path d="M24 8 C15 8 10 15 10 22 L10 30 M10 30 C10 34 7 34 6 32 M17 26 L17 34 C17 38 13 38 12 36 M24 8 C33 8 38 15 38 22 L38 30 M38 30 C38 34 41 34 42 32 M31 26 L31 34 C31 38 35 38 36 36" stroke="#ffd166" stroke-width="4" stroke-linecap="round"></path><circle cx="19" cy="19" r="2.2" fill="#ffd166"></circle><circle cx="29" cy="19" r="2.2" fill="#ffd166"></circle></svg></div>
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #118ab2; display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 48 48" fill="none"><path d="M24 8 C15 8 10 15 10 22 L10 30 M10 30 C10 34 7 34 6 32 M17 26 L17 34 C17 38 13 38 12 36 M24 8 C33 8 38 15 38 22 L38 30 M38 30 C38 34 41 34 42 32 M31 26 L31 34 C31 38 35 38 36 36" stroke="#ffd166" stroke-width="4.5" stroke-linecap="round"></path><circle cx="19" cy="19" r="2.4" fill="#ffd166"></circle><circle cx="29" cy="19" r="2.4" fill="#ffd166"></circle></svg></div>
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #118ab2; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 48 48" fill="none"><path d="M24 8 C15 8 10 15 10 22 L10 32 M24 8 C33 8 38 15 38 22 L38 32 M17 26 L17 36 M31 26 L31 36" stroke="#ffd166" stroke-width="7" stroke-linecap="round"></path></svg></div>
+      </div>
+      <div style="font: 400 12px/1.55 'Instrument Sans', sans-serif; color: #6c707a; margin-top: 8px;">The most memorable and mascot-able; teal + gold pair from 5a. Simplified stroke variant at 16px.</div>
+    </div>
+
+  </div>
+
   <div style="max-width: 900px; margin-bottom: 28px;">
     <div style="font: 500 11px 'JetBrains Mono', monospace; letter-spacing: 0.18em; color: #8f939c; text-transform: uppercase; margin-bottom: 8px;">Turn 5 · Card-edge color palettes</div>
     <div style="font: 600 26px 'Fraunces', serif; color: #1f2126;">Six hues for the card edges</div>

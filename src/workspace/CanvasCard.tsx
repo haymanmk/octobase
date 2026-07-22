@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Link } from "lucide-react";
+import { FileText, Link } from "lucide-react";
+import { useWorkspace } from "./store-context.ts";
 import { KindIcon } from "./kind-icons.tsx";
 import type { Card, Placement } from "../lib/model/types.ts";
 import type { Side } from "./edge-geometry.ts";
@@ -48,6 +49,10 @@ function hostOf(url: string): string {
 
 export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   const { card, placement, selected, editing, scale } = props;
+  const store = useWorkspace();
+  /** "pdf:<id>" sources point at a PDF card in this workspace — name it. */
+  const sourcePdfTitle = (sourceUrl: string): string | null =>
+    store.getCard(sourceUrl.slice(4))?.title ?? null;
   const [dragging, setDragging] = React.useState(false);
   // A library tile (or other card payload) hovering this note for embedding.
   const [embedHover, setEmbedHover] = React.useState(false);
@@ -189,6 +194,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
     card.kind === "note" ? "Note"
     : card.kind === "article" ? "Article"
     : card.kind === "image" ? "Clip"
+    : card.kind === "pdf" ? "PDF"
     : "Highlight";
 
   return (
@@ -281,10 +287,9 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
           <div className="ws-card-title">
             {card.title || "Untitled"}
           </div>
-          {card.kind === "pdf" && (
-            <div className="ws-card-pdfmeta">
-              <KindIcon kind="pdf" size={13} /> {card.pages > 0 ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "PDF"}
-              <span className="ws-card-pdfhint">double-click to read</span>
+          {card.kind === "pdf" && card.cover && (
+            <div className="ws-card-imgwrap ws-card-pdfcover">
+              <img className="ws-card-img" src={clipUrl(card.cover)} alt="" draggable={false} />
             </div>
           )}
           {card.kind === "image" && (
@@ -297,14 +302,23 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
               />
             </div>
           )}
-          <div className="ws-card-body">
-            <MarkdownView
-              body={card.body}
-              resolve={props.resolve}
-              onOpenCard={props.onOpenCard}
-              onCreateLink={props.onCreateLink}
-            />
-          </div>
+          {/* An empty flex:1 body would steal height from the pdf cover. */}
+          {(card.kind !== "pdf" || card.body.trim() !== "") && (
+            <div className="ws-card-body">
+              <MarkdownView
+                body={card.body}
+                resolve={props.resolve}
+                onOpenCard={props.onOpenCard}
+                onCreateLink={props.onCreateLink}
+              />
+            </div>
+          )}
+          {card.kind === "pdf" && (
+            <div className="ws-card-pdfmeta">
+              <KindIcon kind="pdf" size={13} /> {card.pages > 0 ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "PDF"}
+              <span className="ws-card-pdfhint">double-click to read</span>
+            </div>
+          )}
         </>
       )}
       {card.tags.length > 0 && (
@@ -315,7 +329,14 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         </div>
       )}
       {card.kind !== "note" && "sourceUrl" in card && card.sourceUrl && (
-        <div className="ws-card-source"><Link size={11} strokeWidth={2} aria-hidden /> {hostOf(card.sourceUrl)}</div>
+        card.sourceUrl.startsWith("pdf:") ? (
+          <div className="ws-card-source">
+            <FileText size={11} strokeWidth={2} aria-hidden />{" "}
+            {sourcePdfTitle(card.sourceUrl) ?? "PDF"}
+          </div>
+        ) : (
+          <div className="ws-card-source"><Link size={11} strokeWidth={2} aria-hidden /> {hostOf(card.sourceUrl)}</div>
+        )
       )}
       </div>
       {!editing &&

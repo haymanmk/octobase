@@ -1,4 +1,5 @@
 import * as React from "react";
+import { BrandMark } from "./BrandMark.tsx";
 import { WorkspaceStore } from "../lib/store/workspace-store.ts";
 import { LocalStoragePersistence } from "../lib/store/persistence.ts";
 import { StoreContext } from "./store-context.ts";
@@ -15,6 +16,29 @@ export function WorkspaceProvider({
     () => providedStore ?? new WorkspaceStore(new LocalStoragePersistence()),
   );
   const [ready, setReady] = React.useState<boolean>(() => store.isLoaded());
+  // Splash lifecycle: hold the welcome screen for a beat even when the store
+  // loads instantly, then fade it out over the already-rendered workspace.
+  const [splash, setSplash] = React.useState<"hold" | "leave" | "done">("hold");
+  const [splashHeld, setSplashHeld] = React.useState(false);
+
+  React.useEffect(() => {
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const t = setTimeout(() => setSplashHeld(true), reduceMotion ? 300 : 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  React.useEffect(() => {
+    if (!ready || !splashHeld) return;
+    setSplash((s) => (s === "hold" ? "leave" : s));
+  }, [ready, splashHeld]);
+
+  React.useEffect(() => {
+    if (splash !== "leave") return;
+    const t = setTimeout(() => setSplash("done"), 500);
+    return () => clearTimeout(t);
+  }, [splash]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -76,9 +100,24 @@ export function WorkspaceProvider({
     });
   }, [store]);
 
-  if (!ready) {
-    return <div className="ws-boot">Loading your workspace…</div>;
-  }
-
-  return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
+  return (
+    <StoreContext.Provider value={store}>
+      {ready ? children : null}
+      {splash !== "done" && (
+        <div className={splash === "leave" ? "ws-boot ws-boot-leave" : "ws-boot"} aria-hidden={ready}>
+          <div className="ws-boot-inner">
+            <div className="ws-boot-mark">
+              <BrandMark variant="light" size={96} />
+            </div>
+            <h1 className="ws-boot-word">
+              octo<span className="ws-brand-dot">·</span>base
+            </h1>
+            <span className="ws-boot-tag">
+              {ready ? "Welcome back" : "Loading your workspace…"}
+            </span>
+          </div>
+        </div>
+      )}
+    </StoreContext.Provider>
+  );
 }

@@ -32,7 +32,7 @@ src/workspace/                   React UI
   CardMarkdownEditor.tsx         TipTap WYSIWYG markdown (in-place card editor)
   card-embed-node.ts             TipTap atom keeping ![[embeds]] intact
   MarkdownView.tsx               react-markdown + GFM + wikilinks + embed mini-cards
-  CommandPalette.tsx             ⌘K search
+  CommandPalette.tsx             ⌘K search: results + live preview pane
   ViewerHost.tsx / viewer-layout.ts  tabbed right pane: live browser + readers
   reader/Reader.tsx              captured-article reader with highlight overlay
   drop-highlight.ts              browser-pane highlight drop → card
@@ -85,7 +85,12 @@ front, and hides the view during divider drags and full-window overlays
 (⌘K, dialogs). Reader tabs are plain DOM, so the problem can't occur there.
 Opening a card routes by kind: articles → reader tab; notes/highlights →
 placed on the active board (if needed) and edited in place. "Read" on a
-highlight opens its source article and scrolls to the highlight.
+highlight opens its source article and scrolls to the highlight. Library
+tiles and ⌘K results don't place cards anymore: tiles select on click
+(drag is the add gesture; right-click/⋯ opens the board card menu minus
+"Remove from board", with inline rename), and ⌘K Enter jumps to where
+the card lives — readable cards via `readCard`, board-dwelling cards via
+`centerOn` (switching boards when needed).
 
 ## Capture and clip intake
 

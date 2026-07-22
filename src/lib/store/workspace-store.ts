@@ -65,6 +65,7 @@ export class WorkspaceStore {
     const fresh = !loaded;
     this.migrateHighlightBodies();
     this.migrateEscapedWikilinks();
+    this.migrateTruncatedHighlightTitles();
     if (!this.data.whiteboards.some((w) => !w.deletedAt)) {
       // Guarantee at least one board to land on.
       const wb = this.createWhiteboard(seed ? "Welcome" : "My first whiteboard", { silent: true });
@@ -238,6 +239,24 @@ export class WorkspaceStore {
     return JSON.parse(JSON.stringify(this.data)) as WorkspaceData;
   }
 
+  /**
+   * Highlight titles used to cap at 64 chars + "…"; the full quote lives in
+   * the anchor. Restore capped titles once on load.
+   */
+  private migrateTruncatedHighlightTitles(): void {
+    for (const c of this.data.cards) {
+      if (c.kind !== "highlight" || !c.anchor?.exact) continue;
+      const exact = c.anchor.exact.trim();
+      if (
+        c.title.endsWith("…") &&
+        exact.length > c.title.length &&
+        exact.startsWith(c.title.slice(0, -1))
+      ) {
+        c.title = exact;
+      }
+    }
+  }
+
   // ---- reads ---------------------------------------------------------------
 
   getCards(): Card[] {
@@ -326,8 +345,8 @@ export class WorkspaceStore {
     const card: HighlightCard = {
       id: ID.card(),
       kind: "highlight",
-      title: text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight",
-      // The title carries the highlighted text; the body is just the note.
+      title: text || "Highlight",
+      // The title carries the FULL highlighted text; the body is just the note.
       body: init.notes ?? "",
       tags: init.tags ?? [],
       color: init.color ?? "yellow",
@@ -358,8 +377,8 @@ export class WorkspaceStore {
     page?: number;
   }): HighlightCard {
     const text = init.text.trim();
-    const title = text.length > 64 ? text.slice(0, 64) + "…" : text || "Highlight";
-    // The title carries the highlighted text; the body is just the note.
+    const title = text || "Highlight";
+    // The title carries the FULL highlighted text; the body is just the note.
     const body = init.note?.trim() ?? "";
 
     if (init.id) {
@@ -493,6 +512,14 @@ export class WorkspaceStore {
     );
   }
 
+  /** Attach the rendered first-page thumbnail to a PDF card. */
+  setPdfCover(id: string, coverFile: string): void {
+    const idx = this.data.cards.findIndex((c) => c.id === id);
+    if (idx < 0 || this.data.cards[idx].kind !== "pdf") return;
+    this.data.cards[idx] = { ...this.data.cards[idx], cover: coverFile } as Card;
+    this.touch();
+  }
+
   updateCard(
     id: string,
     patch: Partial<Pick<Card, "title" | "body" | "tags" | "color">>,
@@ -575,8 +602,11 @@ export class WorkspaceStore {
     x: number,
     y: number,
     w = 260,
-    h = 180,
+    h?: number,
   ): Placement {
+    // PDF cards carry a portrait cover plus a meta footer — the generic
+    // default leaves no room for either.
+    h ??= this.getCard(cardId)?.kind === "pdf" ? 380 : 180;
     const existing = this.data.placements.find(
       (p) => p.whiteboardId === whiteboardId && p.cardId === cardId,
     );

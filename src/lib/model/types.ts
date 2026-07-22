@@ -83,6 +83,8 @@ export interface PdfCard extends BaseCard {
   /** File name inside the pdfs directory. */
   file: string;
   pages: number;
+  /** First-page thumbnail: file name inside the clips directory. */
+  cover?: string;
 }
 
 export type Card = NoteCard | HighlightCard | ArticleCard | ImageCard | PdfCard;

@@ -115,3 +115,33 @@ test("data persists through the backend across reloads", async () => {
   await reopened.init({ seed: false });
   assert.ok(reopened.getCards().some((c) => c.title === "Persisted"));
 });
+
+test("highlight titles carry the full quoted text untrimmed", async () => {
+  const store = new WorkspaceStore(new MemoryPersistence());
+  await store.init({ seed: false });
+  const long = "The goal of reducing sequential computation also forms the foundation of the Extended Neural GPU and ByteNet architectures.";
+  const anchor = { exact: long, prefix: "", suffix: "", startHint: 0 };
+  const a = store.createHighlightCard({ text: long, sourceUrl: "https://x.test", anchor });
+  assert.equal(a.title, long);
+  const b = store.upsertHighlight({ text: long, sourceUrl: "https://x.test", anchor });
+  assert.equal(b.title, long);
+});
+
+test("legacy truncated highlight titles are restored from the anchor on load", async () => {
+  const backend = new MemoryPersistence();
+  const store = new WorkspaceStore(backend);
+  await store.init({ seed: false });
+  const long = "A quotation that was previously cut off at sixty-four characters by the old title cap.";
+  const card = store.createHighlightCard({
+    text: long,
+    sourceUrl: "https://x.test",
+    anchor: { exact: long, prefix: "", suffix: "", startHint: 0 },
+  });
+  // Simulate the legacy cap.
+  store.updateCard(card.id, { title: long.slice(0, 64) + "…" });
+  await new Promise((r) => setTimeout(r, 200));
+
+  const reloaded = new WorkspaceStore(backend);
+  await reloaded.init({ seed: false });
+  assert.equal(reloaded.getCard(card.id)!.title, long);
+});

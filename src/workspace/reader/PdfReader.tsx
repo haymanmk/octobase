@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus, Scissors, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeftRight, ListTree, Minus, Plus, Scissors, Search } from "lucide-react";
 import { useWorkspace } from "../store-context.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
@@ -110,6 +110,12 @@ export function PdfReader({
     document.body.style.cursor = "grabbing";
     return () => { document.body.style.cursor = ""; };
   }, [ghostUp]);
+  // Backfill covers for PDFs imported before covers existed.
+  React.useEffect(() => {
+    if (!card || card.cover) return;
+    void import("../pdf-cover.ts").then(({ ensurePdfCover }) => ensurePdfCover(card, store));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId]);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
@@ -710,13 +716,13 @@ export function PdfReader({
         <span className="ws-pdf-zoom">{Math.round(scale * 100)}%</span>
         <button className="ws-tb-btn" title="Zoom in" onClick={() => zoomTo(scale * 1.2)}><Plus size={15} strokeWidth={2} aria-hidden /></button>
         <button className={`ws-tb-btn${fitMode ? " active" : ""}`} title="Fit width"
-          onClick={() => setFitMode(true)}>⇔</button>
+          onClick={() => setFitMode(true)}><ChevronsLeftRight size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-tb-sep" />
         <button className={`ws-tb-btn${searchOpen ? " active" : ""}`} title="Search in PDF"
           onClick={() => { setSearchOpen((o) => !o); setOutlineOpen(false); }}><Search size={15} strokeWidth={2} aria-hidden /></button>
         <button className={`ws-tb-btn${outlineOpen ? " active" : ""}`} title="Outline"
           disabled={outline.length === 0}
-          onClick={() => { setOutlineOpen((o) => !o); setSearchOpen(false); }}>☰</button>
+          onClick={() => { setOutlineOpen((o) => !o); setSearchOpen(false); }}><ListTree size={15} strokeWidth={2} aria-hidden /></button>
         <button className={`ws-tb-btn${clipMode ? " active" : ""}`} title="Clip a region"
           onClick={() => { setClipMode((m) => !m); setClipRect(null); }}><Scissors size={15} strokeWidth={2} aria-hidden /></button>
       </div>

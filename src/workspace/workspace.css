@@ -67,12 +67,58 @@
 .ws-boot {
   position: fixed;
   inset: 0;
+  z-index: 200;
   display: grid;
   place-items: center;
   font-family: var(--ws-font-ui);
   color: var(--ws-ink-muted);
   background: var(--ws-paper);
   letter-spacing: 0.02em;
+  transition: opacity 0.45s ease;
+}
+.ws-boot-leave {
+  opacity: 0;
+  pointer-events: none;
+}
+.ws-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  /* Nudge above true center — reads as centered once the tag line lands. */
+  transform: translateY(-4vh);
+}
+.ws-boot-mark {
+  animation: ws-boot-pop 0.65s cubic-bezier(0.34, 1.4, 0.5, 1) both;
+}
+.ws-boot-word {
+  font-family: var(--ws-font-display);
+  font-weight: 600;
+  font-size: 34px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin: 0;
+  color: var(--ws-ink);
+  animation: ws-boot-rise 0.55s ease 0.25s both;
+}
+.ws-boot-tag {
+  font-size: 13px;
+  animation: ws-boot-rise 0.55s ease 0.5s both;
+}
+@keyframes ws-boot-pop {
+  from { transform: scale(0.55); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes ws-boot-rise {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-boot { transition-duration: 0.2s; }
+  .ws-boot-mark,
+  .ws-boot-word,
+  .ws-boot-tag { animation: none; }
 }
 
 /* ── Sidebar (light grey, one family with the canvas + library) ──────────── */
@@ -375,6 +421,10 @@
   padding: 0 11px 6px;
   color: var(--ws-ink);
   cursor: grab;
+  /* Long quote titles (highlight cards) truncate on short cards instead of
+     spilling over the footer divisions below. */
+  min-height: 0;
+  overflow: hidden;
 }
 .ws-card-body {
   padding: 0 11px 11px;
@@ -396,8 +446,10 @@
 .ws-card-source {
   font-size: 10.5px;
   color: var(--ws-ink-faint);
-  padding: 0 11px 9px;
+  padding: 4px 11px 9px;
   margin-top: auto;
+  /* Independent footer division: never squeezed by tall content above. */
+  flex: none;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -665,6 +717,28 @@
 }
 .ws-lib-tile:hover { border-color: var(--ws-line-strong); }
 .ws-lib-tile:active { cursor: grabbing; }
+.ws-lib-tile.selected { border-color: var(--ws-accent); box-shadow: 0 0 0 1px var(--ws-accent); }
+.ws-lib-menu-btn {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  opacity: 0;
+  cursor: pointer;
+  color: var(--ws-ink-faint);
+  padding: 0 2px;
+  border-radius: 5px;
+}
+.ws-lib-tile:hover .ws-lib-menu-btn { opacity: 1; }
+.ws-lib-menu-btn:hover { background: rgba(0,0,0,0.06); color: var(--ws-ink); }
+.ws-lib-rename {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  border-bottom: 1px solid var(--ws-accent);
+}
 .ws-lib-accent {
   position: absolute;
   left: 0; top: 0; bottom: 0;
@@ -895,7 +969,7 @@
   animation: ws-fade 0.12s ease;
 }
 .ws-cmdk {
-  width: min(620px, 92vw);
+  width: min(860px, 94vw);
   height: fit-content;
   max-height: 64vh;
   background: var(--ws-card);
@@ -923,7 +997,60 @@
   color: var(--ws-ink);
 }
 .ws-cmdk input::placeholder { color: var(--ws-ink-faint); }
-.ws-cmdk-results { overflow-y: auto; padding: 6px; }
+/* Results + preview side by side; each scrolls on its own. */
+.ws-cmdk-body { display: flex; min-height: 0; }
+.ws-cmdk-results { overflow-y: auto; padding: 6px; flex: 1 1 55%; min-width: 0; }
+.ws-cmdk-preview {
+  flex: 1 1 45%;
+  min-width: 0;
+  border-left: 1px solid var(--ws-line);
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.ws-cmdk-prev-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.ws-cmdk-prev-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-cmdk-prev-kind {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ws-ink-faint);
+}
+.ws-cmdk-prev-loc { font-size: 11px; color: var(--ws-ink-muted); margin: 4px 0 10px; }
+.ws-cmdk-prev-img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--ws-line);
+  border-radius: 7px;
+  margin-bottom: 10px;
+}
+.ws-cmdk-prev-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ws-ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ws-cmdk-prev-body.quote { border-left: 3px solid var(--ws-line); padding-left: 10px; }
+.ws-cmdk-prev-body mark {
+  background: rgba(255, 213, 79, 0.55);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.ws-cmdk-prev-note { margin-top: 8px; font-size: 12px; color: var(--ws-ink-muted); }
+.ws-cmdk-prev-none { color: var(--ws-ink-faint); font-size: 13px; }
+.ws-cmdk-prev-tags { margin-top: 10px; font-size: 11px; color: var(--ws-ink-muted); }
+@media (max-width: 720px) {
+  .ws-cmdk-preview { display: none; }
+}
 .ws-cmdk-item {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 13px; border-radius: 9px; cursor: pointer;
@@ -1783,6 +1910,23 @@
   padding: 4px 12px 8px;
   font: 500 12.5px var(--ws-font-ui);
   color: var(--ws-ink-soft);
+  /* Independent footer division (same pattern as .ws-card-source): pinned to
+     the card bottom, never clipped by a short card. */
+  flex: none;
+  margin-top: auto;
+}
+/* The cover scales down to the space left over, instead of keeping its
+   natural height and pushing the meta footer out of the clip box. */
+.ws-card-pdfcover {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-card-pdfcover .ws-card-img {
+  height: 100%;
+  object-fit: contain;
 }
 .ws-card-pdfhint { font-size: 10.5px; color: var(--ws-ink-muted); }
 
@@ -1934,3 +2078,25 @@
   color: var(--ws-ink);
   box-shadow: var(--ws-shadow-sm);
 }
+
+/* ---- the "Ö" brand mark (design turn 8) ---- */
+.ws-mark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.ws-mark-eyes { display: flex; }
+.ws-mark-eyes.animate { animation: om-blink 3.2s infinite; }
+.ws-mark-mouthbox { display: flex; align-items: center; }
+.ws-mark-mouth {
+  font-family: var(--ws-font-display);
+  font-weight: 600;
+  line-height: 0.8;
+  display: block;
+}
+.ws-mark-mouth.animate { animation: om-mouth 3.2s ease-in-out infinite; }
+@keyframes om-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
+@keyframes om-mouth { 0%, 55%, 100% { transform: scaleY(1); } 70%, 82% { transform: scaleY(1.28); } }
+.ws-brand { display: flex; align-items: center; gap: 10px; }

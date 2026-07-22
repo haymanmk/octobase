@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Plug, Plus, Search, Settings, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Pencil, Plug, Plus, Search, Settings, Sparkles, Trash2 } from "lucide-react";
 import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
@@ -29,7 +29,7 @@ import {
 } from "./viewer-layout.ts";
 import { HIGHLIGHT_COLORS } from "../types/highlight.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
-import type { HighlightColor } from "../lib/model/types.ts";
+import type { HighlightColor, PdfCard } from "../lib/model/types.ts";
 
 interface ContextMenuState {
   cardId: string;
@@ -267,6 +267,20 @@ function WorkspaceInner(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBoardId]);
 
+  // Covers for PDFs imported before covers existed only backfilled when the
+  // PDF was opened — render them at startup instead, one at a time (each
+  // render loads the whole document).
+  React.useEffect(() => {
+    const stale = store
+      .getCards()
+      .filter((c): c is PdfCard => c.kind === "pdf" && !c.cover);
+    if (stale.length === 0) return;
+    void import("./pdf-cover.ts").then(async ({ ensurePdfCover }) => {
+      for (const card of stale) await ensurePdfCover(card, store);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const board = store.getWhiteboard(activeBoardId);
 
   // ---- viewer tabs ----------------------------------------------------------
@@ -321,8 +335,10 @@ function WorkspaceInner(): React.ReactElement {
       pages = (await loadPdf(pdfUrl(imp.file))).numPages;
     } catch { /* unreadable — keep 0; the reader will surface the error */ }
     const card = store.createPdfCard({ title: imp.name, file: imp.file, pages });
-    // Parse the full text in the background so the AI has it ready.
+    // Parse the full text in the background so the AI has it ready, and
+    // render the first page as the card's cover.
     void import("./pdf-text-cache.ts").then(({ ensurePdfText }) => ensurePdfText(card));
+    void import("./pdf-cover.ts").then(({ ensurePdfCover }) => ensurePdfCover(card, store));
     return card;
   };
 
@@ -412,6 +428,47 @@ function WorkspaceInner(): React.ReactElement {
     canvasRef.current?.centerOn({ x: placed.x, y: placed.y, w: placed.w, h: placed.h });
   };
 
+  // A board switch remounts the Canvas (keyed by board id), so a jump onto
+  // another board lands in this effect once the new canvas is up.
+  const [pendingJump, setPendingJump] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!pendingJump || !activeBoardId) return;
+    const p = store.getPlacements(activeBoardId).find((pl) => pl.cardId === pendingJump);
+    setPendingJump(null);
+    if (!p) return;
+    expandGroupOf(pendingJump);
+    selectOne(pendingJump);
+    canvasRef.current?.centerOn(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingJump, activeBoardId]);
+
+  /**
+   * ⌘K Enter: jump to where the card lives instead of re-placing it.
+   * Readable cards open their source at the right spot; board-dwelling cards
+   * pan the canvas to their placement (switching boards when needed).
+   */
+  const jumpToCard = (cardId: string) => {
+    const card = store.getCard(cardId);
+    if (!card) return;
+    if (canRead(cardId)) { readCard(cardId); return; }
+    const here = activeBoardId
+      ? store.getPlacements(activeBoardId).find((p) => p.cardId === cardId)
+      : undefined;
+    if (here) {
+      expandGroupOf(cardId);
+      selectOne(cardId);
+      canvasRef.current?.centerOn(here);
+      return;
+    }
+    const elsewhere = store.snapshot().placements.find((p) => p.cardId === cardId);
+    if (elsewhere) {
+      setActiveBoardId(elsewhere.whiteboardId);
+      setPendingJump(cardId);
+      return;
+    }
+    showToast({ message: `“${card.title || "Untitled"}” isn’t on any board — drag it out of the Library` });
+  };
+
   const readCard = (cardId: string) => {
     const card = store.getCard(cardId);
     if (!card) return;
@@ -463,7 +520,7 @@ function WorkspaceInner(): React.ReactElement {
   const canRead = (cardId: string): boolean => {
     const c = store.getCard(cardId);
     if (!c) return false;
-    if (c.kind === "highlight" || c.kind === "article") return true;
+    if (c.kind === "highlight" || c.kind === "article" || c.kind === "pdf") return true;
     if (c.kind !== "image") return false;
     // PDF clips open the PDF at their frame; web clips trace back to the page.
     return (c.sourceUrl.startsWith("pdf:") && !!c.clip) || /^https?:/.test(c.sourceUrl);
@@ -590,7 +647,15 @@ function WorkspaceInner(): React.ReactElement {
       )}
 
       {libraryOpen && (
-        <LibraryPanel onOpenCard={openCard} onClose={() => setLibraryOpen(false)} />
+        <LibraryPanel
+          canRead={canRead}
+          onRead={readCard}
+          onAskAi={getAiBridge()
+            ? (id) => { readCard(id); setChatNonce({ at: Date.now() }); }
+            : undefined}
+          onDelete={deleteCard}
+          onClose={() => setLibraryOpen(false)}
+        />
       )}
 
       <main className="ws-main">
@@ -765,7 +830,7 @@ function WorkspaceInner(): React.ReactElement {
           onClose={() => setCmdk({ open: false })}
           onPick={(card) => {
             setCmdk({ open: false });
-            openCard(card.id);
+            jumpToCard(card.id);
           }}
         />
       )}
@@ -788,6 +853,11 @@ function WorkspaceInner(): React.ReactElement {
               setCtx(null);
             }}>
               <span className="ws-ctx-ico"><Sparkles size={13} strokeWidth={2} aria-hidden /></span> Ask AI
+            </div>
+          )}
+          {store.getCard(ctx.cardId)?.kind !== "note" && (
+            <div className="ws-ctx-item" onClick={() => { selectOne(ctx.cardId); setEditingCardId(ctx.cardId); setCtx(null); }}>
+              <span className="ws-ctx-ico"><Pencil size={13} strokeWidth={2} aria-hidden /></span> Rename
             </div>
           )}
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>

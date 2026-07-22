@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight, Frame, Library, Plus, Search, X } from "lucide-react";
+import { BrandMark } from "./BrandMark.tsx";
 import { useWorkspace } from "./store-context.ts";
 
 export interface SidebarProps {
@@ -73,6 +74,7 @@ export function Sidebar({
   return (
     <aside className="ws-sidebar">
       <div className="ws-brand">
+        <BrandMark variant="light" size={32} />
         <h1>octo<span className="ws-brand-dot">·</span>base</h1>
       </div>
 
