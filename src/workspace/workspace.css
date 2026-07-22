@@ -435,7 +435,7 @@
   flex: 1;
   min-height: 0;
 }
-.ws-card-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 11px 10px; }
+.ws-card-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 11px 10px; }
 .ws-card-tag {
   font-size: 10px;
   padding: 2px 7px;
@@ -443,6 +443,66 @@
   background: var(--ws-paper-2);
   color: var(--ws-ink-soft);
 }
+
+/* tag editor (chip input inside the "Edit tags" modal) */
+.ws-tag-editor { padding: 0; }
+.ws-tag-wrap {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 22px;
+  padding: 5px 7px;
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  border-radius: 8px;
+}
+.ws-tag-wrap:focus-within { border-color: var(--ws-accent-soft); }
+.ws-tag-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ws-tag-chip-x { cursor: pointer; opacity: 0.55; }
+.ws-tag-chip-x:hover { opacity: 1; }
+.ws-tag-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ws-ink);
+  min-width: 70px;
+  flex: 1;
+}
+.ws-tag-input::placeholder { color: var(--ws-ink-muted); }
+.ws-tag-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  border-radius: 8px;
+  box-shadow: var(--ws-shadow-md);
+  max-height: 160px;
+  overflow-y: auto;
+  min-width: 140px;
+  z-index: 20;
+}
+.ws-tag-suggest {
+  padding: 4px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ws-ink);
+}
+.ws-tag-suggest.active,
+.ws-tag-suggest:hover { background: var(--ws-accent-soft); }
 .ws-card-source {
   font-size: 10.5px;
   color: var(--ws-ink-faint);
@@ -817,6 +877,115 @@
 .ws-md code { font-family: var(--ws-font-mono); font-size: 0.86em; background: var(--ws-paper-2); padding: 1px 4px; border-radius: 4px; }
 .ws-md pre { background: #29292c; color: #ececee; padding: 10px 12px; border-radius: 8px; overflow: auto; }
 .ws-md pre code { background: none; color: inherit; padding: 0; }
+
+/* Syntax highlighting (hljs token classes, emitted by rehype-highlight in
+   views and lowlight in the editor). One palette, tuned for the dark chip —
+   the pre background is #29292c in both app themes. One-Dark-ish hues. */
+.ws-md pre .hljs-comment,
+.ws-md pre .hljs-quote { color: #7f848e; font-style: italic; }
+.ws-md pre .hljs-keyword,
+.ws-md pre .hljs-selector-tag,
+.ws-md pre .hljs-operator { color: #c678dd; }
+.ws-md pre .hljs-string,
+.ws-md pre .hljs-regexp,
+.ws-md pre .hljs-addition { color: #98c379; }
+.ws-md pre .hljs-number,
+.ws-md pre .hljs-literal,
+.ws-md pre .hljs-symbol,
+.ws-md pre .hljs-bullet { color: #d19a66; }
+.ws-md pre .hljs-title,
+.ws-md pre .hljs-title.function_,
+.ws-md pre .hljs-section { color: #61afef; }
+.ws-md pre .hljs-title.class_,
+.ws-md pre .hljs-type,
+.ws-md pre .hljs-built_in { color: #e5c07b; }
+.ws-md pre .hljs-attr,
+.ws-md pre .hljs-attribute,
+.ws-md pre .hljs-variable,
+.ws-md pre .hljs-template-variable,
+.ws-md pre .hljs-name,
+.ws-md pre .hljs-selector-class,
+.ws-md pre .hljs-selector-id,
+.ws-md pre .hljs-tag { color: #e06c75; }
+.ws-md pre .hljs-meta,
+.ws-md pre .hljs-link { color: #56b6c2; }
+.ws-md pre .hljs-deletion { color: #e06c75; }
+.ws-md pre .hljs-emphasis { font-style: italic; }
+.ws-md pre .hljs-strong { font-weight: 600; }
+
+/* Editor code block node view: language picker in the chip's top-right.
+   Colors are fixed light-on-dark to match the chip, not theme tokens. */
+.ws-codeblock { position: relative; }
+.ws-codeblock-lang {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  max-width: 40%;
+  font: 500 10.5px var(--ws-font-ui);
+  color: #a3a3a8;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 1px 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.ws-codeblock:hover .ws-codeblock-lang,
+.ws-codeblock-lang:focus,
+.ws-codeblock:focus-within .ws-codeblock-lang { opacity: 1; }
+
+/* Block gutter (⋮⋮ drag / click-menu) floated left of the hovered block. */
+.ws-block-handles {
+  display: flex;
+  align-items: center;
+}
+.ws-block-handle-wrap { position: relative; }
+.ws-block-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--ws-card);
+  border: 1px solid var(--ws-line);
+  border-radius: 8px;
+  box-shadow: var(--ws-shadow-md);
+}
+.ws-block-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font: 500 12px var(--ws-font-ui);
+  color: var(--ws-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ws-block-menu-item:hover { background: var(--ws-paper-2); }
+.ws-block-menu-item.danger { color: var(--ws-danger); }
+.ws-block-handle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ws-ink-muted);
+  cursor: pointer;
+}
+.ws-block-handle-btn:hover {
+  background: var(--ws-paper-2);
+  color: var(--ws-ink-soft);
+}
+.ws-block-grip { cursor: grab; }
+.ws-block-grip:active { cursor: grabbing; }
 .ws-md blockquote { margin: 0.5em 0; padding-left: 12px; border-left: 3px solid var(--ws-accent-soft); color: var(--ws-ink-soft); font-style: italic; }
 .ws-md a { color: var(--ws-accent); text-decoration: underline; text-underline-offset: 2px; }
 .ws-md hr { border: none; border-top: 1px solid var(--ws-line); margin: 0.8em 0; }
@@ -1083,6 +1252,61 @@
 .ws-toast button { all: unset; cursor: pointer; color: var(--ws-accent-soft); font-weight: 600; }
 
 /* ── Reader (fills its viewer-pane tab — not a modal) ────────────────────── */
+/* pane note editor (Open in editor on a note card) */
+.ws-note-editor {
+  position: absolute;
+  inset: 0;
+  background: var(--ws-paper);
+  display: flex;
+  flex-direction: column;
+}
+.ws-note-editor-bar {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ws-line);
+}
+.ws-note-editor-title {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: 600 14px var(--ws-font-ui);
+  color: var(--ws-ink);
+}
+.ws-note-editor-title::placeholder { color: var(--ws-ink-muted); }
+.ws-note-editor-scroll {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.ws-note-editor-doc {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 24px 96px;
+}
+/* The TipTap surface reuses the card editor classes; give it room to click. */
+.ws-note-editor-doc .ws-card-md-edit { min-height: 60vh; }
+.ws-note-editor-source {
+  flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 24px 96px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font: 400 13px/1.65 var(--ws-font-mono);
+  color: var(--ws-ink);
+}
+
 .ws-reader-pane {
   position: absolute;
   inset: 0;
@@ -1466,6 +1690,10 @@
   color: var(--ws-ink-soft);
   caret-color: var(--ws-accent);
   padding-right: 2px;
+  /* Reserved gutter: the ⋮⋮ block handle (20px + 4px offset) floats inside
+     this padding, so travelling to it never leaves the editor box (the
+     drag-handle plugin hides the popup on the editor's mouseleave). */
+  padding-left: 28px;
 }
 .ws-card-md-edit p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
@@ -1485,8 +1713,10 @@
 }
 .ws-card-md-edit ul[data-type="taskList"] li > label { flex: none; }
 .ws-card-md-edit ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+/* No background/color here: the surface also carries .ws-md, whose pre rule
+   supplies the dark chip + light text pair. Overriding only the background
+   once left near-white text on the light theme's paper-2 (invisible code). */
 .ws-card-md-edit pre {
-  background: var(--ws-paper-2);
   border-radius: 6px;
   padding: 6px 8px;
   font-family: var(--ws-font-mono);

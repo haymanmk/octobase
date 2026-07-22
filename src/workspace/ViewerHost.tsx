@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, FileText, Globe, RotateCw, Scissors, Sparkles, X } from "lucide-react";
+import { BookOpen, FileText, Globe, RotateCw, Scissors, Sparkles, StickyNote, X } from "lucide-react";
 import {
   getAiBridge,
   getClipBridge,
@@ -10,6 +10,7 @@ import {
 import { BROWSER_TAB } from "./viewer-layout.ts";
 import { Reader } from "./reader/Reader.tsx";
 import { PdfReader } from "./reader/PdfReader.tsx";
+import { NoteEditorTab } from "./NoteEditorTab.tsx";
 import { ChatDrawer } from "./ChatDrawer.tsx";
 import { useWorkspace } from "./store-context.ts";
 
@@ -194,7 +195,7 @@ export function ViewerHost({
               title={t.title}
               onClick={() => onSelectTab(t.cardId)}
             >
-              <span className="ws-vtab-ico">{t.kind === "pdf" ? <FileText size={15} strokeWidth={2} aria-hidden /> : <BookOpen size={15} strokeWidth={2} aria-hidden />}</span>
+              <span className="ws-vtab-ico">{t.kind === "pdf" ? <FileText size={15} strokeWidth={2} aria-hidden /> : t.kind === "note" ? <StickyNote size={15} strokeWidth={2} aria-hidden /> : <BookOpen size={15} strokeWidth={2} aria-hidden />}</span>
               <span className="ws-vtab-label">{t.title}</span>
               <span
                 className="ws-vtab-close"
@@ -256,19 +257,24 @@ export function ViewerHost({
         {browserActive && bridge && suspended && (
           <div className="ws-viewer-placeholder">{browserTitle}</div>
         )}
-        {!browserActive && (
-          readerTabs.find((t) => t.cardId === activeTab)?.kind === "pdf" ? (
-            <PdfReader key={activeTab} cardId={activeTab}
+        {!browserActive && (() => {
+          const kind = readerTabs.find((t) => t.cardId === activeTab)?.kind;
+          if (kind === "pdf") {
+            return <PdfReader key={activeTab} cardId={activeTab}
               focusHighlight={focusHighlight}
               focusClip={focusClip}
-              onDropHighlight={onDropHighlight} />
-          ) : (
-            <Reader key={activeTab} cardId={activeTab} onOpenCard={onOpenCard}
-              onOpenOriginal={openOriginal}
-              focusHighlight={focusHighlight}
-              onDropHighlight={onDropHighlight} />
-          )
-        )}
+              onDropHighlight={onDropHighlight} />;
+          }
+          if (kind === "note") {
+            // Keyed per card: switching tabs remounts (reseeding the editor)
+            // and the unmount flushes the previous tab's in-flight draft.
+            return <NoteEditorTab key={activeTab} cardId={activeTab} />;
+          }
+          return <Reader key={activeTab} cardId={activeTab} onOpenCard={onOpenCard}
+            onOpenOriginal={openOriginal}
+            focusHighlight={focusHighlight}
+            onDropHighlight={onDropHighlight} />;
+        })()}
       </div>
 
       {chatOpen && activeCard && (

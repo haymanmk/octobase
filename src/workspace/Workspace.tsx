@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Pencil, Plug, Plus, Search, Settings, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Pencil, Plug, Plus, Search, Settings, Sparkles, Tag, Trash2 } from "lucide-react";
 import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
 import { useWorkspace } from "./store-context.ts";
@@ -12,6 +12,7 @@ import { CommandPalette } from "./CommandPalette.tsx";
 import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { AiSettings } from "./AiSettings.tsx";
 import { AppSettings } from "./AppSettings.tsx";
+import { TagModal } from "./TagModal.tsx";
 import { applyTheme, loadThemePref, resolveTheme, saveThemePref, type ThemePref } from "./theme.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
 import { imageFileOf, savePastedImage } from "./image-paste.ts";
@@ -68,6 +69,8 @@ function WorkspaceInner(): React.ReactElement {
   const [connectInfo, setConnectInfo] = React.useState<ExtensionInfo | null>(null);
   const [aiSettingsOpen, setAiSettingsOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  /** Card whose tags are being edited in the "Edit tags" modal. */
+  const [tagEditCardId, setTagEditCardId] = React.useState<string | null>(null);
   // Theme: stamp the resolved theme on <html>; "system" tracks the OS live.
   const [themePref, setThemePref] = React.useState<ThemePref>(loadThemePref);
   React.useEffect(() => {
@@ -397,6 +400,15 @@ function WorkspaceInner(): React.ReactElement {
     }
     if (activeBoardId && !store.getPlacements(activeBoardId).some((p) => p.cardId === cardId)) {
       store.placeCard(activeBoardId, cardId, 120, 120);
+    }
+    // The pane editor seeds once and owns its session, so inline edits to the
+    // note it's currently showing would silently diverge. Redirect the edit
+    // gesture to the pane instead. (Inactive/closed tabs are unmounted and
+    // re-seed on activation, so inline editing stays safe for those.)
+    if (card.kind === "note" && viewerOpen && viewer.activeTab === cardId) {
+      openReaderTab(cardId);
+      showToast({ message: "This note is open in the side editor — edit it there" });
+      return;
     }
     if (opts.edit !== false) setEditingCardId(cardId);
   };
@@ -841,6 +853,11 @@ function WorkspaceInner(): React.ReactElement {
           style={{ left: ctx.x, top: ctx.y }}
           onPointerDown={(e) => e.stopPropagation()}
         >
+          {store.getCard(ctx.cardId)?.kind === "note" && (
+            <div className="ws-ctx-item" onClick={() => { openReaderTab(ctx.cardId); setCtx(null); }}>
+              <span className="ws-ctx-ico"><Pencil size={13} strokeWidth={2} aria-hidden /></span> Open in editor
+            </div>
+          )}
           {canRead(ctx.cardId) && (
             <div className="ws-ctx-item" onClick={() => { readCard(ctx.cardId); setCtx(null); }}>
               <span className="ws-ctx-ico"><BookOpen size={13} strokeWidth={2} aria-hidden /></span> Read
@@ -860,6 +877,9 @@ function WorkspaceInner(): React.ReactElement {
               <span className="ws-ctx-ico"><Pencil size={13} strokeWidth={2} aria-hidden /></span> Rename
             </div>
           )}
+          <div className="ws-ctx-item" onClick={() => { setTagEditCardId(ctx.cardId); setCtx(null); }}>
+            <span className="ws-ctx-ico"><Tag size={13} strokeWidth={2} aria-hidden /></span> Edit tags
+          </div>
           <div className="ws-ctx-item" onClick={() => { removeFromBoard(ctx.cardId); setCtx(null); }}>
             <span className="ws-ctx-ico"><CornerUpLeft size={13} strokeWidth={2} aria-hidden /></span> Remove from board
           </div>
@@ -893,6 +913,20 @@ function WorkspaceInner(): React.ReactElement {
           </div>
         </div>
       )}
+
+      {tagEditCardId && (() => {
+        // The card can vanish while the modal is up (e.g. deleted elsewhere).
+        const card = store.getCard(tagEditCardId);
+        if (!card) return null;
+        return (
+          <TagModal
+            card={card}
+            suggestions={store.getAllTags()}
+            onSave={(tags) => store.updateCard(card.id, { tags })}
+            onClose={() => setTagEditCardId(null)}
+          />
+        );
+      })()}
 
       {aiSettingsOpen && <AiSettings onClose={() => setAiSettingsOpen(false)} />}
       {settingsOpen && (

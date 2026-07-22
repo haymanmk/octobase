@@ -1,6 +1,8 @@
 import * as React from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { EditorCodeBlock } from "./code-block.tsx";
+import { BlockHandles } from "./block-handles.tsx";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -54,7 +56,11 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
   const store = useWorkspace();
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // Lowlight replaces the plain code block: same node, live hljs-* token
+      // spans plus a language picker, driven by the fence's language tag
+      // (```c). Serialization is unchanged, so stored markdown is identical.
+      StarterKit.configure({ codeBlock: false }),
+      EditorCodeBlock,
       TaskList,
       TaskItem.configure({ nested: true }),
       CardEmbedNode,
@@ -96,5 +102,10 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
     },
   }, []);
 
-  return <EditorContent editor={editor} />;
+  return (
+    <>
+      {editor && <BlockHandles editor={editor} />}
+      <EditorContent editor={editor} />
+    </>
+  );
 }

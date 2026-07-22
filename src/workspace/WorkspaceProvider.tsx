@@ -5,6 +5,13 @@ import { LocalStoragePersistence } from "../lib/store/persistence.ts";
 import { StoreContext } from "./store-context.ts";
 import { getCaptureBridge } from "./electron-bridge.ts";
 
+/** How long the splash stays up even when the store loads instantly (ms). */
+const SPLASH_HOLD_MS = 3000;
+/** Shortened hold when the OS asks for reduced motion (ms). */
+const SPLASH_HOLD_REDUCED_MS = 300;
+/** Fade-out duration — keep in sync with the ws-boot-leave CSS transition. */
+const SPLASH_FADE_MS = 500;
+
 export function WorkspaceProvider({
   children,
   store: providedStore,
@@ -25,7 +32,10 @@ export function WorkspaceProvider({
     const reduceMotion =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const t = setTimeout(() => setSplashHeld(true), reduceMotion ? 300 : 1500);
+    const t = setTimeout(
+      () => setSplashHeld(true),
+      reduceMotion ? SPLASH_HOLD_REDUCED_MS : SPLASH_HOLD_MS,
+    );
     return () => clearTimeout(t);
   }, []);
 
@@ -36,7 +46,7 @@ export function WorkspaceProvider({
 
   React.useEffect(() => {
     if (splash !== "leave") return;
-    const t = setTimeout(() => setSplash("done"), 500);
+    const t = setTimeout(() => setSplash("done"), SPLASH_FADE_MS);
     return () => clearTimeout(t);
   }, [splash]);
 
