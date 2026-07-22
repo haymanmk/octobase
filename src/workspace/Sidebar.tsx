@@ -102,6 +102,9 @@ export function Sidebar({
                   autoFocus
                   className="ws-rename"
                   value={renameDraft}
+                  // Select-all so typing replaces the placeholder/old name
+                  // (new boards arrive as "Untitled whiteboard").
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setRenameDraft(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onBlur={commitRename}
