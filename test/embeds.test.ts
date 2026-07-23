@@ -34,21 +34,46 @@ test("getChildCards resolves embedded cards in body order, deduped", async () =>
   assert.deepEqual(children.map((c) => c.id), [b.id, a.id]);
 });
 
-test("embedCard appends the embed block and refuses self/duplicates", async () => {
+test("embedCard appends an id|title block and refuses self/duplicates", async () => {
   const store = await freshStore();
   const host = store.createNoteCard({ title: "Host", body: "some notes" });
   const child = store.createNoteCard({ title: "Child" });
+  const block = `![[${child.id}|Child]]`;
   assert.equal(store.embedCard(host.id, child.id), true);
-  assert.equal(store.getCard(host.id)!.body, "some notes\n\n![[Child]]");
+  assert.equal(store.getCard(host.id)!.body, `some notes\n\n${block}`);
   // Duplicate embed is a no-op.
   assert.equal(store.embedCard(host.id, child.id), false);
-  assert.equal(store.getCard(host.id)!.body, "some notes\n\n![[Child]]");
+  assert.equal(store.getCard(host.id)!.body, `some notes\n\n${block}`);
   // Self-embed refused.
   assert.equal(store.embedCard(host.id, host.id), false);
   // Empty body hosts don't get a leading blank line.
   const empty = store.createNoteCard({ title: "Empty" });
   store.embedCard(empty.id, child.id);
-  assert.equal(store.getCard(empty.id)!.body, "![[Child]]");
+  assert.equal(store.getCard(empty.id)!.body, block);
+});
+
+test("embed aliases are sanitized (brackets/pipes/newlines in titles)", async () => {
+  const store = await freshStore();
+  const host = store.createNoteCard({ title: "Host" });
+  const spicy = store.createNoteCard({ title: "GPU[16] | ByteNet\n[18]" });
+  assert.equal(store.embedCard(host.id, spicy.id), true);
+  assert.equal(store.getCard(host.id)!.body, `![[${spicy.id}|GPU16 ByteNet 18]]`);
+  // The sanitized block still resolves back to the card.
+  assert.deepEqual(store.getChildCards(host.id).map((c) => c.id), [spicy.id]);
+});
+
+test("same-titled cards embed as distinct children (id targets)", async () => {
+  const store = await freshStore();
+  const host = store.createNoteCard({ title: "Host" });
+  const a = store.createNoteCard({ title: "Clip — p.1", body: "first" });
+  const b = store.createNoteCard({ title: "Clip — p.1", body: "second" });
+  assert.equal(store.embedCard(host.id, a.id), true);
+  // The twin is a different card — not a duplicate.
+  assert.equal(store.embedCard(host.id, b.id), true);
+  assert.deepEqual(store.getChildCards(host.id).map((c) => c.id), [a.id, b.id]);
+  // removeEmbed strips exactly the addressed twin.
+  assert.equal(store.removeEmbed(host.id, a.id), true);
+  assert.deepEqual(store.getChildCards(host.id).map((c) => c.id), [b.id]);
 });
 
 test("bodies with serializer-escaped wikilinks are repaired on load", async () => {

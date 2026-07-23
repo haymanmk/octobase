@@ -53,7 +53,9 @@ src/workspace/                   React UI
   on `version` change. Do not put `store.getVersion()` inside a dep array
   expression (lint); hoist it to a `const version = store.getVersion()` first.
 - **Wikilinks and embeds** are markdown text. `MarkdownView` rewrites
-  `[[Title]]` to a `wikilink:` URL and `![[Title]]` to an `embed:` image URL
+  `[[Title]]` to a `wikilink:` URL and `![[ref]]`/`![[ref|Title]]` to an
+  `embed:` image URL (the ref is a card id for new embeds, a title for
+  legacy ones — `store.resolveRef` tries id first, then title)
   (`urlTransform` whitelists both schemes), then renders custom spans — a
   resolved depth-0 embed becomes a mini-card, everything else a chip. In the
   editor, embeds are an inert TipTap atom (`card-embed-node.ts`) whose React

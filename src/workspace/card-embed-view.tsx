@@ -10,10 +10,9 @@ import { EmbedBody } from "./MarkdownView.tsx";
  */
 export function CardEmbedView({ node }: NodeViewProps): React.ReactElement {
   const store = useWorkspace();
-  const title = String(node.attrs.target ?? "");
-  const target = store
-    .getCards()
-    .find((c) => c.title.trim().toLowerCase() === title.trim().toLowerCase());
+  const ref = String(node.attrs.target ?? "");
+  const label = String(node.attrs.label ?? "");
+  const target = store.resolveRef(ref);
   return (
     <NodeViewWrapper as="div" className="ws-embed-nodeview" contentEditable={false}>
       {target ? (
@@ -21,7 +20,7 @@ export function CardEmbedView({ node }: NodeViewProps): React.ReactElement {
           <EmbedBody target={target} />
         </span>
       ) : (
-        <span className="ws-embed-chip unresolved">⊞ {title}</span>
+        <span className="ws-embed-chip unresolved">⊞ {label || ref}</span>
       )}
     </NodeViewWrapper>
   );

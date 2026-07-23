@@ -42,8 +42,8 @@ function preprocess(body: string): string {
 /** Markdown body → short plain-text preview (tiles, embed mini-cards). */
 export function snippet(body: string, max = 140): string {
   return body
-    .replace(/!\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, t: string, a?: string) => a ?? t)
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, t: string, a?: string) => a ?? t)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
@@ -84,6 +84,7 @@ export function EmbedBody({ target }: { target: Card }): React.ReactElement {
 /** The nested mini-card an ![[embed]] renders as (depth 0 only). */
 function CardEmbed({
   title,
+  label,
   resolve,
   onOpenCard,
   onCreateLink,
@@ -91,8 +92,11 @@ function CardEmbed({
   hostCardId,
   onEmbedDragOut,
 }: {
+  /** The raw ![[target]] — a card id for new embeds, a title for legacy ones. */
   title: string;
-  resolve?: (title: string) => Card | undefined;
+  /** Human-readable alias (the embedded card's title at insert time). */
+  label?: string;
+  resolve?: (ref: string) => Card | undefined;
   onOpenCard?: (card: Card) => void;
   onCreateLink?: (title: string) => void;
   depth: number;
@@ -100,6 +104,7 @@ function CardEmbed({
   onEmbedDragOut?: (childCard: Card, clientX: number, clientY: number) => void;
 }): React.ReactElement {
   const target = resolve?.(title);
+  const shown = label || title;
   // A completed drag must swallow the click that follows its pointerup.
   const draggedRef = React.useRef(false);
 
@@ -143,14 +148,14 @@ function CardEmbed({
     return (
       <span
         className={`ws-embed-chip${target ? "" : " unresolved"}`}
-        title={target ? `Open “${title}”` : `Create “${title}”`}
+        title={target ? `Open “${target.title}”` : `Create “${shown}”`}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           if (target) onOpenCard?.(target);
-          else onCreateLink?.(title);
+          else onCreateLink?.(shown);
         }}
-      >⊞ {title}</span>
+      >⊞ {target ? target.title : shown}</span>
     );
   }
   return (
@@ -186,6 +191,7 @@ const MdImg: NonNullable<Components["img"]> = ({ src, alt }) => {
     return (
       <CardEmbed
         title={title}
+        label={typeof alt === "string" ? alt : undefined}
         resolve={resolve}
         onOpenCard={onOpenCard}
         onCreateLink={onCreateLink}

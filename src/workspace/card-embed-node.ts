@@ -35,7 +35,8 @@ interface BlockStateLike {
 
 // Targets may span softbreaks — highlight titles keep the full quoted text,
 // newlines included — so match anything but "]"/"|", like the view renderer.
-const EMBED_BLOCK_RE = /^!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\s*$/;
+// The alias (second group) is the card's title for id-form ![[id|title]].
+const EMBED_BLOCK_RE = /^!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]\s*$/;
 
 export const CardEmbedNode = Node.create({
   name: "cardEmbed",
@@ -43,7 +44,7 @@ export const CardEmbedNode = Node.create({
   atom: true,
 
   addAttributes() {
-    return { target: { default: "" } };
+    return { target: { default: "" }, label: { default: "" } };
   },
 
   parseHTML() {
@@ -52,6 +53,7 @@ export const CardEmbedNode = Node.create({
         tag: "div[data-card-embed]",
         getAttrs: (el) => ({
           target: (el as HTMLElement).getAttribute("data-card-embed") ?? "",
+          label: (el as HTMLElement).getAttribute("data-embed-label") ?? "",
         }),
       },
       // Legacy inline form (old clipboard HTML).
@@ -59,6 +61,7 @@ export const CardEmbedNode = Node.create({
         tag: "span[data-card-embed]",
         getAttrs: (el) => ({
           target: (el as HTMLElement).getAttribute("data-card-embed") ?? "",
+          label: (el as HTMLElement).getAttribute("data-embed-label") ?? "",
         }),
       },
     ];
@@ -69,9 +72,10 @@ export const CardEmbedNode = Node.create({
       "div",
       mergeAttributes(HTMLAttributes, {
         "data-card-embed": node.attrs.target,
+        "data-embed-label": node.attrs.label,
         class: "ws-embed-chip",
       }),
-      `⊞ ${node.attrs.target}`,
+      `⊞ ${node.attrs.label || node.attrs.target}`,
     ];
   },
 
@@ -84,9 +88,10 @@ export const CardEmbedNode = Node.create({
       markdown: {
         serialize(
           state: { write: (s: string) => void; closeBlock: (n: unknown) => void },
-          node: { attrs: { target: string } },
+          node: { attrs: { target: string; label: string } },
         ) {
-          state.write(`![[${node.attrs.target}]]`);
+          const { target, label } = node.attrs;
+          state.write(label ? `![[${target}|${label}]]` : `![[${target}]]`);
           state.closeBlock(node);
         },
         parse: {
@@ -109,8 +114,13 @@ export const CardEmbedNode = Node.create({
                   const m = EMBED_BLOCK_RE.exec(content);
                   if (m) {
                     if (!silent) {
-                      const token = state.push("card_embed", "", 0);
+                      const token = state.push("card_embed", "", 0) as {
+                        content: string;
+                        info: string;
+                        map: [number, number];
+                      };
                       token.content = m[1].trim();
+                      token.info = (m[2] ?? "").trim();
                       token.map = [startLine, line + 1];
                     }
                     state.line = line + 1;
@@ -125,10 +135,11 @@ export const CardEmbedNode = Node.create({
               },
             );
             markdownit.renderer.rules.card_embed = (
-              tokens: { content: string }[],
+              tokens: { content: string; info?: string }[],
               idx: number,
             ) =>
-              `<div data-card-embed="${markdownit.utils.escapeHtml(tokens[idx].content)}"></div>`;
+              `<div data-card-embed="${markdownit.utils.escapeHtml(tokens[idx].content)}"` +
+              ` data-embed-label="${markdownit.utils.escapeHtml(tokens[idx].info ?? "")}"></div>`;
           },
         },
       },

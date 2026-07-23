@@ -222,8 +222,7 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
     e.dataTransfer.effectAllowed = "copyMove";
     e.dataTransfer.setData("text/plain", node.textContent || " ");
     if (node.type.name === "cardEmbed") {
-      const title = String(node.attrs.target ?? "").trim().toLowerCase();
-      const target = store.getCards().find((c) => c.title.trim().toLowerCase() === title);
+      const target = store.resolveRef(String(node.attrs.target ?? ""));
       if (target) e.dataTransfer.setData(CARD_DRAG_MIME, target.id);
     }
     if (blockEl) {

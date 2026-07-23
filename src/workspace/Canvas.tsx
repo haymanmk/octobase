@@ -143,8 +143,9 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   }, [store, version]);
 
   const resolve = React.useCallback(
-    (title: string) =>
-      store.getCards().find((c) => c.title.trim().toLowerCase() === title.trim().toLowerCase()),
+    // Card id first (new ![[id|title]] embeds), title fallback (wikilinks
+    // and legacy embeds).
+    (ref: string) => store.resolveRef(ref),
     [store],
   );
 

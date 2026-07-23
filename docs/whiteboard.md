@@ -111,9 +111,12 @@ happens.
 
 While either drag hovers a note, a **drop caret** (`drop-caret.ts`) marks
 the block boundary nearest the pointer; the drop calls
-`store.embedCard(host, child, { at })`, splicing the `![[Child Title]]`
+`store.embedCard(host, child, { at })`, splicing an `![[<id>|<Title>]]`
 block in at that index (blank-line-separated, fence-aware; appended when
-no caret position applies). `MarkdownView` renders a resolved depth-0
+no caret position applies). The id is the resolved target — same-titled
+clips stay distinct and renames don't orphan the embed; the title alias
+keeps raw markdown readable. Legacy `![[Title]]` embeds still resolve by
+title (`store.resolveRef`). `MarkdownView` renders a resolved depth-0
 embed as a **mini-card** (title, image thumb, snippet; click opens the
 card); unresolved targets and embeds-inside-embeds render as plain chips,
 which is also where cycles die. Inside the TipTap editor the block is an

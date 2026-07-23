@@ -867,6 +867,12 @@ export class WorkspaceStore {
     return this.getCards().find((c) => normalizeTitle(c.title) === key);
   }
 
+  /** Resolve a [[ref]]/![[ref]] target: card id first (the unambiguous form
+   *  new embeds write), then title (legacy embeds and wikilinks). */
+  resolveRef(ref: string): Card | undefined {
+    return this.getCard(ref) ?? this.cardByTitle(ref);
+  }
+
   /** [[links]] and ![[embeds]] both create graph relations. */
   private references(body: string) {
     return [...parseWikilinks(body), ...parseEmbeds(body)];
@@ -879,7 +885,7 @@ export class WorkspaceStore {
     const seen = new Set<string>();
     const out: Card[] = [];
     for (const wl of this.references(card.body)) {
-      const target = this.cardByTitle(wl.target);
+      const target = this.resolveRef(wl.target);
       if (target && target.id !== cardId && !seen.has(target.id)) {
         seen.add(target.id);
         out.push(target);
@@ -897,7 +903,9 @@ export class WorkspaceStore {
     for (const other of this.getCards()) {
       if (other.id === cardId) continue;
       const links = this.references(other.body);
-      if (links.some((l) => normalizeTitle(l.target) === key)) out.push(other);
+      if (links.some((l) => l.target === cardId || normalizeTitle(l.target) === key)) {
+        out.push(other);
+      }
     }
     return out;
   }
@@ -911,7 +919,7 @@ export class WorkspaceStore {
     const seen = new Set<string>();
     const out: Card[] = [];
     for (const em of parseEmbeds(card.body)) {
-      const target = this.cardByTitle(em.target);
+      const target = this.resolveRef(em.target);
       if (target && target.id !== cardId && !seen.has(target.id)) {
         seen.add(target.id);
         out.push(target);
@@ -923,19 +931,24 @@ export class WorkspaceStore {
   /**
    * Nest a card: insert an ![[embed]] block into the host's body — before the
    * `at`-th block (blank-line separated, fence-aware) or appended when `at`
-   * is omitted. Returns false on self-embeds, missing cards, or when the
-   * child is already embedded.
+   * is omitted. Written as `![[<id>|<title>]]`: the id resolves unambiguously
+   * (same-titled clips stay distinct, renames don't orphan), the title keeps
+   * the raw markdown readable. Returns false on self-embeds, missing cards,
+   * or when this exact card is already embedded.
    */
   embedCard(hostCardId: string, childCardId: string, opts?: { at?: number }): boolean {
     if (hostCardId === childCardId) return false;
     const host = this.getCard(hostCardId);
     const child = this.getCard(childCardId);
     if (!host || !child) return false;
-    const key = normalizeTitle(child.title);
-    if (parseEmbeds(host.body).some((e) => normalizeTitle(e.target) === key)) {
+    if (parseEmbeds(host.body).some((e) => this.resolveRef(e.target)?.id === childCardId)) {
       return false;
     }
-    const block = `![[${child.title.trim()}]]`;
+    // The alias is only a readable label (the id resolves) — strip the
+    // characters that would break the [[...|...]] syntax and fold the
+    // multi-line quote titles onto one line.
+    const alias = child.title.replace(/[[\]|]/g, "").replace(/\s+/g, " ").trim();
+    const block = alias ? `![[${child.id}|${alias}]]` : `![[${child.id}]]`;
     let body: string;
     if (!host.body.trim()) {
       body = block;
@@ -956,8 +969,7 @@ export class WorkspaceStore {
     const host = this.getCard(hostCardId);
     const child = this.getCard(childCardId);
     if (!host || !child) return false;
-    const key = normalizeTitle(child.title);
-    const em = parseEmbeds(host.body).find((e) => normalizeTitle(e.target) === key);
+    const em = parseEmbeds(host.body).find((e) => this.resolveRef(e.target)?.id === childCardId);
     if (!em) return false;
     const body =
       (host.body.slice(0, em.index) + host.body.slice(em.index + em.raw.length))

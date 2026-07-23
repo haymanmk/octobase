@@ -273,8 +273,7 @@ export function Reader({
     });
   };
 
-  const resolve = (title: string) =>
-    store.getCards().find((c) => c.title.trim().toLowerCase() === title.trim().toLowerCase());
+  const resolve = (ref: string) => store.resolveRef(ref);
 
   const bump = (delta: number) =>
     setPrefs((p) => ({ ...p, scale: Math.min(1.5, Math.max(0.85, +(p.scale + delta).toFixed(2))) }));

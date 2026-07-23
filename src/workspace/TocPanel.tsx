@@ -37,11 +37,15 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
       .filter((e): e is TocEntry => e !== null);
     // Resolve each member's ![[embeds]] to card ids (board members only —
     // buildToc drops non-members anyway, this just keeps the map small).
+    // New embeds carry the card id as their target; legacy ones a title.
+    const memberIds = new Set(entries.map((e) => e.card.id));
     const byTitle = new Map(entries.map((e) => [normalizeTitle(e.card.title), e.card.id]));
     const embeds = new Map<string, string[]>();
     for (const e of entries) {
       const ids = parseEmbeds(e.card.body)
-        .map((em) => byTitle.get(normalizeTitle(em.target)))
+        .map((em) =>
+          memberIds.has(em.target) ? em.target : byTitle.get(normalizeTitle(em.target)),
+        )
         .filter((id): id is string => !!id);
       if (ids.length > 0) embeds.set(e.card.id, ids);
     }
