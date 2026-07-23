@@ -25,7 +25,9 @@ const __dirname = path.dirname(__filename);
 // (octobase-clip://c/<file>). Must be registered before app.whenReady.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'octobase-clip', privileges: { standard: true, secure: true, stream: true } },
-  { scheme: 'octobase-pdf', privileges: { standard: true, secure: true, stream: true } },
+  // pdf.js loads over XHR, and Chromium (Electron ≥ 39.3) rejects XHR/fetch to
+  // schemes not registered as fetch-capable and CORS-enabled.
+  { scheme: 'octobase-pdf', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
 const defaultURL = "https://www.electronjs.org/docs/latest/api/web-contents#contentsexecutejavascriptcode-usergesture";
