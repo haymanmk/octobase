@@ -2,7 +2,7 @@ import * as React from "react";
 import { BookOpen, CornerUpLeft, FileText, Focus, ListTree, MoreHorizontal, PanelLeft, PanelRight, Pencil, Plug, Plus, Search, Settings, Sparkles, Tag, Trash2 } from "lucide-react";
 import "./workspace.css";
 import { WorkspaceProvider } from "./WorkspaceProvider.tsx";
-import { useWorkspace } from "./store-context.ts";
+import { SplashContext, useWorkspace } from "./store-context.ts";
 import { Sidebar } from "./Sidebar.tsx";
 import { LibraryPanel } from "./LibraryPanel.tsx";
 import { TocPanel } from "./TocPanel.tsx";
@@ -112,9 +112,11 @@ function WorkspaceInner(): React.ReactElement {
   }, [tocOpen]);
   const viewerOpen = viewer.open && (viewerAvailable || viewer.readerTabs.length > 0);
   // The native browser view always paints above our DOM, so it must yield
-  // whenever a full-window overlay is up (⌘K palette, extension dialog) or
-  // the divider is mid-drag. Reading and editing are panes now — not overlays.
-  const overlayUp = Boolean(cmdk.open || connectInfo || aiSettingsOpen || settingsOpen);
+  // whenever a full-window overlay is up (boot splash, ⌘K palette, extension
+  // dialog) or the divider is mid-drag. Reading and editing are panes now —
+  // not overlays.
+  const splashUp = React.useContext(SplashContext);
+  const overlayUp = Boolean(splashUp || cmdk.open || connectInfo || aiSettingsOpen || settingsOpen);
   React.useEffect(() => saveViewerLayout(viewer), [viewer]);
   // Re-clamp when the window shrinks or the library opens so the panes can't
   // squeeze out the board.

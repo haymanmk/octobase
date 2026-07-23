@@ -2,7 +2,7 @@ import * as React from "react";
 import { BrandMark } from "./BrandMark.tsx";
 import { WorkspaceStore } from "../lib/store/workspace-store.ts";
 import { LocalStoragePersistence } from "../lib/store/persistence.ts";
-import { StoreContext } from "./store-context.ts";
+import { SplashContext, StoreContext } from "./store-context.ts";
 import { getCaptureBridge } from "./electron-bridge.ts";
 
 /** How long the splash stays up even when the store loads instantly (ms). */
@@ -112,7 +112,9 @@ export function WorkspaceProvider({
 
   return (
     <StoreContext.Provider value={store}>
-      {ready ? children : null}
+      <SplashContext.Provider value={splash !== "done"}>
+        {ready ? children : null}
+      </SplashContext.Provider>
       {splash !== "done" && (
         <div className={splash === "leave" ? "ws-boot ws-boot-leave" : "ws-boot"} aria-hidden={ready}>
           <div className="ws-boot-inner">

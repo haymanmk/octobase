@@ -3,6 +3,13 @@ import { WorkspaceStore } from "../lib/store/workspace-store.ts";
 
 export const StoreContext = React.createContext<WorkspaceStore | null>(null);
 
+/**
+ * True while the boot splash still covers the workspace. The native browser
+ * view paints above the DOM, so anything docking it must stay suspended
+ * until the splash is gone.
+ */
+export const SplashContext = React.createContext(false);
+
 /** Access the store and subscribe to its version so the component re-renders on change. */
 export function useWorkspace(): WorkspaceStore {
   const store = React.useContext(StoreContext);
