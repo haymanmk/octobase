@@ -129,7 +129,14 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
       const box = pm.getBoundingClientRect();
       showCaretLine(box.left, box.width, y);
     };
-    const onDrop = () => hideDropCaret();
+    // In-editor drops are ProseMirror's business alone: without the
+    // stopPropagation, the native drop (now carrying CARD_DRAG_MIME for
+    // embed blocks) bubbles up to the canvas, which would ALSO place the
+    // card on the board — duplicating what stays a block move here.
+    const onDrop = (e: DragEvent) => {
+      e.stopPropagation();
+      hideDropCaret();
+    };
     window.addEventListener("mousemove", onMove);
     scroller.addEventListener("scroll", onScroll);
     pm.addEventListener("dragover", onDragOver);
