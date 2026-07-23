@@ -15,6 +15,7 @@ import { AppSettings } from "./AppSettings.tsx";
 import { TagModal } from "./TagModal.tsx";
 import { applyTheme, loadThemePref, resolveTheme, saveThemePref, type ThemePref } from "./theme.ts";
 import { applyHighlightDrop } from "./drop-highlight.ts";
+import { embedHostAt, insertionIndexAt } from "./drop-caret.ts";
 import { imageFileOf, savePastedImage } from "./image-paste.ts";
 import { ViewerHost, type ViewerTabInfo } from "./ViewerHost.tsx";
 import {
@@ -186,6 +187,18 @@ function WorkspaceInner(): React.ReactElement {
       // Dropping back onto the viewer pane or the divider cancels the drag.
       const under = document.elementFromPoint(d.x, d.y);
       if (under?.closest(".ws-viewer, .ws-divider")) return;
+      // Released over a card → nest the highlight there instead of placing.
+      const host = embedHostAt(d.x, d.y);
+      if (host?.dataset.cardId) {
+        const card = applyHighlightDrop(store, d, null);
+        embedIntoCard(host.dataset.cardId, card.id, {
+          removePlacement: false,
+          at: insertionIndexAt(host, d.y),
+        });
+        const hostCard = store.getCard(host.dataset.cardId);
+        showToast({ message: `Embedded in “${hostCard?.title ?? "card"}”` });
+        return;
+      }
       const canvas = canvasRef.current;
       if (activeBoardId && canvas?.containsPoint(d.x, d.y)) {
         const { x, y } = canvas.screenToWorld(d.x, d.y);
@@ -540,6 +553,17 @@ function WorkspaceInner(): React.ReactElement {
 
   /** A highlight hold-dragged out of the reader was released at (x, y). */
   const dropHighlightFromReader = (hlCardId: string, x: number, y: number) => {
+    // Released over a card → nest at the drop caret instead of placing.
+    const host = embedHostAt(x, y, hlCardId);
+    if (host?.dataset.cardId) {
+      const hostCard = store.getCard(host.dataset.cardId);
+      embedIntoCard(host.dataset.cardId, hlCardId, {
+        removePlacement: false,
+        at: insertionIndexAt(host, y),
+      });
+      showToast({ message: `Embedded in “${hostCard?.title ?? "card"}”` });
+      return;
+    }
     const canvas = canvasRef.current;
     if (!activeBoardId || !canvas?.containsPoint(x, y)) return; // not a board drop
     const { x: wx, y: wy } = canvas.screenToWorld(x, y);
@@ -549,6 +573,30 @@ function WorkspaceInner(): React.ReactElement {
     showToast({ message: `Added “${title}”` });
   };
 
+  /** An ![[embed]] mini-card dragged out of a card's read view was released:
+   *  over another card → move the embed there; over the canvas → un-nest and
+   *  place; anywhere else (or back on its host) → no-op. */
+  const dragEmbedOut = (hostCardId: string, childCardId: string, x: number, y: number) => {
+    const hostEl = embedHostAt(x, y, childCardId);
+    if (hostEl?.dataset.cardId === hostCardId) return; // dropped back home
+    if (hostEl?.dataset.cardId) {
+      if (!store.removeEmbed(hostCardId, childCardId)) return;
+      embedIntoCard(hostEl.dataset.cardId, childCardId, {
+        removePlacement: false,
+        at: insertionIndexAt(hostEl, y),
+      });
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!activeBoardId || !canvas?.containsPoint(x, y)) return;
+    if (!store.removeEmbed(hostCardId, childCardId)) return;
+    const { x: wx, y: wy } = canvas.screenToWorld(x, y);
+    store.placeCard(activeBoardId, childCardId, wx - 130, wy - 20);
+    selectOne(childCardId);
+    const title = store.getCard(childCardId)?.title ?? "card";
+    showToast({ message: `“${title}” moved to the board` });
+  };
+
   /** A card dragged from the sidebar inbox was dropped on the canvas. */
   const dropCardOnCanvas = (cardId: string, wx: number, wy: number) => {
     if (!activeBoardId || !store.getCard(cardId)) return;
@@ -556,16 +604,17 @@ function WorkspaceInner(): React.ReactElement {
     selectOne(cardId);
   };
 
-  /** Nest a card into a note: append an ![[embed]] block to the host body. */
+  /** Nest a card into another card: insert an ![[embed]] block into the host
+   *  body (at the drop caret's block index, or appended). Any kind hosts. */
   const embedIntoCard = (
     hostCardId: string,
     childCardId: string,
-    opts: { removePlacement: boolean },
+    opts: { removePlacement: boolean; at?: number },
   ) => {
     const host = store.getCard(hostCardId);
     const child = store.getCard(childCardId);
-    if (!host || !child || host.kind !== "note") return;
-    const ok = store.embedCard(hostCardId, childCardId);
+    if (!host || !child) return;
+    const ok = store.embedCard(hostCardId, childCardId, { at: opts.at });
     if (!ok) {
       showToast({ message: `Already embedded in “${host.title}”` });
       return;
@@ -770,6 +819,7 @@ function WorkspaceInner(): React.ReactElement {
             onContextMenu={(cardId, x, y) => { setCanvasMenu(null); setCtx({ cardId, x, y }); }}
             onBackgroundContextMenu={(wx, wy, x, y) => { setCtx(null); setCanvasMenu({ wx, wy, x, y }); }}
             onEmbed={embedIntoCard}
+            onUnembed={dragEmbedOut}
           />
         )}
 

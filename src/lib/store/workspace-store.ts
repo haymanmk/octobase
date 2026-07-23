@@ -35,6 +35,27 @@ export interface SearchHit {
   score: number;
 }
 
+/** Split a body into blank-line-separated blocks, keeping fenced code (which
+ *  may contain blank lines) as a single block. */
+export function splitMarkdownBlocks(body: string): string[] {
+  const blocks: string[] = [];
+  let cur: string[] = [];
+  let inFence = false;
+  for (const line of body.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (!inFence && line.trim() === "") {
+      if (cur.length > 0) {
+        blocks.push(cur.join("\n"));
+        cur = [];
+      }
+    } else {
+      cur.push(line);
+    }
+  }
+  if (cur.length > 0) blocks.push(cur.join("\n"));
+  return blocks;
+}
+
 /**
  * The single source of truth for the knowledge base. Holds the workspace in
  * memory, persists through a pluggable backend, derives the link graph and a
@@ -900,10 +921,12 @@ export class WorkspaceStore {
   }
 
   /**
-   * Nest a card: append an ![[embed]] block to the host's body. Returns false
-   * on self-embeds, missing cards, or when the child is already embedded.
+   * Nest a card: insert an ![[embed]] block into the host's body — before the
+   * `at`-th block (blank-line separated, fence-aware) or appended when `at`
+   * is omitted. Returns false on self-embeds, missing cards, or when the
+   * child is already embedded.
    */
-  embedCard(hostCardId: string, childCardId: string): boolean {
+  embedCard(hostCardId: string, childCardId: string, opts?: { at?: number }): boolean {
     if (hostCardId === childCardId) return false;
     const host = this.getCard(hostCardId);
     const child = this.getCard(childCardId);
@@ -913,7 +936,33 @@ export class WorkspaceStore {
       return false;
     }
     const block = `![[${child.title.trim()}]]`;
-    const body = host.body.trim() ? `${host.body.replace(/\s+$/, "")}\n\n${block}` : block;
+    let body: string;
+    if (!host.body.trim()) {
+      body = block;
+    } else if (opts?.at == null) {
+      body = `${host.body.replace(/\s+$/, "")}\n\n${block}`;
+    } else {
+      const blocks = splitMarkdownBlocks(host.body);
+      blocks.splice(Math.max(0, Math.min(blocks.length, opts.at)), 0, block);
+      body = blocks.join("\n\n");
+    }
+    this.updateCard(hostCardId, { body });
+    return true;
+  }
+
+  /** Un-nest: remove the child's ![[embed]] from the host's body (tidying
+   *  the blank lines left behind). Returns false when no embed matched. */
+  removeEmbed(hostCardId: string, childCardId: string): boolean {
+    const host = this.getCard(hostCardId);
+    const child = this.getCard(childCardId);
+    if (!host || !child) return false;
+    const key = normalizeTitle(child.title);
+    const em = parseEmbeds(host.body).find((e) => normalizeTitle(e.target) === key);
+    if (!em) return false;
+    const body =
+      (host.body.slice(0, em.index) + host.body.slice(em.index + em.raw.length))
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
     this.updateCard(hostCardId, { body });
     return true;
   }

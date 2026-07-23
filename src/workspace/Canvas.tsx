@@ -26,7 +26,9 @@ export interface CanvasProps {
   /** Right-click on empty canvas: canvas coords (wx,wy) + screen coords (x,y). */
   onBackgroundContextMenu: (wx: number, wy: number, x: number, y: number) => void;
   /** Nest a card into a note (library-tile drop, or ⌥-release of a card drag). */
-  onEmbed: (hostCardId: string, childCardId: string, opts: { removePlacement: boolean }) => void;
+  onEmbed: (hostCardId: string, childCardId: string, opts: { removePlacement: boolean; at?: number }) => void;
+  /** An embed mini-card was dragged out of a card's read view and released. */
+  onUnembed: (hostCardId: string, childCardId: string, clientX: number, clientY: number) => void;
   /**
    * A reference (embed mini-card / wikilink) inside a card body was clicked.
    * `near` is a world position close to the host card, for placing targets
@@ -49,6 +51,7 @@ export interface CanvasHandle {
 
 export { CARD_DRAG_MIME } from "./dnd.ts";
 import { CARD_DRAG_MIME } from "./dnd.ts";
+import { markCardDropHandled } from "./drop-caret.ts";
 
 interface View {
   tx: number;
@@ -71,6 +74,7 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
   onContextMenu,
   onBackgroundContextMenu,
   onEmbed,
+  onUnembed,
   onOpenRef,
 }: CanvasProps, handleRef): React.ReactElement {
   const store = useWorkspace();
@@ -650,13 +654,19 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
       }}
       onDragOver={(e) => {
         const t = e.dataTransfer.types;
-        if (t.includes(CARD_DRAG_MIME) || t.includes("Files")) e.preventDefault();
+        if (t.includes(CARD_DRAG_MIME) || t.includes("Files")) {
+          e.preventDefault();
+          // "move" tells the drag source (e.g. an embed block's grip) that
+          // the drop was accepted, so it can un-nest on dragend.
+          if (t.includes(CARD_DRAG_MIME)) e.dataTransfer.dropEffect = "move";
+        }
       }}
       onDrop={(e) => {
         const { x, y } = screenToCanvas(e.clientX, e.clientY);
         const id = e.dataTransfer.getData(CARD_DRAG_MIME);
         if (id) {
           e.preventDefault();
+          markCardDropHandled();
           onDropCard(id, x, y);
           return;
         }
@@ -739,8 +749,13 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
               onSelect={(id) => { onSelect(id); setSelectedEdgeId(null); store.bringToFront(p.id); }}
               onStartEdge={startEdgeDrag}
               edgeTarget={card.id === edgeTargetId}
-              onEmbedDrop={(hostId, childId) => onEmbed(hostId, childId, { removePlacement: false })}
-              onAltDropOnCard={(draggedId, hostId) => onEmbed(hostId, draggedId, { removePlacement: true })}
+              onEmbedDrop={(hostId, childId, at) => onEmbed(hostId, childId, { removePlacement: false, at })}
+              onDropOnCard={(draggedId, hostId, at) => {
+                // A multi-selection drag is a group move — never an embed.
+                if (selectedCardIds.length > 1 && selectedCardIds.includes(draggedId)) return;
+                onEmbed(hostId, draggedId, { removePlacement: true, at });
+              }}
+              onEmbedDragOut={onUnembed}
               onMove={(id, x, y) => {
                 // Dragging one card of a multi-selection moves the group.
                 // `placements` is the drag-start snapshot (the handler closure

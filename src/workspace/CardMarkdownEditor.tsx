@@ -1,6 +1,7 @@
 import * as React from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Paragraph from "@tiptap/extension-paragraph";
 import { EditorCodeBlock } from "./code-block.tsx";
 import { BlockHandles } from "./block-handles.tsx";
 import TaskList from "@tiptap/extension-task-list";
@@ -26,6 +27,35 @@ import "katex/dist/katex.min.css";
 const ClipImage = Image.extend({
   renderHTML({ HTMLAttributes }) {
     return ["img", mergeAttributes(HTMLAttributes, { src: resolveClipSrc(HTMLAttributes.src ?? "") })];
+  },
+});
+
+/**
+ * Paragraph whose EMPTY instances survive the markdown round-trip: plain
+ * markdown collapses blank lines, so a deliberately added empty line would
+ * vanish on render. Serialized as `&nbsp;` (which markdown-it decodes back
+ * to a U+00A0-only paragraph), an empty line stays visible in the read view
+ * and reappears as an (effectively) empty paragraph when editing.
+ */
+const PersistentParagraph = Paragraph.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(
+          state: {
+            write: (s: string) => void;
+            renderInline: (n: unknown) => void;
+            closeBlock: (n: unknown) => void;
+          },
+          node: { childCount: number },
+        ) {
+          if (node.childCount === 0) state.write("&nbsp;");
+          else state.renderInline(node);
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
   },
 });
 
@@ -59,7 +89,8 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
       // Lowlight replaces the plain code block: same node, live hljs-* token
       // spans plus a language picker, driven by the fence's language tag
       // (```c). Serialization is unchanged, so stored markdown is identical.
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit.configure({ codeBlock: false, paragraph: false }),
+      PersistentParagraph,
       EditorCodeBlock,
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -102,10 +133,13 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
     },
   }, []);
 
+  // The scroll wrapper (not the ProseMirror element) owns overflow, so the
+  // absolutely-positioned block handle can sit in the gutter and scroll with
+  // the content it annotates.
   return (
-    <>
-      {editor && <BlockHandles editor={editor} />}
+    <div className="ws-card-md-scroll">
       <EditorContent editor={editor} />
-    </>
+      {editor && <BlockHandles editor={editor} />}
+    </div>
   );
 }

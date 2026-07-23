@@ -118,16 +118,17 @@ Transitions:
 - Clicking a swatch calls `applyHighlightFromSelection(color)` which
   serializes the range, applies the Rangy class applier, stamps each
   produced fragment with a shared id + the full selected text, and saves a
-  `Highlight` record. The widget then enters `expanded` mode with that
-  record loaded.
-- Clicking `+ note` before a color is chosen pulses the swatches.
+  `Highlight` record. The widget **stays in `pill` mode** — highlighting is
+  one gesture; `+ note` expands into the tags/notes form only on demand.
+- Clicking `+ note` before a color is chosen pulses the swatches; after a
+  color it enters `expanded` mode with the record loaded.
 - Clicking outside the host element, or pressing Escape, calls
   `reset()` + `hide()`.
 
-`handleTextSelection` ignores the `expanded` branch: once the user has
-committed to a highlight, document selection no longer drives widget
-visibility — otherwise the post-click `removeAllRanges()` would immediately
-hide the form.
+`handleTextSelection` ignores the widget once it owns a highlight
+(`hasHighlight`, or the `expanded` form): document selection no longer
+drives visibility — otherwise the post-click `removeAllRanges()` would
+immediately hide the pill before `+ note` is reachable.
 
 ## Edit panel (existing highlights)
 

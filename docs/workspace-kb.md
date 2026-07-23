@@ -56,8 +56,9 @@ src/workspace/                   React UI
   `[[Title]]` to a `wikilink:` URL and `![[Title]]` to an `embed:` image URL
   (`urlTransform` whitelists both schemes), then renders custom spans — a
   resolved depth-0 embed becomes a mini-card, everything else a chip. In the
-  editor, embeds are an inert TipTap atom (`card-embed-node.ts`) so they
-  survive the round-trip.
+  editor, embeds are an inert TipTap atom (`card-embed-node.ts`) whose React
+  node view (`card-embed-view.tsx`) renders the same mini-card as the read
+  view, so entering edit mode doesn't reflow embeds into chips.
 - **Markdown round-trip**: cards store markdown. TipTap loads it via
   tiptap-markdown and serializes back with `editor.storage.markdown.getMarkdown()`.
 - **The link graph is derived**, not stored — `getBacklinks` /

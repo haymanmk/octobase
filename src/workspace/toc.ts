@@ -1,13 +1,12 @@
 /**
  * Whiteboard table of contents — pure derivation, no store or React.
  *
- * Named groups (frames) claim their member cards first and use the group
- * name as a stable heading. Remaining cards fall back to spatial clusters
- * ("islands"), ordered in reading order and labeled by their anchor card
- * (largest note, falling back to the largest card). Inside either unit, a
- * card ![[embedded]] in another member's body indents under its host.
- * Isolated cards render as bare label-less single-row groups, so a board
- * with no clusters degrades to the flat spatial list.
+ * Named groups (frames) are the only headings: they claim their member
+ * cards and use the group name as a stable, foldable headline. Remaining
+ * cards fall back to spatial clusters ("islands") used purely for reading
+ * order — their rows render flat, never under a headline (a neighbor card's
+ * title is not a hierarchy). Inside either unit, a card ![[embedded]] in
+ * another member's body indents under its host.
  */
 import type { Card, Group, Placement } from "../lib/model/types.ts";
 import { groupOf } from "../lib/model/groups.ts";
@@ -26,7 +25,7 @@ export interface TocRow {
 }
 
 export interface TocGroup {
-  /** Group name for frames, anchor card's title for real clusters, null for isolated cards. */
+  /** Group name for named frames; null for spatial islands and isolated cards. */
   label: string | null;
   /** Jump target when the group header is clicked. */
   anchorCardId: string;
@@ -174,7 +173,7 @@ export function buildToc(
       top: Math.min(...cluster.map((e) => e.placement.y)),
       left: Math.min(...cluster.map((e) => e.placement.x)),
       toGroup: () => ({
-        label: cluster.length > 1 ? anchor.card.title || "Untitled" : null,
+        label: null, // islands order rows; only named frames make headlines
         anchorCardId: anchor.card.id,
         rows: rowsOf(cluster, embeds),
       }),

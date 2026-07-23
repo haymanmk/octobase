@@ -3,7 +3,7 @@ import { useWorkspace } from "./store-context.ts";
 import { parseEmbeds, normalizeTitle } from "../lib/model/wikilinks.ts";
 import { buildToc, filterToc, type TocEntry } from "./toc.ts";
 
-import { X } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { KindIcon } from "./kind-icons.tsx";
 
 export interface TocPanelProps {
@@ -14,14 +14,18 @@ export interface TocPanelProps {
 }
 
 /**
- * Floating table of contents for the active whiteboard: spatial clusters
- * labeled by their anchor card, embedded cards indented under their host,
- * with a title filter. Clicking anything jumps the canvas to the card.
+ * Floating table of contents for the active whiteboard: named frames as
+ * foldable headlines (collapsed by default), loose cards as flat rows in
+ * reading order, embedded cards indented under their host, with a title
+ * filter. Clicking anything jumps the canvas to the card.
  */
 export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.ReactElement {
   const store = useWorkspace();
   const version = store.getVersion();
   const [query, setQuery] = React.useState("");
+  // Groups whose rows are unfolded — only headers show by default; filtering
+  // unfolds everything so matches stay visible.
+  const [openGroups, setOpenGroups] = React.useState<Set<string>>(new Set());
 
   const groups = React.useMemo(() => {
     const entries: TocEntry[] = store
@@ -64,32 +68,51 @@ export function TocPanel({ boardId, onJump, onClose }: TocPanelProps): React.Rea
       />
       <div className="ws-toc-list">
         {shown.length === 0 && <div className="ws-toc-empty">No matching cards</div>}
-        {shown.map((g, gi) => (
-          <React.Fragment key={`${g.anchorCardId}-${gi}`}>
-            {g.label !== null && (
-              <div className="ws-toc-group" onClick={() => onJump(g.anchorCardId)}>
-                {g.groupId && (
-                  <span className="ws-toc-fold" title={g.collapsed ? "Collapsed on the board" : undefined}>
-                    {g.collapsed ? "▸" : "▾"}
-                  </span>
-                )}
-                {g.label}
-                <span className="ws-toc-count">{g.rows.length}</span>
-              </div>
-            )}
-            {g.rows.map((r) => (
-              <div
-                key={r.cardId}
-                className={`ws-toc-item${r.depth === 1 ? " child" : ""}${g.label === null ? " lone" : ""}`}
-                onClick={() => onJump(r.cardId)}
-                title={r.title || "Untitled"}
-              >
-                <span className="ws-toc-glyph"><KindIcon kind={r.kind} size={13} /></span>
-                <span className="ws-toc-label">{r.title || "Untitled"}</span>
-              </div>
-            ))}
-          </React.Fragment>
-        ))}
+        {shown.map((g, gi) => {
+          // Only named frames have headlines and fold; islands render flat.
+          const foldable = !!g.groupId;
+          const open = !foldable || query.trim() !== "" || openGroups.has(g.groupId!);
+          return (
+            <React.Fragment key={`${g.anchorCardId}-${gi}`}>
+              {g.label !== null && (
+                <div className="ws-toc-group" onClick={() => onJump(g.anchorCardId)}>
+                  {foldable && (
+                    <span
+                      className="ws-toc-fold"
+                      title={open ? "Collapse" : "Expand"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(g.groupId!)) next.delete(g.groupId!);
+                          else next.add(g.groupId!);
+                          return next;
+                        });
+                      }}
+                    >
+                      {open
+                        ? <ChevronDown size={14} strokeWidth={2} aria-hidden />
+                        : <ChevronRight size={14} strokeWidth={2} aria-hidden />}
+                    </span>
+                  )}
+                  {g.label}
+                  <span className="ws-toc-count">{g.rows.length}</span>
+                </div>
+              )}
+              {open && g.rows.map((r) => (
+                <div
+                  key={r.cardId}
+                  className={`ws-toc-item${r.depth === 1 ? " child" : ""}${g.label === null ? " lone" : ""}`}
+                  onClick={() => onJump(r.cardId)}
+                  title={r.title || "Untitled"}
+                >
+                  <span className="ws-toc-glyph"><KindIcon kind={r.kind} size={13} /></span>
+                  <span className="ws-toc-label">{r.title || "Untitled"}</span>
+                </div>
+              ))}
+            </React.Fragment>
+          );
+        })}
       </div>
     </aside>
   );

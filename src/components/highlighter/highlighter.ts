@@ -553,6 +553,11 @@ export class HighlighterWidget extends LitElement {
   private currentNotes: string = '';
   private suggestions: string[] = [];
 
+  /** True once this widget owns an applied highlight (pill or form). */
+  get hasHighlight(): boolean {
+    return this.currentId !== null;
+  }
+
   updateWidgetPosition(rect: DOMRect) {
     this.style.position = 'absolute';
     this.style.top = `${rect.bottom + window.scrollY + 10}px`;
@@ -590,7 +595,8 @@ export class HighlighterWidget extends LitElement {
       this.currentTags = [];
       this.currentNotes = '';
       this.suggestions = (await window.electronAPI?.listTags()) ?? [];
-      this.mode = 'expanded';
+      // Stay a pill: highlighting is one gesture. "+ note" expands into the
+      // tags/note form only when asked.
       this.requestUpdate();
     } else {
       await changeHighlightColor(this.currentId, color);
@@ -673,12 +679,12 @@ const handleTextSelection = async (event: MouseEvent) => {
   // Delay to ensure selection is registered
   await new Promise(resolve => setTimeout(resolve, 10));
 
-  // Once the widget has expanded into the edit form, the user has committed
-  // to a highlight and we no longer drive visibility from the document
-  // selection — clicking a swatch clears the selection as a side effect of
-  // applying the highlight, and re-running this handler on the same click
-  // would otherwise hide the form.
-  if (highlighterWidget.mode === 'expanded') return;
+  // Once a highlight exists (pill with a current id, or the expanded form),
+  // the user has committed and we no longer drive visibility from the
+  // document selection — clicking a swatch clears the selection as a side
+  // effect of applying the highlight, and re-running this handler on the
+  // same click would otherwise hide the widget before "+ note" is reachable.
+  if (highlighterWidget.mode === 'expanded' || highlighterWidget.hasHighlight) return;
 
   const selection = window.getSelection();
   const selectedText = selection ? selection.toString() : '';
@@ -715,14 +721,15 @@ const highlighterWidget = new HighlighterWidget();
   // Inject the highlighter widget into shadow DOM
   shadowRoot.appendChild(highlighterWidget);
 
-  // Click outside the widget host while expanded → close + reset.
+  // Click outside the widget host while it owns a highlight (pill after
+  // applying, or the expanded form) → close + reset.
   document.addEventListener('mousedown', (e) => {
     const target = e.target as Node;
     if (
       hostElement &&
       !hostElement.contains(target) &&
       highlighterWidget.visible &&
-      highlighterWidget.mode === 'expanded'
+      (highlighterWidget.mode === 'expanded' || highlighterWidget.hasHighlight)
     ) {
       highlighterWidget.reset();
       highlighterWidget.hide();

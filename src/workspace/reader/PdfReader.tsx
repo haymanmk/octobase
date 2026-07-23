@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight, ChevronsLeftRight, ListTree, Minus, Plus, Scissors, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeftRight, ListTree, Minus, Plus, Scissors, Search } from "lucide-react";
 import { useWorkspace } from "../store-context.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
@@ -24,6 +24,7 @@ import {
   type PDFDocumentProxy,
 } from "./pdf-doc.ts";
 import { findHits, stepHit, type SearchHit } from "./pdf-search.ts";
+import { embedHostAt, hideDropCaret, showDropCaret } from "../drop-caret.ts";
 import { flattenOutline, type FlatOutlineItem } from "./pdf-outline.ts";
 
 export interface PdfReaderProps {
@@ -39,7 +40,13 @@ export interface PdfReaderProps {
 const HOLD_MS = 250;
 const MOVE_CANCEL_PX = 5;
 const PAGE_GAP = 16;
-const FIT_PAD = 32;
+/** Slack left beside the page when fitting to width — kept slim so the page
+ *  runs nearly edge to edge in the pane. */
+const FIT_PAD = 8;
+/** Zoom buttons walk a fixed 10% ladder. */
+const ZOOM_STEP = 0.1;
+
+const clampScale = (s: number): number => Math.max(0.3, Math.min(3, s));
 
 /** A highlight card's body is its note. */
 function noteOfHighlight(card: HighlightCard): string {
@@ -87,7 +94,9 @@ export function PdfReader({
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [baseSizes, setBaseSizes] = React.useState<Array<{ width: number; height: number }>>([]);
   const [scale, setScale] = React.useState(1);
-  const [fitMode, setFitMode] = React.useState(true);
+  // The scale belongs to the user once set: the pane fits the page width once
+  // per document, and pane resizes never rescale (or lose the reading spot).
+  const fittedRef = React.useRef(false);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   // Which pages have a live render at which scale.
   const renderedRef = React.useRef(new Map<number, number>());
@@ -133,6 +142,8 @@ export function PdfReader({
   const pageTextsRef = React.useRef<string[]>([]);
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [outline, setOutline] = React.useState<FlatOutlineItem[]>([]);
+  // Indices (into `outline`) whose children are unfolded — top level only by default.
+  const [outlineExpanded, setOutlineExpanded] = React.useState<Set<number>>(new Set());
   const [clipMode, setClipMode] = React.useState(false);
   const clipDrag = React.useRef<null | { page: number; sx: number; sy: number }>(null);
   const [clipRect, setClipRect] = React.useState<null | { page: number; x: number; y: number; w: number; h: number }>(null);
@@ -176,12 +187,14 @@ export function PdfReader({
     setDoc(null);
     setLoadError(null);
     renderedRef.current.clear();
+    fittedRef.current = false;
     loadPdf(pdfUrl(card.file))
       .then(async (d) => {
         if (gone) return;
         setDoc(d);
         setBaseSizes(await pageBaseSizes(d));
         setOutline(flattenOutline(await d.getOutline()));
+        setOutlineExpanded(new Set());
         // Page texts power search; extract in the background.
         const texts: string[] = [];
         for (let n = 1; n <= d.numPages; n++) {
@@ -195,19 +208,33 @@ export function PdfReader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.file]);
 
-  // Fit-width: track the pane size while fit mode is on.
-  React.useEffect(() => {
+  // Fit the widest page to the pane. One-shot: runs once when a document's
+  // sizes arrive and again from the toolbar's Fit button — never from a
+  // ResizeObserver, so dragging the pane divider keeps scale and position.
+  const fitWidth = React.useCallback(() => {
     const el = scrollRef.current;
-    if (!el || !fitMode || baseSizes.length === 0) return;
-    const fit = () => {
-      const maxW = Math.max(...baseSizes.map((s) => s.width));
-      setScale(Math.max(0.3, Math.min(3, (el.clientWidth - FIT_PAD * 2) / maxW)));
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fitMode, baseSizes]);
+    if (!el || baseSizes.length === 0) return;
+    const maxW = Math.max(...baseSizes.map((s) => s.width));
+    setScale(clampScale((el.clientWidth - FIT_PAD * 2) / maxW));
+  }, [baseSizes]);
+
+  React.useEffect(() => {
+    if (baseSizes.length === 0 || fittedRef.current) return;
+    fittedRef.current = true;
+    fitWidth();
+  }, [baseSizes, fitWidth]);
+
+  // Keep the viewport middle anchored across scale changes (zoom, fit) so
+  // zooming doesn't lose the reading spot. Runs before paint.
+  const prevScaleRef = React.useRef<number | null>(null);
+  React.useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prev = prevScaleRef.current;
+    prevScaleRef.current = scale;
+    if (!el || prev == null || prev === scale) return;
+    const mid = el.scrollTop + el.clientHeight / 2;
+    el.scrollTop = (mid * scale) / prev - el.clientHeight / 2;
+  }, [scale]);
 
   // ---- page rendering (lazy, scale-aware) -----------------------------------
 
@@ -425,12 +452,18 @@ export function PdfReader({
       setSelToolbar(null);
       window.getSelection()?.removeAllRanges();
       setDragGhost({ text: ghost.text, color: ghost.color, x: start.x, y: start.y });
-      const onMove = (me: PointerEvent) =>
+      const onMove = (me: PointerEvent) => {
         setDragGhost((g) => (g ? { ...g, x: me.clientX, y: me.clientY } : g));
+        // Hovering a board card previews the embed insertion point.
+        const host = embedHostAt(me.clientX, me.clientY, cardId);
+        if (host) showDropCaret(host, me.clientY);
+        else hideDropCaret();
+      };
       const onUp = (ue: PointerEvent) => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         setDragGhost(null);
+        hideDropCaret();
         onDropHighlight?.(cardId, ue.clientX, ue.clientY);
         setTimeout(() => { draggedRef.current = false; }, 0);
       };
@@ -520,7 +553,6 @@ export function PdfReader({
 
   const makeHighlight = (color: HighlightColor) => {
     const pending = pendingSel.current;
-    const at = selToolbar;
     setSelToolbar(null);
     window.getSelection()?.removeAllRanges();
     if (!pending || !card) return;
@@ -528,14 +560,15 @@ export function PdfReader({
     if (!textEl) return;
     const anchor = describeAnchorFromRange(textEl, pending.range);
     if (!anchor || !anchor.exact.trim()) return;
-    const created = store.createHighlightCard({
+    // No edit popover here — highlighting stays one gesture; clicking the
+    // highlight opens the tags/note editor when wanted.
+    store.createHighlightCard({
       text: anchor.exact,
       sourceUrl: pdfSourceUrl(card.id),
       anchor,
       color,
       page: pending.page,
     });
-    if (at) setEditPop({ cardId: created.id, x: at.x, y: at.y });
   };
 
   const updateEditCard = (patch: { color?: HighlightColor; note?: string }) => {
@@ -625,10 +658,36 @@ export function PdfReader({
     pageRefs.current.get(clamped)?.scrollIntoView({ block: "start" });
   };
 
-  const zoomTo = (s: number) => {
-    setFitMode(false);
-    setScale(Math.max(0.3, Math.min(3, s)));
+  /** Step to the next/previous notch of the fixed ZOOM_STEP ladder. */
+  const zoomStep = (dir: 1 | -1) => {
+    const notch =
+      dir > 0
+        ? Math.floor(scale / ZOOM_STEP + 1e-4) + 1
+        : Math.ceil(scale / ZOOM_STEP - 1e-4) - 1;
+    setScale(clampScale(notch * ZOOM_STEP));
   };
+
+  const toggleOutlineFold = (index: number) =>
+    setOutlineExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+
+  // Rows visible under the current folds: an item hides while any ancestor
+  // (nearest shallower row above it) is folded. (Plain computation — this
+  // sits below the `!card` early return, where hooks are off-limits.)
+  const visibleOutline: Array<{ item: FlatOutlineItem; index: number }> = [];
+  {
+    let foldedBelow: number | null = null;
+    outline.forEach((item, index) => {
+      if (foldedBelow != null && item.depth > foldedBelow) return;
+      foldedBelow = null;
+      visibleOutline.push({ item, index });
+      if (item.hasChildren && !outlineExpanded.has(index)) foldedBelow = item.depth;
+    });
+  }
 
   const openOutlineItem = async (item: FlatOutlineItem) => {
     if (!doc) return;
@@ -712,11 +771,11 @@ export function PdfReader({
         <span className="ws-pdf-pagecount">/ {baseSizes.length || card.pages}</span>
         <button className="ws-tb-btn" title="Next page" onClick={() => gotoPage(currentPage + 1)}><ChevronRight size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-tb-sep" />
-        <button className="ws-tb-btn" title="Zoom out" onClick={() => zoomTo(scale / 1.2)}><Minus size={15} strokeWidth={2} aria-hidden /></button>
+        <button className="ws-tb-btn" title="Zoom out" onClick={() => zoomStep(-1)}><Minus size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-pdf-zoom">{Math.round(scale * 100)}%</span>
-        <button className="ws-tb-btn" title="Zoom in" onClick={() => zoomTo(scale * 1.2)}><Plus size={15} strokeWidth={2} aria-hidden /></button>
-        <button className={`ws-tb-btn${fitMode ? " active" : ""}`} title="Fit width"
-          onClick={() => setFitMode(true)}><ChevronsLeftRight size={15} strokeWidth={2} aria-hidden /></button>
+        <button className="ws-tb-btn" title="Zoom in" onClick={() => zoomStep(1)}><Plus size={15} strokeWidth={2} aria-hidden /></button>
+        <button className="ws-tb-btn" title="Fit width"
+          onClick={fitWidth}><ChevronsLeftRight size={15} strokeWidth={2} aria-hidden /></button>
         <span className="ws-tb-sep" />
         <button className={`ws-tb-btn${searchOpen ? " active" : ""}`} title="Search in PDF"
           onClick={() => { setSearchOpen((o) => !o); setOutlineOpen(false); }}><Search size={15} strokeWidth={2} aria-hidden /></button>
@@ -747,10 +806,23 @@ export function PdfReader({
 
       {outlineOpen && (
         <div className="ws-pdf-outline">
-          {outline.map((it, i) => (
-            <div key={i} className="ws-pdf-outline-item" style={{ paddingLeft: 10 + it.depth * 14 }}
-              onClick={() => void openOutlineItem(it)}>
-              {it.title}
+          {visibleOutline.map(({ item, index }) => (
+            <div key={index} className="ws-pdf-outline-item" style={{ paddingLeft: 4 + item.depth * 14 }}
+              onClick={() => void openOutlineItem(item)}>
+              {item.hasChildren ? (
+                <span
+                  className="ws-pdf-outline-fold"
+                  title={outlineExpanded.has(index) ? "Collapse" : "Expand"}
+                  onClick={(e) => { e.stopPropagation(); toggleOutlineFold(index); }}
+                >
+                  {outlineExpanded.has(index)
+                    ? <ChevronDown size={14} strokeWidth={2} aria-hidden />
+                    : <ChevronRight size={14} strokeWidth={2} aria-hidden />}
+                </span>
+              ) : (
+                <span className="ws-pdf-outline-fold" aria-hidden="true" />
+              )}
+              <span className="ws-pdf-outline-label">{item.title}</span>
             </div>
           ))}
         </div>

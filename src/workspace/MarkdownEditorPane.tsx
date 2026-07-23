@@ -52,7 +52,16 @@ export function MarkdownEditorPane(props: MarkdownEditorPaneProps): React.ReactE
   };
 
   return (
-    <div className="ws-note-editor">
+    <div
+      className="ws-note-editor"
+      // Same shortcut as the in-card editor: ⌘/ flips WYSIWYG ↔ source.
+      onKeyDown={(e) => {
+        if (e.key === "/" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          toggleMode();
+        }
+      }}
+    >
       <div className="ws-note-editor-bar">
         <input
           className="ws-note-editor-title"

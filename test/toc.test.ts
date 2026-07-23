@@ -46,19 +46,20 @@ test("nearby cards cluster; distant ones form separate groups in reading order",
   const b2 = entry("Idea", 1200, 1120, { h: 100 }); // 60px below b1
   const stray = entry("Stray", 40, 2400);
   const groups = buildToc([b2, stray, a2, b1, a1], new Map());
+  // Islands are flat: they order rows but never make a headline.
   assert.deepEqual(
     groups.map((g) => [g.label, g.rows.length]),
-    [["Paper summary", 2], ["Roadmap", 2], [null, 1]],
+    [[null, 2], [null, 2], [null, 1]],
   );
   // Reading order inside the first cluster: left card first.
   assert.deepEqual(groups[0].rows.map((r) => r.title), ["Paper summary", "Highlight"]);
 });
 
-test("cluster label prefers the largest note over a larger non-note", () => {
+test("island anchor (jump target) prefers the largest note; label stays null", () => {
   const img = entry("Big clip", 0, 0, { kind: "image", w: 600, h: 400 });
   const note = entry("The note", 640, 0, { w: 260, h: 160 });
   const [g] = buildToc([img, note], new Map());
-  assert.equal(g.label, "The note");
+  assert.equal(g.label, null);
   assert.equal(g.anchorCardId, note.card.id);
 });
 
@@ -136,8 +137,15 @@ test("filter keeps structure: matching child retains its host row", () => {
   const hit = filterToc(groups, "beta");
   assert.equal(hit.length, 1);
   assert.deepEqual(hit[0].rows.map((r) => r.title), ["Alpha host", "Beta child"]);
-  // Group-label matches keep the whole island.
-  const byLabel = filterToc(groups, "alpha host");
-  assert.equal(byLabel[0].rows.length, 3);
   assert.deepEqual(filterToc(groups, "zzz"), []);
+});
+
+test("filter on a frame's name keeps the whole group", () => {
+  const inA = entry("First", 20, 20);
+  const inB = entry("Second", 20, 220);
+  const g = frame("Research", 0, 0, 400, 500);
+  const groups = buildToc([inB, inA], new Map(), [g]);
+  const byLabel = filterToc(groups, "research");
+  assert.equal(byLabel.length, 1);
+  assert.equal(byLabel[0].rows.length, 2);
 });

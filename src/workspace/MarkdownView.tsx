@@ -8,6 +8,14 @@ import "katex/dist/katex.min.css";
 import type { Card } from "../lib/model/types.ts";
 import { clipUrl } from "./electron-bridge.ts";
 import { parseClipRef, resolveClipSrc } from "./clip-ref.ts";
+import {
+  embedHostAt,
+  hideDragGhost,
+  hideDropCaret,
+  moveDragGhost,
+  showDragGhost,
+  showDropCaret,
+} from "./drop-caret.ts";
 
 const EMBED_RE = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
@@ -52,6 +60,25 @@ export interface MarkdownViewProps {
   onCreateLink?: (title: string) => void;
   /** Embed nesting depth; embeds inside embeds render as plain chips. */
   depth?: number;
+  /** The card whose body this renders — embeds exclude it as a drag target. */
+  hostCardId?: string;
+  /** An embed mini-card was dragged out of this body and released at (x, y). */
+  onEmbedDragOut?: (childCard: Card, clientX: number, clientY: number) => void;
+}
+
+/** Shared visual body of an ![[embed]] mini-card (read view and the editor's
+ *  node view render the same thing, so entering edit mode doesn't reflow). */
+export function EmbedBody({ target }: { target: Card }): React.ReactElement {
+  const text = snippet(target.body, 120);
+  return (
+    <>
+      <span className="ws-embed-title">{target.title || "Untitled"}</span>
+      {target.kind === "image" && (
+        <img className="ws-embed-img" src={clipUrl(target.image.file)} alt="" draggable={false} />
+      )}
+      {text && <span className="ws-embed-snippet">{text}</span>}
+    </>
+  );
 }
 
 /** The nested mini-card an ![[embed]] renders as (depth 0 only). */
@@ -61,14 +88,55 @@ function CardEmbed({
   onOpenCard,
   onCreateLink,
   depth,
+  hostCardId,
+  onEmbedDragOut,
 }: {
   title: string;
   resolve?: (title: string) => Card | undefined;
   onOpenCard?: (card: Card) => void;
   onCreateLink?: (title: string) => void;
   depth: number;
+  hostCardId?: string;
+  onEmbedDragOut?: (childCard: Card, clientX: number, clientY: number) => void;
 }): React.ReactElement {
   const target = resolve?.(title);
+  // A completed drag must swallow the click that follows its pointerup.
+  const draggedRef = React.useRef(false);
+
+  /** Drag the mini-card out of its host: ghost + caret feedback while the
+   *  pointer roams; release hands the drop point to the workspace. */
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!target || !onEmbedDragOut || e.button !== 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let active = false;
+    const onMove = (me: PointerEvent) => {
+      if (!active) {
+        if (Math.abs(me.clientX - sx) + Math.abs(me.clientY - sy) <= 4) return;
+        active = true;
+        draggedRef.current = true;
+        showDragGhost(target.title || "Untitled");
+      }
+      moveDragGhost(me.clientX, me.clientY);
+      const host = embedHostAt(me.clientX, me.clientY, target.id);
+      if (host && host.dataset.cardId !== hostCardId) showDropCaret(host, me.clientY);
+      else hideDropCaret();
+    };
+    const onUp = (ue: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      hideDragGhost();
+      hideDropCaret();
+      if (active) {
+        onEmbedDragOut(target, ue.clientX, ue.clientY);
+        setTimeout(() => { draggedRef.current = false; }, 0);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   if (!target || depth > 0) {
     // Unresolved or nested-inside-an-embed: a plain chip. Cycles die here too.
     // Clicking an unresolved chip creates the card, like wikilinks do.
@@ -85,19 +153,19 @@ function CardEmbed({
       >⊞ {title}</span>
     );
   }
-  const text = snippet(target.body, 120);
   return (
     <span
       className="ws-embed"
       title={`Open “${target.title}”`}
       onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); onOpenCard?.(target); }}
+      onPointerDown={onPointerDown}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (draggedRef.current) return;
+        onOpenCard?.(target);
+      }}
     >
-      <span className="ws-embed-title">{target.title || "Untitled"}</span>
-      {target.kind === "image" && (
-        <img className="ws-embed-img" src={clipUrl(target.image.file)} alt="" draggable={false} />
-      )}
-      {text && <span className="ws-embed-snippet">{text}</span>}
+      <EmbedBody target={target} />
     </span>
   );
 }
@@ -111,7 +179,8 @@ function CardEmbed({
 const MdContext = React.createContext<Omit<MarkdownViewProps, "body">>({});
 
 const MdImg: NonNullable<Components["img"]> = ({ src, alt }) => {
-  const { resolve, onOpenCard, onCreateLink, depth = 0 } = React.useContext(MdContext);
+  const { resolve, onOpenCard, onCreateLink, depth = 0, hostCardId, onEmbedDragOut } =
+    React.useContext(MdContext);
   if (typeof src === "string" && src.startsWith(EMBED_SCHEME)) {
     const title = decodeURIComponent(src.slice(EMBED_SCHEME.length));
     return (
@@ -121,6 +190,8 @@ const MdImg: NonNullable<Components["img"]> = ({ src, alt }) => {
         onOpenCard={onOpenCard}
         onCreateLink={onCreateLink}
         depth={depth}
+        hostCardId={hostCardId}
+        onEmbedDragOut={onEmbedDragOut}
       />
     );
   }
@@ -164,11 +235,13 @@ export function MarkdownView({
   onOpenCard,
   onCreateLink,
   depth = 0,
+  hostCardId,
+  onEmbedDragOut,
 }: MarkdownViewProps): React.ReactElement {
   const processed = React.useMemo(() => preprocess(body), [body]);
   const ctx = React.useMemo(
-    () => ({ resolve, onOpenCard, onCreateLink, depth }),
-    [resolve, onOpenCard, onCreateLink, depth],
+    () => ({ resolve, onOpenCard, onCreateLink, depth, hostCardId, onEmbedDragOut }),
+    [resolve, onOpenCard, onCreateLink, depth, hostCardId, onEmbedDragOut],
   );
 
   return (

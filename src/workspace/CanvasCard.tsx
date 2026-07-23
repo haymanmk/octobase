@@ -6,6 +6,13 @@ import type { Card, Placement } from "../lib/model/types.ts";
 import type { Side } from "./edge-geometry.ts";
 import { clipUrl } from "./electron-bridge.ts";
 import { CARD_DRAG_MIME } from "./dnd.ts";
+import {
+  embedHostAt,
+  hideDropCaret,
+  insertionIndexAt,
+  markCardDropHandled,
+  showDropCaret,
+} from "./drop-caret.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { CardMarkdownEditor } from "./CardMarkdownEditor.tsx";
@@ -31,10 +38,13 @@ export interface CanvasCardProps {
   onStartEdge: (cardId: string, side: Side, e: React.PointerEvent) => void;
   /** True while an edge drag hovers this card as its drop target. */
   edgeTarget: boolean;
-  /** A card (library tile / ⌥-drag) was dropped onto this note to nest it. */
-  onEmbedDrop: (hostCardId: string, droppedCardId: string) => void;
-  /** A card drag ended over another card with ⌥ held — embed instead of move. */
-  onAltDropOnCard: (draggedCardId: string, hostCardId: string) => void;
+  /** A card (library tile / board drag) was dropped onto this note to nest it —
+   *  `at` is the block index the drop caret pointed at. */
+  onEmbedDrop: (hostCardId: string, droppedCardId: string, at: number) => void;
+  /** A board card drag ended over another note — embed instead of move. */
+  onDropOnCard: (draggedCardId: string, hostCardId: string, at: number) => void;
+  /** An embed mini-card was dragged out of this card's body and released. */
+  onEmbedDragOut: (hostCardId: string, childCardId: string, clientX: number, clientY: number) => void;
 }
 
 const HANDLE_SIDES: Side[] = ["top", "right", "bottom", "left"];
@@ -56,7 +66,10 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   const [dragging, setDragging] = React.useState(false);
   // A library tile (or other card payload) hovering this note for embedding.
   const [embedHover, setEmbedHover] = React.useState(false);
-  const acceptsEmbed = card.kind === "note" && !editing;
+  // Block index the drop caret points at while a drag hovers this note.
+  const dropIdxRef = React.useRef(0);
+  // Every card kind hosts embeds in its body; only an active editor opts out.
+  const acceptsEmbed = !editing;
   const [titleDraft, setTitleDraft] = React.useState(card.title);
   // The WYSIWYG editor streams markdown into this ref on every keystroke;
   // state would re-render the card for no benefit.
@@ -73,7 +86,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   const MAX_AUTO_H = 900;
   const growToFit = React.useCallback(() => {
     requestAnimationFrame(() => {
-      const el = editBoxRef.current?.querySelector(".ws-card-md-edit");
+      const el = editBoxRef.current?.querySelector(".ws-card-md-scroll");
       if (!el) return;
       const overflow = el.scrollHeight - el.clientHeight;
       const p = placementRef.current;
@@ -84,15 +97,33 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Entering edit mode: seed drafts from the card (the editor autofocuses),
-  // and grow immediately if the existing content already overflows.
+  // The in-card editor's two faces: rich WYSIWYG or raw markdown source.
+  const [srcMode, setSrcMode] = React.useState(false);
+
+  // Entering edit mode: seed the body draft synchronously (the editor mounts
+  // this same render, so an effect would hand it a stale draft) and reset to
+  // the rich face.
+  const wasEditing = React.useRef(false);
+  if (editing && !wasEditing.current) {
+    bodyDraft.current = card.body;
+    if (srcMode) setSrcMode(false); // guarded render-time adjust
+  }
+  wasEditing.current = editing;
+
+  // Title seeding + grow-to-fit still run post-render.
   React.useEffect(() => {
     if (!editing) return;
     setTitleDraft(card.title);
-    bodyDraft.current = card.body;
     growToFit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
+
+  // Focus the freshly mounted face after a mode switch (TipTap autofocuses
+  // itself on mount; the source textarea does not).
+  React.useEffect(() => {
+    if (!editing || !srcMode) return;
+    (editBoxRef.current?.querySelector(".ws-card-body-input") as HTMLElement | null)?.focus();
+  }, [srcMode, editing]);
 
   const commitEdit = () => {
     const patch: { title?: string; body?: string } = {};
@@ -113,11 +144,19 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       commitEdit();
       props.onEndEdit();
     }
+    // ⌘/ flips between rich editing and raw markdown source.
+    if (e.key === "/" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      setSrcMode((m) => !m);
+    }
   };
 
   // Commit when focus leaves the card entirely (click on canvas, other card…).
   const onEditBlur = (e: React.FocusEvent) => {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return; // moved between fields
+    // The ⋮⋮ block handle lives in a body-level portal — grabbing or
+    // clicking it must not end the session.
+    if ((e.relatedTarget as HTMLElement | null)?.closest?.(".ws-block-handles")) return;
     commitEdit();
     props.onEndEdit();
   };
@@ -132,6 +171,11 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   // enters edit mode (no double-click needed).
   const wasSelectedAtDown = React.useRef(false);
   const movedRef = React.useRef(false);
+
+  /** The embeddable card under the pointer (excluding this card) during a
+   *  board drag — the embed-drop host. */
+  const embedHostUnder = (me: PointerEvent): HTMLElement | null =>
+    embedHostAt(me.clientX, me.clientY, card.id);
 
   const startDrag = (
     e: React.PointerEvent,
@@ -160,6 +204,10 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       const dy = (me.clientY - sy) / scale;
       if (mode === "move") {
         props.onMove(placement.id, origin.ox + dx, origin.oy + dy);
+        // Hovering another note previews the embed insertion point.
+        const host = embedHostUnder(me);
+        if (host) showDropCaret(host, me.clientY);
+        else hideDropCaret();
       } else {
         props.onResize(
           placement.id,
@@ -172,13 +220,13 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       window.removeEventListener("pointermove", onWinMove);
       window.removeEventListener("pointerup", onWinUp);
       if (active) setDragging(false);
-      // ⌥-release over another card nests instead of moving.
-      if (active && mode === "move" && me.altKey) {
-        const host = document
-          .elementsFromPoint(me.clientX, me.clientY)
-          .map((el) => el.closest?.(".ws-card") as HTMLElement | null)
-          .find((el) => el && el.dataset.cardId !== card.id);
-        if (host?.dataset.cardId) props.onAltDropOnCard(card.id, host.dataset.cardId);
+      hideDropCaret();
+      // Release over another note nests instead of moving (⌥ not required).
+      if (active && mode === "move") {
+        const host = embedHostUnder(me);
+        if (host?.dataset.cardId) {
+          props.onDropOnCard(card.id, host.dataset.cardId, insertionIndexAt(host, me.clientY));
+        }
       }
     };
     window.addEventListener("pointermove", onWinMove);
@@ -201,6 +249,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
     <div
       className={`ws-card${selected ? " selected" : ""}${dragging ? " dragging" : ""}${editing ? " editing" : ""}${props.edgeTarget ? " edge-target" : ""}${embedHover ? " embed-target" : ""}`}
       data-card-id={card.id}
+      data-embeddable={acceptsEmbed ? "true" : undefined}
       style={{ left: placement.x, top: placement.y, width: placement.w, height: placement.h, zIndex: placement.z }}
       onPointerDown={(e) => { if (!editing) beginMove(e); else props.onSelect(card.id); }}
       onClick={(e) => {
@@ -220,17 +269,24 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         if (!acceptsEmbed || !e.dataTransfer.types.includes(CARD_DRAG_MIME)) return;
         e.preventDefault();
         e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        dropIdxRef.current = showDropCaret(e.currentTarget as HTMLElement, e.clientY);
         if (!embedHover) setEmbedHover(true);
       }}
-      onDragLeave={() => setEmbedHover(false)}
+      onDragLeave={() => {
+        hideDropCaret();
+        setEmbedHover(false);
+      }}
       onDrop={(e) => {
         if (!acceptsEmbed) return;
         const id = e.dataTransfer.getData(CARD_DRAG_MIME);
         if (!id) return;
         e.preventDefault();
         e.stopPropagation();
+        markCardDropHandled();
+        hideDropCaret();
         setEmbedHover(false);
-        props.onEmbedDrop(card.id, id);
+        props.onEmbedDrop(card.id, id, dropIdxRef.current);
       }}
     >
       {/* Inner wrapper owns the rounded-corner clipping so the connector
@@ -250,8 +306,11 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
       {editing ? (
         <div ref={editBoxRef} className="ws-card-edit" onBlur={onEditBlur} onKeyDown={onEditKeyDown}
           onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-          <input
+          {/* A textarea so long titles wrap while editing; Enter never inserts
+              a newline — it hops into the body instead. */}
+          <textarea
             className="ws-card-title-input"
+            rows={1}
             value={titleDraft}
             placeholder="Untitled"
             onChange={(e) => setTitleDraft(e.target.value)}
@@ -259,7 +318,7 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
               if (e.key === "Enter") {
                 e.preventDefault();
                 (e.currentTarget.closest(".ws-card-edit")
-                  ?.querySelector(".ws-card-md-edit") as HTMLElement | null)?.focus();
+                  ?.querySelector(".ws-card-md-edit, .ws-card-body-input") as HTMLElement | null)?.focus();
               }
             }}
           />
@@ -273,13 +332,26 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
               />
             </div>
           )}
-          <CardMarkdownEditor
-            value={card.body}
-            cardId={card.id}
-            onChange={(md) => { bodyDraft.current = md; growToFit(); }}
-          />
+          {srcMode ? (
+            <textarea
+              key="src"
+              className="ws-card-body-input"
+              defaultValue={bodyDraft.current}
+              spellCheck={false}
+              onChange={(e) => { bodyDraft.current = e.target.value; }}
+            />
+          ) : (
+            <CardMarkdownEditor
+              key="wysiwyg"
+              value={bodyDraft.current}
+              cardId={card.id}
+              onChange={(md) => { bodyDraft.current = md; growToFit(); }}
+            />
+          )}
           <div className="ws-card-edit-hint" aria-hidden="true">
-            {navigator.platform.includes("Mac") ? "⌘↵" : "Ctrl↵"} to save · esc to cancel
+            {navigator.platform.includes("Mac")
+              ? `⌘↵ to save · esc to cancel · ⌘/ ${srcMode ? "rich text" : "markdown"}`
+              : `Ctrl↵ to save · esc to cancel · Ctrl+/ ${srcMode ? "rich text" : "markdown"}`}
           </div>
         </div>
       ) : (
@@ -310,6 +382,8 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
                 resolve={props.resolve}
                 onOpenCard={props.onOpenCard}
                 onCreateLink={props.onCreateLink}
+                hostCardId={card.id}
+                onEmbedDragOut={(child, x, y) => props.onEmbedDragOut(card.id, child.id, x, y)}
               />
             </div>
           )}

@@ -418,7 +418,9 @@
   font-size: 15.5px;
   line-height: 1.25;
   letter-spacing: -0.01em;
-  padding: 0 11px 6px;
+  /* 26px sides (Heptabase-style margin): the ⋮⋮ block handle sits inside
+     the card's left margin while editing, clear of the border and text. */
+  padding: 0 26px 6px;
   color: var(--ws-ink);
   cursor: grab;
   /* Long quote titles (highlight cards) truncate on short cards instead of
@@ -427,7 +429,7 @@
   overflow: hidden;
 }
 .ws-card-body {
-  padding: 0 11px 11px;
+  padding: 0 26px 11px;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ws-ink-soft);
@@ -435,7 +437,7 @@
   flex: 1;
   min-height: 0;
 }
-.ws-card-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 11px 10px; }
+.ws-card-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 26px 10px; }
 .ws-card-tag {
   font-size: 10px;
   padding: 2px 7px;
@@ -686,6 +688,25 @@
 }
 .ws-embed-chip.unresolved { border-style: dashed; opacity: 0.75; cursor: default; }
 .ws-card-md-edit .ws-embed-chip { cursor: default; }
+/* Editor node view: same mini-card as the read view, but inert — a click
+   selects the atom instead of opening the target. */
+.ws-embed-nodeview { display: block; }
+.ws-card-md-edit .ws-embed { cursor: default; }
+.ws-embed-nodeview.ProseMirror-selectednode .ws-embed {
+  border-color: var(--ws-accent);
+  outline: 1.5px solid var(--ws-accent-soft);
+}
+
+/* Insertion caret while a card drag hovers between a note's blocks. */
+.ws-drop-caret {
+  position: fixed;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ws-accent);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+  z-index: 90;
+  pointer-events: none;
+}
 
 /* card library panel */
 .ws-library {
@@ -852,7 +873,10 @@
   overflow: hidden;
   border: 1px solid var(--ws-line);
   background: var(--ws-paper);
-  flex: none;
+  /* Shrinkable: a tall clip image compresses on short cards instead of
+     pushing the source footer out of the clipped card bottom. */
+  flex: 0 1 auto;
+  min-height: 0;
 }
 .ws-card-img {
   display: block;
@@ -874,6 +898,9 @@
 .ws-md p { margin: 0.4em 0; }
 .ws-md ul, .ws-md ol { margin: 0.4em 0; padding-left: 1.3em; }
 .ws-md li { margin: 0.15em 0; }
+/* TipTap wraps list-item content in paragraphs (react-markdown doesn't) —
+   zero their margins so lists measure the same in edit and read mode. */
+.ws-card-md-edit li > p { margin: 0; }
 .ws-md code { font-family: var(--ws-font-mono); font-size: 0.86em; background: var(--ws-paper-2); padding: 1px 4px; border-radius: 4px; }
 .ws-md pre { background: #29292c; color: #ececee; padding: 10px 12px; border-radius: 8px; overflow: auto; }
 .ws-md pre code { background: none; color: inherit; padding: 0; }
@@ -936,10 +963,14 @@
 .ws-codeblock-lang:focus,
 .ws-codeblock:focus-within .ws-codeblock-lang { opacity: 1; }
 
-/* Block gutter (⋮⋮ drag / click-menu) floated left of the hovered block. */
+/* Block handle (⋮⋮ drag / click-menu): a body-level fixed overlay hanging
+   just outside the hovered block's top-left, so the editor reserves no
+   gutter and text sits exactly where read mode renders it. */
 .ws-block-handles {
+  position: fixed;
+  z-index: 90;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
 }
 .ws-block-handle-wrap { position: relative; }
 .ws-block-menu {
@@ -1645,15 +1676,25 @@
   flex: 1;
   min-height: 0;
   gap: 6px;
-  padding: 2px 12px 10px;
+  /* Same 26px sides (and no top inset) as .ws-card-title / .ws-card-body —
+     entering edit mode must not shift the text. */
+  padding: 0 26px 10px;
 }
 .ws-card-title-input {
   border: none;
   outline: none;
   background: transparent;
-  font: 600 15.5px var(--ws-font-display);
+  /* Mirror .ws-card-title so the title doesn't reflow entering edit mode. */
+  font: 600 15.5px/1.25 var(--ws-font-display);
+  letter-spacing: -0.01em;
   color: var(--ws-ink);
   padding: 0;
+  /* A wrapping, self-sizing textarea — long titles fold instead of clipping. */
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  flex: none;
+  max-height: 40%;
 }
 .ws-card-body-input {
   flex: 1;
@@ -1680,20 +1721,31 @@
 /* Clip image stays visible while its note is edited; the editor gets the
    remaining space. */
 .ws-card-edit .ws-card-imgwrap { margin: 0; max-height: 55%; }
+/* The scroll wrapper owns overflow (not the ProseMirror element) so the
+   block handle, absolutely positioned inside it, scrolls with the content. */
+.ws-card-md-scroll {
+  position: relative;
+  overflow-y: auto;
+  /* No scrollbar track: read mode shows none, and its 15px would reflow
+     the text on entering edit mode. Wheel/keyboard scrolling still works. */
+  scrollbar-width: none;
+}
+/* Stretch the EditorContent div; the handle overlay is out of flow. */
+.ws-card-md-scroll > div:not(.ws-block-handles) {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 .ws-card-md-edit {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   outline: none;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ws-ink-soft);
   caret-color: var(--ws-accent);
-  padding-right: 2px;
-  /* Reserved gutter: the ⋮⋮ block handle (20px + 4px offset) floats inside
-     this padding, so travelling to it never leaves the editor box (the
-     drag-handle plugin hides the popup on the editor's mouseleave). */
-  padding-left: 28px;
+  /* No gutters: the block handle floats outside the card, so the text
+     column keeps the exact geometry of read mode. */
+  padding: 0;
 }
 .ws-card-md-edit p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
@@ -2108,16 +2160,33 @@
   z-index: 11;
 }
 .ws-pdf-outline-item {
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px 6px 4px;
   border-radius: 6px;
   font: 500 12.5px var(--ws-font-ui);
   color: var(--ws-ink);
   cursor: pointer;
+}
+.ws-pdf-outline-item:hover { background: var(--ws-paper-2); }
+.ws-pdf-outline-fold {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--ws-ink-soft);
+  border-radius: 5px;
+}
+.ws-pdf-outline-fold:hover { background: rgba(0, 0, 0, 0.07); color: var(--ws-ink); }
+.ws-pdf-outline-label {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ws-pdf-outline-item:hover { background: var(--ws-paper-2); }
 .ws-pdf-note {
   position: absolute;
   left: 50%;
@@ -2258,10 +2327,19 @@
 }
 
 .ws-toc-fold {
-  font-size: 10px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  align-self: center;
   color: var(--ws-ink-soft);
-  margin-right: -1px;
+  margin-left: -4px;
+  border-radius: 5px;
+  cursor: pointer;
 }
+.ws-toc-fold:hover { background: rgba(0, 0, 0, 0.07); color: var(--ws-ink); }
 
 /* Edge with an end standing in at a collapsed group's chip. */
 .ws-edge.indirect { stroke-dasharray: 6 5; }

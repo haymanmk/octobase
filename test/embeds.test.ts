@@ -71,3 +71,13 @@ test("embeds count as outgoing links for the graph", async () => {
   assert.deepEqual(store.getOutgoingLinks(host.id).map((c) => c.id), [child.id]);
   assert.deepEqual(store.getBacklinks(child.id).map((c) => c.id), [host.id]);
 });
+
+test("removeEmbed strips the block and tidies the blank lines", async () => {
+  const store = await freshStore();
+  const child = store.createNoteCard({ title: "Child" });
+  const host = store.createNoteCard({ title: "Host", body: "before\n\n![[Child]]\n\nafter" });
+  assert.equal(store.removeEmbed(host.id, child.id), true);
+  assert.equal(store.getCard(host.id)!.body, "before\n\nafter");
+  // Nothing left to remove.
+  assert.equal(store.removeEmbed(host.id, child.id), false);
+});

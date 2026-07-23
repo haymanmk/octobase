@@ -15,6 +15,8 @@ export interface FlatOutlineItem {
   title: string;
   depth: number;
   dest: unknown;
+  /** True when nested entries follow — the outline panel folds on these. */
+  hasChildren: boolean;
 }
 
 export function flattenOutline(
@@ -24,7 +26,7 @@ export function flattenOutline(
   if (!items) return [];
   const out: FlatOutlineItem[] = [];
   for (const it of items) {
-    out.push({ title: it.title, depth, dest: it.dest ?? null });
+    out.push({ title: it.title, depth, dest: it.dest ?? null, hasChildren: !!it.items?.length });
     if (it.items?.length) out.push(...flattenOutline(it.items, depth + 1));
   }
   return out;

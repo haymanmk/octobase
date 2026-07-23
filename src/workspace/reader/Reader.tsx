@@ -2,6 +2,7 @@ import * as React from "react";
 import { ExternalLink } from "lucide-react";
 import { useWorkspace } from "../store-context.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
+import { embedHostAt, hideDropCaret, showDropCaret } from "../drop-caret.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
@@ -183,12 +184,18 @@ export function Reader({
       setSelToolbar(null);
       window.getSelection()?.removeAllRanges();
       setDragGhost({ cardId: h.id, text: h.anchor.exact, color: h.color, x: start.x, y: start.y });
-      const onMove = (me: PointerEvent) =>
+      const onMove = (me: PointerEvent) => {
         setDragGhost((g) => (g ? { ...g, x: me.clientX, y: me.clientY } : g));
+        // Hovering a board card previews the embed insertion point.
+        const host = embedHostAt(me.clientX, me.clientY, hit.cardId);
+        if (host) showDropCaret(host, me.clientY);
+        else hideDropCaret();
+      };
       const onUp = (ue: PointerEvent) => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         setDragGhost(null);
+        hideDropCaret();
         onDropHighlight(hit.cardId, ue.clientX, ue.clientY);
         // Let the click that follows pointerup be ignored, then reset.
         setTimeout(() => { draggedRef.current = false; }, 0);
@@ -244,15 +251,14 @@ export function Reader({
   const makeHighlight = (color: HighlightColor) => {
     const el = bodyRef.current;
     const range = pendingRange.current;
-    const at = selToolbar;
     if (!el || !range) return;
     const anchor = describeAnchorFromRange(el, range);
     setSelToolbar(null);
     window.getSelection()?.removeAllRanges();
     if (!anchor || !anchor.exact.trim()) return;
-    const created = store.createHighlightCard({ text: anchor.exact, sourceUrl: sourceUrl || card.id, anchor, color });
-    // Like the live widget: creating expands straight into the edit form.
-    if (at) setEditPop({ cardId: created.id, x: at.x, y: at.y });
+    // No edit popover here — highlighting stays one gesture; clicking the
+    // highlight opens the tags/note editor when wanted.
+    store.createHighlightCard({ text: anchor.exact, sourceUrl: sourceUrl || card.id, anchor, color });
   };
 
   const updateHighlight = (patch: { color?: HighlightColor; note?: string }) => {
