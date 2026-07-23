@@ -269,7 +269,9 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         if (!acceptsEmbed || !e.dataTransfer.types.includes(CARD_DRAG_MIME)) return;
         e.preventDefault();
         e.stopPropagation();
-        e.dataTransfer.dropEffect = "move";
+        // Must stay within the source's effectAllowed (see Canvas.onDragOver).
+        e.dataTransfer.dropEffect =
+          e.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
         dropIdxRef.current = showDropCaret(e.currentTarget as HTMLElement, e.clientY);
         if (!embedHover) setEmbedHover(true);
       }}

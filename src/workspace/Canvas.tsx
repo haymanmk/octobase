@@ -656,9 +656,13 @@ export const Canvas = React.forwardRef<CanvasHandle, CanvasProps>(function Canva
         const t = e.dataTransfer.types;
         if (t.includes(CARD_DRAG_MIME) || t.includes("Files")) {
           e.preventDefault();
-          // "move" tells the drag source (e.g. an embed block's grip) that
-          // the drop was accepted, so it can un-nest on dragend.
-          if (t.includes(CARD_DRAG_MIME)) e.dataTransfer.dropEffect = "move";
+          // dropEffect must stay within the source's effectAllowed or
+          // Chromium disallows the drop entirely (library tiles say "copy";
+          // the block-handle grip says "copyMove").
+          if (t.includes(CARD_DRAG_MIME)) {
+            e.dataTransfer.dropEffect =
+              e.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+          }
         }
       }}
       onDrop={(e) => {
