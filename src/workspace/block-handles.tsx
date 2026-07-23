@@ -109,43 +109,89 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
     const onScroll = () => {
       if (!menuOpenRef.current && !draggingRef.current) setShown(null);
     };
+    // The zone that owns a grip drag's drop: the whole card (canvas) or the
+    // note-editor pane (viewer). The ProseMirror element stops at the text
+    // column, but the card's padding and the grip gutter sit just outside
+    // it — a drop there used to bubble to the canvas, which placed the card
+    // on the board while the caret still promised an in-note position.
+    const zone = (scroller.closest(".ws-card, .ws-note-editor") as HTMLElement | null) ?? scroller;
+    /** Block boundary nearest clientY: insertion index + caret line y. */
+    const nearestBoundary = (clientY: number): { index: number; y: number } | null => {
+      const rects = [...pm.children].map((el) => el.getBoundingClientRect());
+      if (rects.length === 0) return null;
+      let index = 0;
+      let y = rects[0].top;
+      let best = Math.abs(clientY - y);
+      for (let i = 0; i < rects.length; i++) {
+        const cand = i + 1 < rects.length ? (rects[i].bottom + rects[i + 1].top) / 2 : rects[i].bottom;
+        const d = Math.abs(clientY - cand);
+        if (d < best) {
+          best = d;
+          index = i + 1;
+          y = cand;
+        }
+      }
+      return { index, y };
+    };
     // Drop feedback during a grip drag: prosemirror-dropcursor mis-positions
     // inside the canvas transform, so place the app's fixed-overlay caret at
     // the block boundary nearest the pointer (all client-rect math).
     const onDragOver = (e: DragEvent) => {
       if (!draggingRef.current) return;
-      const rects = [...pm.children].map((el) => el.getBoundingClientRect());
-      if (rects.length === 0) return;
-      let y = rects[0].top;
-      let best = Math.abs(e.clientY - y);
-      for (let i = 0; i < rects.length; i++) {
-        const cand = i + 1 < rects.length ? (rects[i].bottom + rects[i + 1].top) / 2 : rects[i].bottom;
-        const d = Math.abs(e.clientY - cand);
-        if (d < best) {
-          best = d;
-          y = cand;
-        }
-      }
+      const b = nearestBoundary(e.clientY);
+      if (!b) return;
       const box = pm.getBoundingClientRect();
-      showCaretLine(box.left, box.width, y);
+      showCaretLine(box.left, box.width, b.y);
+      // Outside the ProseMirror element (padding/gutter) nothing else claims
+      // the drag — preventDefault or Chromium forbids the drop outright.
+      if (!(e.target instanceof globalThis.Node && pm.contains(e.target))) e.preventDefault();
     };
     // In-editor drops are ProseMirror's business alone: without the
     // stopPropagation, the native drop (now carrying CARD_DRAG_MIME for
     // embed blocks) bubbles up to the canvas, which would ALSO place the
     // card on the board — duplicating what stays a block move here.
     const onDrop = (e: DragEvent) => {
+      if (e.target instanceof globalThis.Node && pm.contains(e.target)) {
+        // Over the text column: ProseMirror's own drop handler moves the
+        // block; just keep the canvas out of it.
+        e.stopPropagation();
+        hideDropCaret();
+        return;
+      }
+      if (!draggingRef.current) return;
+      // Padding/gutter drop: honor the caret ourselves — move the block to
+      // the boundary the caret marked instead of letting the canvas take it.
+      e.preventDefault();
       e.stopPropagation();
       hideDropCaret();
+      const { node, pos } = current.current;
+      const b = nearestBoundary(e.clientY);
+      if (!node || pos < 0 || !b) return;
+      const doc = editor.state.doc;
+      let insertPos = 0;
+      for (let i = 0; i < Math.min(b.index, doc.childCount); i++) insertPos += doc.child(i).nodeSize;
+      const tr = editor.state.tr;
+      tr.delete(pos, pos + node.nodeSize);
+      tr.insert(tr.mapping.map(insertPos), node);
+      editor.view.dispatch(tr);
+    };
+    // Anywhere else in the app, the caret must not linger and lie: while a
+    // grip drag is outside the zone the drop belongs to the canvas.
+    const onWindowDragOver = (e: DragEvent) => {
+      if (!draggingRef.current) return;
+      if (!(e.target instanceof globalThis.Node && zone.contains(e.target))) hideDropCaret();
     };
     window.addEventListener("mousemove", onMove);
     scroller.addEventListener("scroll", onScroll);
-    pm.addEventListener("dragover", onDragOver);
-    pm.addEventListener("drop", onDrop);
+    zone.addEventListener("dragover", onDragOver);
+    zone.addEventListener("drop", onDrop);
+    window.addEventListener("dragover", onWindowDragOver);
     return () => {
       window.removeEventListener("mousemove", onMove);
       scroller.removeEventListener("scroll", onScroll);
-      pm.removeEventListener("dragover", onDragOver);
-      pm.removeEventListener("drop", onDrop);
+      zone.removeEventListener("dragover", onDragOver);
+      zone.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragover", onWindowDragOver);
     };
   }, [editor, setShown]);
 
