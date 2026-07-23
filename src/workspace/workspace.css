@@ -2065,9 +2065,23 @@
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  z-index: 1; /* above the endOfContent guard, as in pdf_viewer.css */
 }
 .ws-pdf-text ::selection,
 .ws-pdf-text span::selection { background: rgba(79, 125, 201, 0.32); }
+/* pdf.js selection guard: while a selection drag is in flight this div
+   expands over the layer (and rides beside the drag boundary) so Chromium
+   anchors into it instead of jumping across the absolutely-positioned
+   spans. Mirrors pdf_viewer.css's .textLayer .endOfContent. */
+.ws-pdf-text .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+.ws-pdf-text.selecting .endOfContent { top: 0; }
 /* .ws-hl-layer deliberately gets no z-index on PDF pages: it would create a
    stacking context that isolates the bands' mix-blend-mode from the page
    canvas underneath, painting them opaque. DOM order already places the

@@ -7,6 +7,7 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
+import { attachSelectionGuard } from "./pdf-selection.ts";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -70,6 +71,9 @@ export async function renderPage(
     viewport,
   });
   await layer.render();
+  // Without this, drag-selections that wander into the blank gaps between
+  // the absolutely-positioned spans balloon across whole paragraphs.
+  attachSelectionGuard(textLayerDiv);
   return { width: viewport.width, height: viewport.height };
 }
 

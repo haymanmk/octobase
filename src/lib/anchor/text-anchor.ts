@@ -137,19 +137,17 @@ function offsetWithin(
   nodeOffset: number,
 ): number | null {
   const doc = root.ownerDocument;
-  if (!doc) return null;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let total = 0;
-  let current = walker.nextNode();
-  while (current) {
-    if (current === node) return total + nodeOffset;
-    total += current.textContent?.length ?? 0;
-    current = walker.nextNode();
+  if (!doc || !root.contains(node)) return null;
+  // Measure the text between the root's start and the boundary. Unlike a
+  // text-node walk keyed on identity, this is exact for element boundaries
+  // too (e.g. a drag ending in the PDF text layer's blank space yields
+  // (layer div, childIndex) — which used to resolve to the whole page).
+  const r = doc.createRange();
+  r.setStart(root, 0);
+  try {
+    r.setEnd(node, nodeOffset);
+  } catch {
+    return null;
   }
-  // If the node is an element (e.g. selection ended at element boundary),
-  // fall back to summing text up to it.
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    return total;
-  }
-  return null;
+  return r.toString().length;
 }
