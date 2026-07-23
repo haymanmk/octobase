@@ -37,15 +37,20 @@ export function showDropCaret(hostCardEl: HTMLElement, clientY: number): number 
     const next = blocks[index].getBoundingClientRect();
     y = (prev.bottom + next.top) / 2;
   }
+  showCaretLine(box.left + 6, Math.max(0, box.width - 12), Math.max(box.top, Math.min(box.bottom, y)));
+  return index;
+}
+
+/** Low-level caret placement in client coordinates (fixed overlay). */
+export function showCaretLine(left: number, width: number, top: number): void {
   if (!caretEl) {
     caretEl = document.createElement("div");
     caretEl.className = "ws-drop-caret";
     document.body.appendChild(caretEl);
   }
-  caretEl.style.left = `${box.left + 6}px`;
-  caretEl.style.width = `${Math.max(0, box.width - 12)}px`;
-  caretEl.style.top = `${Math.max(box.top, Math.min(box.bottom, y))}px`;
-  return index;
+  caretEl.style.left = `${left}px`;
+  caretEl.style.width = `${width}px`;
+  caretEl.style.top = `${top}px`;
 }
 
 export function hideDropCaret(): void {

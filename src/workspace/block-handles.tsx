@@ -5,7 +5,7 @@ import type { Editor } from "@tiptap/react";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { CARD_DRAG_MIME } from "./dnd.ts";
-import { consumeCardDropHandled } from "./drop-caret.ts";
+import { consumeCardDropHandled, hideDropCaret, showCaretLine } from "./drop-caret.ts";
 import { useWorkspaceStore } from "./store-context.ts";
 
 /**
@@ -109,11 +109,36 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
     const onScroll = () => {
       if (!menuOpenRef.current && !draggingRef.current) setShown(null);
     };
+    // Drop feedback during a grip drag: prosemirror-dropcursor mis-positions
+    // inside the canvas transform, so place the app's fixed-overlay caret at
+    // the block boundary nearest the pointer (all client-rect math).
+    const onDragOver = (e: DragEvent) => {
+      if (!draggingRef.current) return;
+      const rects = [...pm.children].map((el) => el.getBoundingClientRect());
+      if (rects.length === 0) return;
+      let y = rects[0].top;
+      let best = Math.abs(e.clientY - y);
+      for (let i = 0; i < rects.length; i++) {
+        const cand = i + 1 < rects.length ? (rects[i].bottom + rects[i + 1].top) / 2 : rects[i].bottom;
+        const d = Math.abs(e.clientY - cand);
+        if (d < best) {
+          best = d;
+          y = cand;
+        }
+      }
+      const box = pm.getBoundingClientRect();
+      showCaretLine(box.left, box.width, y);
+    };
+    const onDrop = () => hideDropCaret();
     window.addEventListener("mousemove", onMove);
     scroller.addEventListener("scroll", onScroll);
+    pm.addEventListener("dragover", onDragOver);
+    pm.addEventListener("drop", onDrop);
     return () => {
       window.removeEventListener("mousemove", onMove);
       scroller.removeEventListener("scroll", onScroll);
+      pm.removeEventListener("dragover", onDragOver);
+      pm.removeEventListener("drop", onDrop);
     };
   }, [editor, setShown]);
 
@@ -194,12 +219,25 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
       const target = store.getCards().find((c) => c.title.trim().toLowerCase() === title);
       if (target) e.dataTransfer.setData(CARD_DRAG_MIME, target.id);
     }
-    if (blockEl) e.dataTransfer.setDragImage(blockEl, 0, 0);
+    if (blockEl) {
+      // Drag image from an offscreen, untransformed clone: rasterizing the
+      // live block inside the canvas's scale() transform yields a giant
+      // black slab on Chromium. The clone is captured synchronously at
+      // dragstart, so it can be removed on the next tick.
+      const ghost = document.createElement("div");
+      ghost.className = "ws-block-drag-image";
+      ghost.style.width = `${Math.min(280, Math.round(blockEl.getBoundingClientRect().width))}px`;
+      ghost.appendChild(blockEl.cloneNode(true));
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 10, 10);
+      setTimeout(() => ghost.remove(), 0);
+    }
     draggingRef.current = true;
   };
 
   const onDragEnd = (e: React.DragEvent) => {
     draggingRef.current = false;
+    hideDropCaret();
     (editor.view as unknown as { dragging: unknown }).dragging = null;
     // An embed block dropped OUTSIDE the editor (canvas placement or another
     // card's caret — both accept CARD_DRAG_MIME and mark the handshake) is

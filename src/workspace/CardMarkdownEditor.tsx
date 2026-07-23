@@ -89,7 +89,10 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
       // Lowlight replaces the plain code block: same node, live hljs-* token
       // spans plus a language picker, driven by the fence's language tag
       // (```c). Serialization is unchanged, so stored markdown is identical.
-      StarterKit.configure({ codeBlock: false, paragraph: false }),
+      // prosemirror-dropcursor computes offsets that break inside the
+      // canvas's scale() transform — BlockHandles drives the app's own
+      // fixed-position drop caret during block drags instead.
+      StarterKit.configure({ codeBlock: false, paragraph: false, dropcursor: false }),
       PersistentParagraph,
       EditorCodeBlock,
       TaskList,

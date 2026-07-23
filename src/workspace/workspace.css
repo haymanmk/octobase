@@ -697,6 +697,23 @@
   outline: 1.5px solid var(--ws-accent-soft);
 }
 
+/* Offscreen source for the block drag image (cloned, untransformed). */
+.ws-block-drag-image {
+  position: fixed;
+  top: -10000px;
+  left: 0;
+  pointer-events: none;
+  background: var(--ws-card);
+  color: var(--ws-ink);
+  border: 1px solid var(--ws-line);
+  border-radius: 8px;
+  box-shadow: var(--ws-shadow-md);
+  padding: 6px 9px;
+  font: 400 12.5px/1.5 var(--ws-font-ui);
+  max-height: 120px;
+  overflow: hidden;
+}
+
 /* Insertion caret while a card drag hovers between a note's blocks. */
 .ws-drop-caret {
   position: fixed;
