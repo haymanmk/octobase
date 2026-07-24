@@ -100,6 +100,18 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
   // The in-card editor's two faces: rich WYSIWYG or raw markdown source.
   const [srcMode, setSrcMode] = React.useState(false);
 
+  // Highlight notes clamp to two lines until expanded. Ephemeral by design —
+  // reopening the board starts collapsed again. The "more" toggle only shows
+  // when the clamp actually hides something.
+  const [noteOpen, setNoteOpen] = React.useState(false);
+  const [noteClipped, setNoteClipped] = React.useState(false);
+  const noteInnerRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = noteInnerRef.current;
+    if (!el) return;
+    setNoteClipped(el.scrollHeight > el.clientHeight + 1);
+  }, [card.body, noteOpen, editing, placement.w, placement.h]);
+
   // Entering edit mode: seed the body draft synchronously (the editor mounts
   // this same render, so an effect would hand it a stale draft) and reset to
   // the rich face.
@@ -358,9 +370,14 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
         </div>
       ) : (
         <>
-          <div className="ws-card-title">
-            {card.title || "Untitled"}
-          </div>
+          {/* Clip (image) cards drop the title row — the image is the card's
+              identity, and the source footer already names where it came from.
+              The title lives on in the library, search, embeds and edit mode. */}
+          {card.kind !== "image" && (
+            <div className="ws-card-title">
+              {card.title || "Untitled"}
+            </div>
+          )}
           {card.kind === "pdf" && card.cover && (
             <div className="ws-card-imgwrap ws-card-pdfcover">
               <img className="ws-card-img" src={clipUrl(card.cover)} alt="" draggable={false} />
@@ -376,18 +393,45 @@ export function CanvasCard(props: CanvasCardProps): React.ReactElement {
               />
             </div>
           )}
-          {/* An empty flex:1 body would steal height from the pdf cover. */}
-          {(card.kind !== "pdf" || card.body.trim() !== "") && (
-            <div className="ws-card-body">
-              <MarkdownView
-                body={card.body}
-                resolve={props.resolve}
-                onOpenCard={props.onOpenCard}
-                onCreateLink={props.onCreateLink}
-                hostCardId={card.id}
-                onEmbedDragOut={(child, x, y) => props.onEmbedDragOut(card.id, child.id, x, y)}
-              />
-            </div>
+          {/* Highlight cards keep the quote (title) primary: the note clamps
+              to two lines until expanded. An empty note renders nothing. */}
+          {card.kind === "highlight" ? (
+            card.body.trim() !== "" && (
+              <div className={`ws-card-body ws-card-note${noteOpen ? " open" : ""}`}>
+                <div ref={noteInnerRef} className="ws-card-note-inner">
+                  <MarkdownView
+                    body={card.body}
+                    resolve={props.resolve}
+                    onOpenCard={props.onOpenCard}
+                    onCreateLink={props.onCreateLink}
+                    hostCardId={card.id}
+                    onEmbedDragOut={(child, x, y) => props.onEmbedDragOut(card.id, child.id, x, y)}
+                  />
+                </div>
+                {(noteClipped || noteOpen) && (
+                  <button
+                    type="button"
+                    className="ws-card-note-toggle"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); setNoteOpen((v) => !v); }}
+                  >{noteOpen ? "less" : "more"}</button>
+                )}
+              </div>
+            )
+          ) : (
+            /* An empty flex:1 body would steal height from the pdf cover. */
+            (card.kind !== "pdf" || card.body.trim() !== "") && (
+              <div className="ws-card-body">
+                <MarkdownView
+                  body={card.body}
+                  resolve={props.resolve}
+                  onOpenCard={props.onOpenCard}
+                  onCreateLink={props.onCreateLink}
+                  hostCardId={card.id}
+                  onEmbedDragOut={(child, x, y) => props.onEmbedDragOut(card.id, child.id, x, y)}
+                />
+              </div>
+            )
           )}
           {card.kind === "pdf" && (
             <div className="ws-card-pdfmeta">

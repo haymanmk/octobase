@@ -437,6 +437,29 @@
   flex: 1;
   min-height: 0;
 }
+/* Highlight-card note: clamped to two lines until expanded so the quote
+   (title) stays the star. The toggle appears only when lines are hidden. */
+.ws-card-note { display: flex; flex-direction: column; align-items: flex-start; }
+.ws-card-note:not(.open) .ws-card-note-inner {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* Expanded on a short card: the note shrinks (and scrolls once selected)
+   instead of pushing the "less" toggle out of reach below the footer. */
+.ws-card-note.open .ws-card-note-inner { min-height: 0; overflow: hidden; }
+.ws-card.selected .ws-card-note.open .ws-card-note-inner { overflow-y: auto; }
+.ws-card-note-toggle {
+  border: none;
+  background: none;
+  padding: 1px 0 0;
+  font: inherit;
+  font-size: 10.5px;
+  color: var(--ws-ink-muted);
+  cursor: pointer;
+}
+.ws-card-note-toggle:hover { color: var(--ws-accent); }
 .ws-card-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 26px 10px; }
 .ws-card-tag {
   font-size: 10px;

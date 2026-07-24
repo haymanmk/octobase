@@ -39,7 +39,12 @@ Each `CanvasCard` renders a `Placement` (x/y/w/h/z, see
 `workspace-kb.md`): color accent bar, kind label (Note / Highlight /
 Article / Clip), title, markdown body via `MarkdownView`, tag chips, and a
 source-hostname footer for captured kinds. Image cards show their clipped
-PNG via the `octobase-clip://` protocol.
+PNG via the `octobase-clip://` protocol — and skip the title row in view
+mode (the image is the identity; the title still serves the library,
+search, embeds, and edit mode). Highlight cards keep the quote (title)
+primary: the note (body) clamps to two lines with a "more"/"less" toggle
+that appears only when lines are actually hidden; the expanded state is
+ephemeral per session.
 
 - **Move**: drag anywhere on the card, window-level listeners, 3 px
   threshold so plain clicks still reach links and checkboxes. Dragging one
