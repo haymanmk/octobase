@@ -138,9 +138,11 @@
 
    Everything collapses in fullscreen, where the OS hides its controls.
    ────────────────────────────────────────────────────────────────────────── */
-:root { --ws-tl-below: 0px; --ws-tl-start: 0px; --ws-wc-start: 0px; }
-/* Traffic lights span x 20–80, y 12–26 (TRAFFIC_LIGHTS in main.js). */
-.ws-mac:not(.ws-fullscreen) { --ws-tl-below: 44px; --ws-tl-start: 92px; }
+:root { --ws-topbar-h: 44px; --ws-tl-below: 0px; --ws-tl-start: 0px; --ws-wc-start: 0px; }
+/* Traffic lights span x 20–80, y 15–29 — centred on --ws-topbar-h, so the
+   buttons and the board title share one line (TRAFFIC_LIGHTS in main.js).
+   --ws-tl-below then starts the sidebar's brand at the topbar's bottom edge. */
+.ws-mac:not(.ws-fullscreen) { --ws-tl-below: var(--ws-topbar-h); --ws-tl-start: 92px; }
 .ws-win:not(.ws-fullscreen) { --ws-wc-start: 140px; }
 
 .ws-sidebar .ws-brand { padding-top: max(20px, var(--ws-tl-below)); }
@@ -306,7 +308,10 @@
 .ws-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
 
 .ws-topbar {
-  height: 56px;
+  /* Also the macOS traffic lights' row: TRAFFIC_LIGHTS in main.js centres the
+     buttons on this height, so the two move together. The 32px icon buttons
+     set the floor. */
+  height: var(--ws-topbar-h);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1116,7 +1121,7 @@
 /* ── Inspector ───────────────────────────────────────────────────────────── */
 .ws-inspector {
   position: absolute;
-  top: 56px; right: 0; bottom: 0;
+  top: var(--ws-topbar-h); right: 0; bottom: 0;
   width: 300px;
   background: var(--ws-card);
   border-left: 1px solid var(--ws-line);

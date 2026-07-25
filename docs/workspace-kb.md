@@ -108,9 +108,14 @@ both corners are reserved. Each gutter is a content *start* rather than an
 increment — `max(<own padding>, var(--ws-…))` — so a row keeps its normal
 spacing whenever its gutter is off.
 
-**Left corner (macOS traffic lights).** The sidebar gives them a strip of
-their own: `.ws-brand` takes extra *top* padding (`--ws-tl-below`) and the
-brand sits below them. With the sidebar hidden there is no such strip, so
+**Left corner (macOS traffic lights).** The buttons are centred on the board
+topbar's row, so they share a line with the board title and its controls:
+`TRAFFIC_LIGHTS.y` in `main.js` is `--ws-topbar-h / 2 - 7` (they are 14px
+tall), which is why the two constants have to move together — the topbar's
+height is in turn floored by its 32px icon buttons. The sidebar gives the
+buttons a strip of their own: `.ws-brand` takes extra *top* padding
+(`--ws-tl-below`, the topbar height) so the brand starts at the topbar's
+bottom edge, below them. With the sidebar hidden there is no such strip, so
 whichever row is leftmost indents past them horizontally instead
 (`--ws-tl-start`), picked in plain CSS by `.ws-root > :first-child` — sidebar
 hidden → `.ws-topbar`, sidebar hidden with library open → `.ws-lib-head`. No

@@ -131,12 +131,12 @@ const superviseView = (name, wc) => {
 };
 
 /**
- * Where the macOS window buttons sit with the title bar hidden. They get a
- * strip of their own above the sidebar's brand, so they sit near the top edge
- * rather than centred on a row; the shell clears them via --ws-tl-below /
- * --ws-tl-start (workspace.css).
+ * Where the macOS window buttons sit with the title bar hidden. The buttons
+ * are 14px tall, so this y centres them on the shell's 44px topbar row
+ * (--ws-topbar-h): y = h/2 - 7. Change one and the other must follow. The
+ * shell clears them via --ws-tl-below / --ws-tl-start (workspace.css).
  */
-const TRAFFIC_LIGHTS = { x: 20, y: 12 };
+const TRAFFIC_LIGHTS = { x: 20, y: 15 };
 
 const createMainWindow = () => {
   parentWin = new BrowserWindow({

@@ -35,8 +35,9 @@ window.
 On macOS the parent window is created with `titleBarStyle: 'hidden'`, so the
 shell's own top row runs to the window edge. The traffic lights remain (macOS
 draws them above the content views) and are positioned by hand via
-`trafficLightPosition: TRAFFIC_LIGHTS`, which parks them near the top edge —
-the sidebar gives them a strip of their own above its brand.
+`trafficLightPosition: TRAFFIC_LIGHTS`, which centres them on the shell's
+topbar row so the buttons and the board title share one line. That couples the
+constant to `--ws-topbar-h` in `workspace.css` — see `workspace-kb.md`.
 
 Two consequences the renderer handles (see `workspace-kb.md` → "Window
 chrome"):
