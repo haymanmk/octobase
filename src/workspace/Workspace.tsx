@@ -220,12 +220,16 @@ function WorkspaceInner(): React.ReactElement {
   }, [store, activeBoardId, showToast]);
 
   // Window chrome: with the native title bar hidden, the shell's own top row
-  // must leave room for the macOS traffic lights. Both facts live as classes
-  // on <html> so plain CSS can size the gutter (see --ws-tl-inset).
+  // must leave room for whichever window controls the OS draws on it — macOS
+  // top-left, Windows/Linux top-right. Which corner (and whether fullscreen
+  // has hidden them) lives as classes on <html> so plain CSS can size the
+  // gutters (see "Window chrome" in workspace.css).
   React.useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("ws-mac", navigator.platform.includes("Mac"));
-    // Fullscreen hides the traffic lights — no gutter needed.
+    const mac = navigator.platform.includes("Mac");
+    root.classList.toggle("ws-mac", mac);
+    root.classList.toggle("ws-win", !mac);
+    // Fullscreen hides the controls — no gutter needed.
     getWindowBridge()?.onWindowFullScreen((on) => {
       root.classList.toggle("ws-fullscreen", on);
     });
@@ -888,7 +892,6 @@ function WorkspaceInner(): React.ReactElement {
             activeTab={viewer.activeTab}
             onSelectTab={(id) => setViewer((v) => ({ ...v, activeTab: id }))}
             onCloseTab={closeReaderTab}
-            onClose={() => setViewer((v) => ({ ...v, open: false }))}
             onOpenCard={(id) => openReference(id)}
             focusHighlight={focusHl}
             focusClip={focusClip}

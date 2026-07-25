@@ -131,11 +131,12 @@ const superviseView = (name, wc) => {
 };
 
 /**
- * Where the macOS window buttons sit with the title bar hidden. y centres the
- * 14px buttons on the shell's 56px top row; the shell keeps content clear of
- * them via --ws-tl-inset (workspace.css).
+ * Where the macOS window buttons sit with the title bar hidden. They get a
+ * strip of their own above the sidebar's brand, so they sit near the top edge
+ * rather than centred on a row; the shell clears them via --ws-tl-below /
+ * --ws-tl-start (workspace.css).
  */
-const TRAFFIC_LIGHTS = { x: 12, y: 21 };
+const TRAFFIC_LIGHTS = { x: 20, y: 12 };
 
 const createMainWindow = () => {
   parentWin = new BrowserWindow({
@@ -145,9 +146,9 @@ const createMainWindow = () => {
     // No native title bar: the shell's own top row (sidebar brand / board
     // topbar) runs to the window edge and doubles as the drag handle. The
     // traffic lights stay — macOS draws them above the content views — and
-    // the shell reserves a gutter for them (--ws-tl-inset in workspace.css).
-    // The buttons are placed by hand so they centre on the 56px topbar row
-    // instead of floating near its top edge.
+    // the shell reserves gutters for them (see "Window chrome" in
+    // workspace.css, which also reserves the opposite corner for the window
+    // controls Windows and Linux draw there).
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hidden', trafficLightPosition: TRAFFIC_LIGHTS }
       : {}),

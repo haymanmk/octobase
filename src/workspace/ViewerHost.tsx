@@ -34,7 +34,6 @@ export interface ViewerHostProps {
   activeTab: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (cardId: string) => void;
-  onClose: () => void;
   /** Clicking a highlight inside a reader selects its card on the board. */
   onOpenCard: (cardId: string) => void;
   /** Scroll the active reader to this highlight (nonce re-fires repeats). */
@@ -60,7 +59,6 @@ export function ViewerHost({
   activeTab,
   onSelectTab,
   onCloseTab,
-  onClose,
   onOpenCard,
   focusHighlight,
   focusClip,
@@ -214,7 +212,8 @@ export function ViewerHost({
             onClick={() => setChatOpen((o) => !o)}
           ><Sparkles size={15} strokeWidth={2} aria-hidden /></button>
         )}
-        <button className="ws-icon-btn" title="Close viewer pane" onClick={onClose}><X size={15} strokeWidth={2} aria-hidden /></button>
+        {/* No close button here: this corner is where Windows and Linux draw
+            their window controls. The board topbar's ◫ toggle closes the pane. */}
       </div>
 
       {browserActive && (

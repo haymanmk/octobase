@@ -123,19 +123,34 @@
 
 /* ── Window chrome (hidden native title bar) ─────────────────────────────────
    The window has no title bar, so the shell's own top row runs to the window
-   edge and doubles as the drag handle. macOS still draws the traffic lights
-   over the top-left corner: `--ws-tl-inset` is the extra left padding that
-   keeps content clear of them. It applies only on macOS, and collapses in
-   fullscreen where the lights are hidden. Whichever column happens to be
-   leftmost owns the gutter, so `:first-child` picks it — no state to thread.
-   ────────────────────────────────────────────────────────────────────────── */
-:root { --ws-tl-inset: 0px; }
-/* Buttons span x 12–71 (see TRAFFIC_LIGHTS in main.js); this clears them. */
-.ws-mac:not(.ws-fullscreen) { --ws-tl-inset: 68px; }
+   edge and doubles as the drag handle — which means the OS draws its window
+   controls straight onto app chrome. Both corners are reserved, and each
+   value is a content *start* rather than an increment, so a row's own padding
+   applies whenever the gutter is off (max() falls back to it).
 
-.ws-root > :first-child .ws-brand { padding-left: calc(20px + var(--ws-tl-inset)); }
-.ws-root > :first-child .ws-topbar { padding-left: calc(22px + var(--ws-tl-inset)); }
-.ws-root > :first-child .ws-lib-head { padding-left: calc(10px + var(--ws-tl-inset)); }
+   Left (macOS traffic lights): the sidebar gives them a strip of their own
+   above the brand (--ws-tl-below). With the sidebar hidden there is no such
+   strip, so whichever row is leftmost indents past them instead
+   (--ws-tl-start); `:first-child` picks it, no state to thread.
+
+   Right (Windows/Linux minimise/maximise/close): --ws-wc-start keeps the last
+   column's controls out of that corner. Zero on macOS, which has none.
+
+   Everything collapses in fullscreen, where the OS hides its controls.
+   ────────────────────────────────────────────────────────────────────────── */
+:root { --ws-tl-below: 0px; --ws-tl-start: 0px; --ws-wc-start: 0px; }
+/* Traffic lights span x 20–80, y 12–26 (TRAFFIC_LIGHTS in main.js). */
+.ws-mac:not(.ws-fullscreen) { --ws-tl-below: 44px; --ws-tl-start: 92px; }
+.ws-win:not(.ws-fullscreen) { --ws-wc-start: 140px; }
+
+.ws-sidebar .ws-brand { padding-top: max(20px, var(--ws-tl-below)); }
+.ws-root > :first-child .ws-topbar { padding-left: max(22px, var(--ws-tl-start)); }
+.ws-root > :first-child .ws-lib-head { padding-left: max(10px, var(--ws-tl-start)); }
+
+/* Right corner: the viewer's tab strip when it is open, the board topbar when
+   it is not — whichever column is last. */
+.ws-root > :last-child .ws-viewer-tabs { padding-right: max(6px, var(--ws-wc-start)); }
+.ws-root > :last-child .ws-topbar { padding-right: max(22px, var(--ws-wc-start)); }
 
 /* Drag the window by its top row; every control inside it opts back out. */
 .ws-brand, .ws-topbar, .ws-lib-head { -webkit-app-region: drag; }
@@ -1689,9 +1704,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  /* Tabs share the strip evenly: equal basis, capped at max-width. The high
-     grow factor outweighs the right-side spacer so tabs fill first. */
-  flex: 12 1 0;
+  /* Tabs sit left-aligned at their natural width — the spacer after them
+     takes the slack. They shrink (never grow) so a full strip still fits. */
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 190px;
   padding: 6px 10px;

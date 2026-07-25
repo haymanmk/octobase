@@ -35,15 +35,16 @@ window.
 On macOS the parent window is created with `titleBarStyle: 'hidden'`, so the
 shell's own top row runs to the window edge. The traffic lights remain (macOS
 draws them above the content views) and are positioned by hand via
-`trafficLightPosition: TRAFFIC_LIGHTS`, which centres them on the shell's 56px
-topbar row instead of letting them float near its top edge.
+`trafficLightPosition: TRAFFIC_LIGHTS`, which parks them near the top edge —
+the sidebar gives them a strip of their own above its brand.
 
 Two consequences the renderer handles (see `workspace-kb.md` → "Window
 chrome"):
 
-- Content must stay clear of the buttons. The shell reserves the
-  `--ws-tl-inset` gutter, and its top row is a `-webkit-app-region: drag`
-  handle so the window can still be moved.
+- Content must stay clear of the buttons — of *both* corners, since
+  Windows and Linux draw their controls top-right. The shell reserves those
+  gutters, and its top row is a `-webkit-app-region: drag` handle so the
+  window can still be moved.
 - Fullscreen hides the buttons, so main pushes `window:fullscreen` to the
   shell and the gutter collapses. Leaving fullscreen also resets the custom
   button position, so `leave-full-screen` re-applies it with

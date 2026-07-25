@@ -80,7 +80,7 @@ src/workspace/                   React UI
 |---|---|---|
 | Sidebar | boards (rename/delete), library toggle with unplaced-card count, tag chips | section fold state: `octobase.sidebar.closed` |
 | Library panel | every live card as a drag tile; search box + kind filters (All/Unplaced/Notes/Highlights/Articles/Clips); drag payload is `CARD_DRAG_MIME`, accepted by the canvas (place) and by notes (embed) | open flag: `octobase.library.open` |
-| Viewer pane | tab strip over one slot: a pinned 🌐 tab hosting the native browser `WebContentsView`, plus 📖 reader tabs (one per article card, deduped by source URL). Resizable divider (double-click = 50/50). | `octobase.viewer.layout` (open, width, sidebar, tabs) |
+| Viewer pane | tab strip over one slot: a pinned 🌐 tab hosting the native browser `WebContentsView`, plus 📖 reader tabs (one per article card, deduped by source URL). Tabs are left-aligned at their natural width. Closed from the board topbar's ◫ toggle — the pane has no close button of its own, since that corner belongs to the OS (see "Window chrome"). Resizable divider (double-click = 50/50). | `octobase.viewer.layout` (open, width, sidebar, tabs) |
 
 The native browser view paints above the DOM, so `ViewerHost` streams the
 slot rectangle to main (`paneSetBounds`) only while the browser tab is
@@ -103,18 +103,30 @@ handle: `.ws-brand`, `.ws-topbar` and `.ws-lib-head` are
 `-webkit-app-region: drag`, with every control inside them set back to
 `no-drag` (otherwise clicks become window drags).
 
-macOS still draws the traffic lights over the top-left corner, so whichever
-column happens to be leftmost must indent past them. That column is picked in
-plain CSS with `.ws-root > :first-child`, so no state has to be threaded
-through — sidebar open → `.ws-brand`, sidebar hidden → `.ws-topbar`, sidebar
-hidden with library open → `.ws-lib-head`. The indent itself is the
-`--ws-tl-inset` custom property, added to each row's own padding so their base
-spacing is preserved.
+That also means the OS draws its window controls straight onto app chrome, so
+both corners are reserved. Each gutter is a content *start* rather than an
+increment — `max(<own padding>, var(--ws-…))` — so a row keeps its normal
+spacing whenever its gutter is off.
 
-`--ws-tl-inset` is 0 by default and only becomes non-zero on macOS, gated by
-classes `Workspace.tsx` puts on `<html>`: `ws-mac` (from `navigator.platform`)
-and `ws-fullscreen` (from the `window:fullscreen` bridge signal, since
-fullscreen hides the buttons and the gutter is then just a hole).
+**Left corner (macOS traffic lights).** The sidebar gives them a strip of
+their own: `.ws-brand` takes extra *top* padding (`--ws-tl-below`) and the
+brand sits below them. With the sidebar hidden there is no such strip, so
+whichever row is leftmost indents past them horizontally instead
+(`--ws-tl-start`), picked in plain CSS by `.ws-root > :first-child` — sidebar
+hidden → `.ws-topbar`, sidebar hidden with library open → `.ws-lib-head`. No
+state has to be threaded through.
+
+**Right corner (Windows/Linux minimise/maximise/close).** `--ws-wc-start`
+keeps the last column's controls out of that corner, again by position:
+`.ws-root > :last-child` is the viewer's tab strip when the pane is open and
+the board topbar when it isn't. The viewer pane deliberately has no close
+button of its own — that corner is the OS's — so the topbar's ◫ toggle is how
+the pane closes.
+
+All three are 0 by default and gated by classes `Workspace.tsx` puts on
+`<html>`: `ws-mac` / `ws-win` (from `navigator.platform`) and `ws-fullscreen`
+(from the `window:fullscreen` bridge signal, since fullscreen hides the
+controls and a gutter would then just be a hole).
 
 ## Capture and clip intake
 
