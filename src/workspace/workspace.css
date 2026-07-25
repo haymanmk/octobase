@@ -1104,6 +1104,12 @@
 .ws-md blockquote { margin: 0.5em 0; padding-left: 12px; border-left: 3px solid var(--ws-accent-soft); color: var(--ws-ink-soft); font-style: italic; }
 .ws-md a { color: var(--ws-accent); text-decoration: underline; text-underline-offset: 2px; }
 .ws-md hr { border: none; border-top: 1px solid var(--ws-line); margin: 0.8em 0; }
+/* A task item carries its own checkbox, so the list marker in front of it is
+   just noise (remark-gfm's classes — the editor's equivalent sits with the
+   .ws-card-md-edit rules). The reduced indent keeps the checkboxes roughly
+   where the bullets were. */
+.ws-md ul.contains-task-list { list-style: none; padding-left: 0.2em; }
+.ws-md li.task-list-item { list-style: none; }
 .ws-md input[type="checkbox"] { margin-right: 6px; }
 .ws-wikilink {
   color: var(--ws-ink);

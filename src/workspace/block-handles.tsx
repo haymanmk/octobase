@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import type { Node } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { moveTopLevelBlock } from "./block-move.ts";
 import { CARD_DRAG_MIME } from "./dnd.ts";
 import { consumeCardDropHandled, hideDropCaret, showCaretLine } from "./drop-caret.ts";
 import { useWorkspaceStore } from "./store-context.ts";
@@ -12,8 +12,16 @@ import { useWorkspaceStore } from "./store-context.ts";
  * Milkdown/Notion-style block handle: hovering a top-level block shows a ⋮⋮
  * grip hanging just outside the block's top-left, so the editor keeps the
  * exact text layout of read mode (no reserved gutter). Hold and drag to move
- * the block (ProseMirror's own drop handling + dropcursor take over); click
- * to open a small action menu (add line below · duplicate · delete).
+ * the block; click to open a small action menu (add line below · duplicate ·
+ * delete).
+ *
+ * The drag deliberately does NOT go through ProseMirror's drop handling. That
+ * handler removes the source with `tr.deleteSelection()` — whatever is
+ * selected when the drop lands, which stops being the dragged block as soon as
+ * focus moves to this grip (a portal button outside the editor) — and it
+ * inserts at its own `dropPoint`, which can nest a block inside whatever list
+ * sits under the cursor rather than at the caret the user is watching. Both
+ * are handled here instead, by index, through `block-move.ts`.
  *
  * The grip renders in a body-level portal with fixed positioning taken
  * straight from the hovered block's client rect — the same coordinate space
@@ -30,7 +38,11 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
   const store = useWorkspaceStore();
   // The hovered block. A ref, not state: it changes on every hover and only
   // the handle element's inline position needs to follow.
-  const current = React.useRef<{ node: Node | null; pos: number }>({ node: null, pos: -1 });
+  const current = React.useRef<{ node: Node | null; pos: number; index: number }>({
+    node: null,
+    pos: -1,
+    index: -1,
+  });
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuOpenRef = React.useRef(false);
   const draggingRef = React.useRef(false);
@@ -70,7 +82,7 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
         e.clientY < box.top ||
         e.clientY > box.bottom
       ) {
-        current.current = { node: null, pos: -1 };
+        current.current = { node: null, pos: -1, index: -1 };
         setShown(null);
         return;
       }
@@ -86,7 +98,7 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
         }
       }
       if (!hit || hitDist > SNAP_PX) {
-        current.current = { node: null, pos: -1 };
+        current.current = { node: null, pos: -1, index: -1 };
         setShown(null);
         return;
       }
@@ -100,7 +112,7 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
       }
       let pos = 0;
       for (let i = 0; i < idx; i++) pos += doc.child(i).nodeSize;
-      current.current = { node: doc.child(idx), pos };
+      current.current = { node: doc.child(idx), pos, index: idx };
       const r = hit.getBoundingClientRect();
       setShown({ top: r.top, left: r.left - GRIP_GAP });
     };
@@ -133,47 +145,40 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
       }
       return { index, y };
     };
-    // Drop feedback during a grip drag: prosemirror-dropcursor mis-positions
-    // inside the canvas transform, so place the app's fixed-overlay caret at
-    // the block boundary nearest the pointer (all client-rect math).
+    // Both listeners run in the CAPTURE phase and swallow the event, so a grip
+    // drag reaches neither ProseMirror below (whose drop handler would delete
+    // the selection instead of the dragged block — see block-move.ts) nor the
+    // canvas above (which would place the card on the board). Anything that is
+    // not a grip drag — a library tile heading for an embed, dragged text —
+    // falls through untouched.
+    const claim = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    // Drop feedback: prosemirror-dropcursor mis-positions inside the canvas
+    // transform, so place the app's fixed-overlay caret at the block boundary
+    // nearest the pointer (all client-rect math).
     const onDragOver = (e: DragEvent) => {
       if (!draggingRef.current) return;
       const b = nearestBoundary(e.clientY);
       if (!b) return;
+      // Chromium forbids the drop outright without a preventDefault here, and
+      // nothing below us is left to supply one.
+      claim(e);
       const box = pm.getBoundingClientRect();
       showCaretLine(box.left, box.width, b.y);
-      // Outside the ProseMirror element (padding/gutter) nothing else claims
-      // the drag — preventDefault or Chromium forbids the drop outright.
-      if (!(e.target instanceof globalThis.Node && pm.contains(e.target))) e.preventDefault();
     };
-    // In-editor drops are ProseMirror's business alone: without the
-    // stopPropagation, the native drop (now carrying CARD_DRAG_MIME for
-    // embed blocks) bubbles up to the canvas, which would ALSO place the
-    // card on the board — duplicating what stays a block move here.
     const onDrop = (e: DragEvent) => {
-      if (e.target instanceof globalThis.Node && pm.contains(e.target)) {
-        // Over the text column: ProseMirror's own drop handler moves the
-        // block; just keep the canvas out of it.
-        e.stopPropagation();
-        hideDropCaret();
-        return;
-      }
       if (!draggingRef.current) return;
-      // Padding/gutter drop: honor the caret ourselves — move the block to
-      // the boundary the caret marked instead of letting the canvas take it.
-      e.preventDefault();
-      e.stopPropagation();
+      claim(e);
       hideDropCaret();
-      const { node, pos } = current.current;
       const b = nearestBoundary(e.clientY);
-      if (!node || pos < 0 || !b) return;
-      const doc = editor.state.doc;
-      let insertPos = 0;
-      for (let i = 0; i < Math.min(b.index, doc.childCount); i++) insertPos += doc.child(i).nodeSize;
-      const tr = editor.state.tr;
-      tr.delete(pos, pos + node.nodeSize);
-      tr.insert(tr.mapping.map(insertPos), node);
-      editor.view.dispatch(tr);
+      const { index } = current.current;
+      if (!b || index < 0) return;
+      // Indices into the live document — no positions captured at hover time,
+      // no selection consulted. The drop lands on the boundary the caret drew.
+      const tr = moveTopLevelBlock(editor.state, index, b.index);
+      if (tr) editor.view.dispatch(tr);
     };
     // Anywhere else in the app, the caret must not linger and lie: while a
     // grip drag is outside the zone the drop belongs to the canvas.
@@ -183,14 +188,14 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
     };
     window.addEventListener("mousemove", onMove);
     scroller.addEventListener("scroll", onScroll);
-    zone.addEventListener("dragover", onDragOver);
-    zone.addEventListener("drop", onDrop);
+    zone.addEventListener("dragover", onDragOver, true);
+    zone.addEventListener("drop", onDrop, true);
     window.addEventListener("dragover", onWindowDragOver);
     return () => {
       window.removeEventListener("mousemove", onMove);
       scroller.removeEventListener("scroll", onScroll);
-      zone.removeEventListener("dragover", onDragOver);
-      zone.removeEventListener("drop", onDrop);
+      zone.removeEventListener("dragover", onDragOver, true);
+      zone.removeEventListener("drop", onDrop, true);
       window.removeEventListener("dragover", onWindowDragOver);
     };
   }, [editor, setShown]);
@@ -247,11 +252,13 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
     editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).focus().run();
   });
 
-  /** Hand the block to ProseMirror's native drag machinery: select it, mark
-   *  the view as dragging a move-slice, and let PM's drop handler relocate
-   *  it (dropcursor draws the insertion line). Embed blocks additionally
-   *  carry the card payload, so dropping them outside the editor — on the
-   *  canvas or another card — un-nests them (see onDragEnd). */
+  /** Start a native drag carrying only what the OS needs. The document move
+   *  is this component's own business (onDrop → moveTopLevelBlock), so the
+   *  view is deliberately NOT handed a `dragging` slice: ProseMirror's drop
+   *  handler would then delete the current selection rather than the dragged
+   *  block. Embed blocks additionally carry the card payload, so dropping them
+   *  outside the editor — on the canvas or another card — un-nests them (see
+   *  onDragEnd). */
   const onDragStart = (e: React.DragEvent) => {
     const { node, pos } = current.current;
     if (!node || pos < 0) {
@@ -259,11 +266,6 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
       return;
     }
     const view = editor.view;
-    view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
-    (view as unknown as { dragging: unknown }).dragging = {
-      slice: view.state.selection.content(),
-      move: true,
-    };
     const blockEl = view.nodeDOM(pos) as HTMLElement | null;
     e.dataTransfer.effectAllowed = "copyMove";
     e.dataTransfer.setData("text/plain", node.textContent || " ");
@@ -290,10 +292,11 @@ export function BlockHandles({ editor }: { editor: Editor }): React.ReactElement
   const onDragEnd = (e: React.DragEvent) => {
     draggingRef.current = false;
     hideDropCaret();
-    (editor.view as unknown as { dragging: unknown }).dragging = null;
+    // Nothing to unwind on the view: a grip drag never hands ProseMirror a
+    // dragging slice, and PM's own drags never start from this portal button.
     // An embed block dropped OUTSIDE the editor (canvas placement or another
     // card's caret — both accept CARD_DRAG_MIME and mark the handshake) is
-    // un-nested: remove the block here; PM only handles in-editor drops.
+    // un-nested: remove the block here; in-editor drops never reach this.
     const { node, pos } = current.current;
     const external = consumeCardDropHandled();
     const overEditor = document

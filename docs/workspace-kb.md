@@ -30,6 +30,8 @@ src/workspace/                   React UI
   Canvas.tsx / CanvasCard.tsx    the whiteboard canvas — see whiteboard.md
   EdgeLayer.tsx / edge-geometry.ts   mind-map connectors — see whiteboard.md
   CardMarkdownEditor.tsx         TipTap WYSIWYG markdown (in-place card editor)
+  block-handles.tsx              ⋮⋮ grip: hover/drag/menu for a top-level block
+  block-move.ts                  the block-reordering transform (unit-tested)
   card-embed-node.ts             TipTap atom keeping ![[embeds]] intact
   MarkdownView.tsx               react-markdown + GFM + wikilinks + embed mini-cards
   CommandPalette.tsx             ⌘K search: results + live preview pane
@@ -63,6 +65,19 @@ src/workspace/                   React UI
   view, so entering edit mode doesn't reflow embeds into chips.
 - **Markdown round-trip**: cards store markdown. TipTap loads it via
   tiptap-markdown and serializes back with `editor.storage.markdown.getMarkdown()`.
+- **Block dragging bypasses ProseMirror's drop handling entirely.** The ⋮⋮ grip
+  is a portal button *outside* the editor, so by the time a drop lands the
+  editor's selection is no longer the dragged block — and PM's handler removes
+  the source with `tr.deleteSelection()`, which then deleted the wrong range
+  and left the original in place (a duplicated block plus a hole chewed in an
+  unrelated one). Its `dropPoint` also ignored the app's own caret and could
+  nest a block inside whatever list sat under the cursor. So `block-handles.tsx`
+  listens for `dragover`/`drop` in the CAPTURE phase and stops the event before
+  PM (below) or the canvas (above) sees it, then applies
+  `moveTopLevelBlock(state, fromIndex, toIndex)` from `block-move.ts` — pure
+  index arithmetic against the live document, no captured positions and no
+  selection. Non-grip drags (library tiles, dragged text) fall through
+  untouched. `test/block-move.test.ts` covers it exhaustively.
 - **The link graph is derived**, not stored — `getBacklinks` /
   `getOutgoingLinks` / `getChildCards` scan card bodies by normalized title
   ([[links]] and ![[embeds]] both count). Currently store-API only; the
