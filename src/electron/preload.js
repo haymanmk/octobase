@@ -78,6 +78,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('browser:state');
     ipcRenderer.on('browser:state', (_event, data) => callback(data));
   },
+
+  // Window chrome: the shell draws its own top row, so it tracks fullscreen
+  // to know whether the traffic-light gutter is still needed.
+  onWindowFullScreen: (callback) => {
+    ipcRenderer.removeAllListeners('window:fullscreen');
+    ipcRenderer.on('window:fullscreen', (_event, data) => callback(data));
+  },
 });
 
 // Bridge for the Chrome capture extension: the localhost server runs in the

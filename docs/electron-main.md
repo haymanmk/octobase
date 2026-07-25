@@ -30,6 +30,25 @@ window.
    `userData/capture-token.txt` and the loopback capture server starts —
    see `capture-extension.md`.
 
+## Window chrome — no native title bar
+
+On macOS the parent window is created with `titleBarStyle: 'hidden'`, so the
+shell's own top row runs to the window edge. The traffic lights remain (macOS
+draws them above the content views) and are positioned by hand via
+`trafficLightPosition: TRAFFIC_LIGHTS`, which centres them on the shell's 56px
+topbar row instead of letting them float near its top edge.
+
+Two consequences the renderer handles (see `workspace-kb.md` → "Window
+chrome"):
+
+- Content must stay clear of the buttons. The shell reserves the
+  `--ws-tl-inset` gutter, and its top row is a `-webkit-app-region: drag`
+  handle so the window can still be moved.
+- Fullscreen hides the buttons, so main pushes `window:fullscreen` to the
+  shell and the gutter collapses. Leaving fullscreen also resets the custom
+  button position, so `leave-full-screen` re-applies it with
+  `setWindowButtonPosition`.
+
 ## View bounds — renderer-owned
 
 Main's `updateViewBounds()` (creation + window `resize`) only sizes the

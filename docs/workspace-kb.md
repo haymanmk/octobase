@@ -95,6 +95,27 @@ tiles and ⌘K results don't place cards anymore: tiles select on click
 the card lives — readable cards via `readCard`, board-dwelling cards via
 `centerOn` (switching boards when needed).
 
+### Window chrome (hidden title bar)
+
+The window has no native title bar (`main.js` — see `electron-main.md`), so
+the shell's own top row sits at the window edge and doubles as the drag
+handle: `.ws-brand`, `.ws-topbar` and `.ws-lib-head` are
+`-webkit-app-region: drag`, with every control inside them set back to
+`no-drag` (otherwise clicks become window drags).
+
+macOS still draws the traffic lights over the top-left corner, so whichever
+column happens to be leftmost must indent past them. That column is picked in
+plain CSS with `.ws-root > :first-child`, so no state has to be threaded
+through — sidebar open → `.ws-brand`, sidebar hidden → `.ws-topbar`, sidebar
+hidden with library open → `.ws-lib-head`. The indent itself is the
+`--ws-tl-inset` custom property, added to each row's own padding so their base
+spacing is preserved.
+
+`--ws-tl-inset` is 0 by default and only becomes non-zero on macOS, gated by
+classes `Workspace.tsx` puts on `<html>`: `ws-mac` (from `navigator.platform`)
+and `ws-fullscreen` (from the `window:fullscreen` bridge signal, since
+fullscreen hides the buttons and the gutter is then just a hole).
+
 ## Capture and clip intake
 
 All Electron-only inputs arrive through typed bridges in

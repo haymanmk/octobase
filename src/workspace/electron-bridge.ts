@@ -106,6 +106,21 @@ export function getViewerBridge(): OctobaseViewerBridge | undefined {
   return api?.paneSetBounds ? (api as OctobaseViewerBridge) : undefined;
 }
 
+/**
+ * Window-chrome signals. The window has no native title bar, so the shell
+ * reserves a gutter for the macOS traffic lights — fullscreen hides them and
+ * makes the gutter unnecessary.
+ */
+export interface OctobaseWindowBridge {
+  onWindowFullScreen: (cb: (fullscreen: boolean) => void) => void;
+}
+
+export function getWindowBridge(): OctobaseWindowBridge | undefined {
+  const api = (window as unknown as { electronAPI?: Partial<OctobaseWindowBridge> })
+    .electronAPI;
+  return api?.onWindowFullScreen ? (api as OctobaseWindowBridge) : undefined;
+}
+
 /** A clipped region captured by main.js, ready to become an image card. */
 export interface ClipCapturedPayload {
   /** File name inside userData/clips. */

@@ -130,11 +130,27 @@ const superviseView = (name, wc) => {
   });
 };
 
+/**
+ * Where the macOS window buttons sit with the title bar hidden. y centres the
+ * 14px buttons on the shell's 56px top row; the shell keeps content clear of
+ * them via --ws-tl-inset (workspace.css).
+ */
+const TRAFFIC_LIGHTS = { x: 12, y: 21 };
+
 const createMainWindow = () => {
   parentWin = new BrowserWindow({
     width: 1440,
     height: 900,
     icon: path.join(__dirname, 'assets', 'icon.png'),
+    // No native title bar: the shell's own top row (sidebar brand / board
+    // topbar) runs to the window edge and doubles as the drag handle. The
+    // traffic lights stay — macOS draws them above the content views — and
+    // the shell reserves a gutter for them (--ws-tl-inset in workspace.css).
+    // The buttons are placed by hand so they centre on the 56px topbar row
+    // instead of floating near its top edge.
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hidden', trafficLightPosition: TRAFFIC_LIGHTS }
+      : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -193,6 +209,20 @@ const createMainWindow = () => {
   browserView.setVisible(false); // hidden until the shell docks it
   updateViewBounds();
   parentWin.on('resize', updateViewBounds);
+
+  // macOS fullscreen hides the traffic lights, so the shell can close the
+  // gutter it reserves for them.
+  const sendFullScreen = () =>
+    appView?.webContents.send('window:fullscreen', parentWin?.isFullScreen() ?? false);
+  parentWin.on('enter-full-screen', sendFullScreen);
+  parentWin.on('leave-full-screen', () => {
+    sendFullScreen();
+    // Leaving fullscreen drops the custom button position back to the macOS
+    // default — put it back.
+    if (process.platform === 'darwin') parentWin?.setWindowButtonPosition(TRAFFIC_LIGHTS);
+  });
+  // Covers a window restored straight into fullscreen by macOS.
+  appView.webContents.on('did-finish-load', sendFullScreen);
 
   superviseView('app', appView.webContents);
   superviseView('browser', browserView.webContents);

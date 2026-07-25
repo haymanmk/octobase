@@ -9,7 +9,7 @@ import { TocPanel } from "./TocPanel.tsx";
 import { Canvas, type CanvasHandle } from "./Canvas.tsx";
 import { groupOf } from "../lib/model/groups.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
+import { getAiBridge, getCaptureBridge, getClipBridge, getDropBridge, getPdfBridge, getViewerBridge, getWindowBridge, pdfUrl, type ExtensionInfo, type PdfImportResult } from "./electron-bridge.ts";
 import { AiSettings } from "./AiSettings.tsx";
 import { AppSettings } from "./AppSettings.tsx";
 import { TagModal } from "./TagModal.tsx";
@@ -218,6 +218,18 @@ function WorkspaceInner(): React.ReactElement {
     });
     return () => bridge.removeHighlightDroppedListener();
   }, [store, activeBoardId, showToast]);
+
+  // Window chrome: with the native title bar hidden, the shell's own top row
+  // must leave room for the macOS traffic lights. Both facts live as classes
+  // on <html> so plain CSS can size the gutter (see --ws-tl-inset).
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("ws-mac", navigator.platform.includes("Mac"));
+    // Fullscreen hides the traffic lights — no gutter needed.
+    getWindowBridge()?.onWindowFullScreen((on) => {
+      root.classList.toggle("ws-fullscreen", on);
+    });
+  }, []);
 
   // Clipped regions arrive from main as saved PNG references; they become
   // image cards in the library (unplaced), and the library opens to show them.

@@ -121,6 +121,30 @@
   .ws-boot-tag { animation: none; }
 }
 
+/* ── Window chrome (hidden native title bar) ─────────────────────────────────
+   The window has no title bar, so the shell's own top row runs to the window
+   edge and doubles as the drag handle. macOS still draws the traffic lights
+   over the top-left corner: `--ws-tl-inset` is the extra left padding that
+   keeps content clear of them. It applies only on macOS, and collapses in
+   fullscreen where the lights are hidden. Whichever column happens to be
+   leftmost owns the gutter, so `:first-child` picks it — no state to thread.
+   ────────────────────────────────────────────────────────────────────────── */
+:root { --ws-tl-inset: 0px; }
+/* Buttons span x 12–71 (see TRAFFIC_LIGHTS in main.js); this clears them. */
+.ws-mac:not(.ws-fullscreen) { --ws-tl-inset: 68px; }
+
+.ws-root > :first-child .ws-brand { padding-left: calc(20px + var(--ws-tl-inset)); }
+.ws-root > :first-child .ws-topbar { padding-left: calc(22px + var(--ws-tl-inset)); }
+.ws-root > :first-child .ws-lib-head { padding-left: calc(10px + var(--ws-tl-inset)); }
+
+/* Drag the window by its top row; every control inside it opts back out. */
+.ws-brand, .ws-topbar, .ws-lib-head { -webkit-app-region: drag; }
+.ws-brand button, .ws-brand a,
+.ws-topbar button, .ws-topbar a, .ws-topbar input,
+.ws-lib-head button, .ws-lib-head a, .ws-lib-head input {
+  -webkit-app-region: no-drag;
+}
+
 /* ── Sidebar (light grey, one family with the canvas + library) ──────────── */
 .ws-sidebar {
   background: var(--ws-paper-2);
