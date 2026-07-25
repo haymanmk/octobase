@@ -6,8 +6,14 @@ Persistent state now lives in two layers:
    placements, edges) as one JSON document, owned by the renderer and stored
    in `localStorage`.
 2. **Main-process JSON files** under the Electron `userData` directory
-   (typically `~/Library/Application Support/octobase-react-ui/` on macOS) —
+   (`~/.config/octobase/` on Linux, `~/Library/Application Support/octobase/`
+   on macOS; the directory name follows package.json `name`) —
    page highlights for the in-app browser pane, plus a legacy card file.
+
+> The app was renamed `octobase-react-ui` → `octobase`, which moves that
+> directory. A machine that had run the old build starts against an empty
+> store until the old directory is moved across (`mv ~/.config/octobase-react-ui
+> ~/.config/octobase`, app closed). Nothing migrates automatically.
 
 On disk (`userData`):
 

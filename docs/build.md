@@ -128,3 +128,12 @@ dist-extension/                                 (from npm run build:extension)
 Electron's `main.js` loads the `dist/` files by relative path; nothing
 else outside `dist/` is referenced at app runtime. `dist-extension/` is
 only ever loaded by Chrome.
+
+## Desktop entry (Linux)
+
+`npm run install:desktop` writes `~/.local/share/applications/octobase.desktop`
+and copies `src/electron/assets/icon.png` into the hicolor icon theme, so the
+window gets a real name and icon in the GNOME/Ubuntu dock and can be pinned.
+The dock matches window to launcher by `WM_CLASS`, which Electron derives from
+package.json `name` — so `StartupWMClass` in the script must stay in sync with
+that field. One-time, per machine; a packaged build would ship this instead.

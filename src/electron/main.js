@@ -134,6 +134,7 @@ const createMainWindow = () => {
   parentWin = new BrowserWindow({
     width: 1440,
     height: 900,
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

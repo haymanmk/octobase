@@ -1,5 +1,5 @@
 {
-  "name": "octobase-react-ui",
+  "name": "octobase",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,6 +13,7 @@
     "build": "tsc -b && tsc -p src/extension/tsconfig.json && vite build && npm run build:highlighter",
     "build:highlighter": "vite build --config vite.highlighter.config.ts",
     "build:extension": "node scripts/build-extension.mjs",
+    "install:desktop": "node scripts/install-desktop-entry.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
