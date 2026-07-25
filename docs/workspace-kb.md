@@ -32,6 +32,7 @@ src/workspace/                   React UI
   CardMarkdownEditor.tsx         TipTap WYSIWYG markdown (in-place card editor)
   block-handles.tsx              ⋮⋮ grip: hover/drag/menu for a top-level block
   block-move.ts                  the block-reordering transform (unit-tested)
+  markdown-lists.ts              adjacent lists keep apart across the round-trip
   card-embed-node.ts             TipTap atom keeping ![[embeds]] intact
   MarkdownView.tsx               react-markdown + GFM + wikilinks + embed mini-cards
   CommandPalette.tsx             ⌘K search: results + live preview pane
@@ -65,6 +66,18 @@ src/workspace/                   React UI
   view, so entering edit mode doesn't reflow embeds into chips.
 - **Markdown round-trip**: cards store markdown. TipTap loads it via
   tiptap-markdown and serializes back with `editor.storage.markdown.getMarkdown()`.
+  Anything that changes the document has to be checked through that round-trip,
+  not just in the editor — see the adjacent-list case below.
+- **Adjacent bullet lists alternate their marker** (`markdown-lists.ts`).
+  Markdown cannot express "two separate lists" when both use the same bullet
+  character: `- a` / blank line / `- [ ] b` re-parses as ONE list, so a bullet
+  list sitting directly above a task list came back merged — the plain items
+  joined the task list, inherited `contains-task-list`, and lost their markers.
+  CommonMark does start a new list when the marker changes, so the serializer
+  flips `-`/`*` along any run of adjacent bullet/task lists. Only `serialize` is
+  overridden; supplying `parse` too would shallow-merge away tiptap-markdown's
+  task-list plugin. `test/markdown-lists.test.ts` checks both parsers in play —
+  markdown-it (editor) and remark-gfm (read view).
 - **Block dragging bypasses ProseMirror's drop handling entirely.** The ⋮⋮ grip
   is a portal button *outside* the editor, so by the time a drop lands the
   editor's selection is no longer the dragged block — and PM's handler removes

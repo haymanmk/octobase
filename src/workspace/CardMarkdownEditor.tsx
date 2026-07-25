@@ -4,8 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Paragraph from "@tiptap/extension-paragraph";
 import { EditorCodeBlock } from "./code-block.tsx";
 import { BlockHandles } from "./block-handles.tsx";
-import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import { SeparatedBulletList, SeparatedTaskList } from "./markdown-lists.ts";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { mergeAttributes } from "@tiptap/core";
@@ -92,10 +92,13 @@ export function CardMarkdownEditor({ value, onChange, cardId }: CardMarkdownEdit
       // prosemirror-dropcursor computes offsets that break inside the
       // canvas's scale() transform — BlockHandles drives the app's own
       // fixed-position drop caret during block drags instead.
-      StarterKit.configure({ codeBlock: false, paragraph: false, dropcursor: false }),
+      // bulletList comes from markdown-lists.ts instead: adjacent bullet
+      // lists have to alternate their marker or markdown re-parses them as one.
+      StarterKit.configure({ codeBlock: false, paragraph: false, dropcursor: false, bulletList: false }),
       PersistentParagraph,
       EditorCodeBlock,
-      TaskList,
+      SeparatedBulletList,
+      SeparatedTaskList,
       TaskItem.configure({ nested: true }),
       CardEmbedNode,
       CardMath,
