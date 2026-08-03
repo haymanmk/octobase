@@ -75,6 +75,17 @@ Request/reply:
 | `highlights:save` | browser view → main | `Highlight` | `{ ok: true }` |
 | `highlights:delete` | browser view → main | `{ id }` | `{ ok: true }` |
 | `tags:list` | browser view → main | — | `string[]` |
+| `clip:save` | app view → main | `{ dataUrl, w, h }` | `{ file, w, h } \| null` |
+| `pdf:open` | app view → main | — | `{ file, name } \| null` |
+| `pdf:import` | app view → main | absolute source path | `{ file, name } \| null` |
+| `pdf:delete` | app view → main | imported file name | `boolean` |
+| `pdftext:save` | app view → main | `{ file, markdown }` | `boolean` |
+| `pdftext:load` | app view → main | imported file name | cached markdown or `null` |
+| `ai:status` | app view → main | — | `{ hasKey, model }` |
+| `ai:set-key` | app view → main | API key or empty string | `{ ok, error? }` |
+| `ai:set-model` | app view → main | model id | `{ ok: true, model }` |
+| `ai:test` | app view → main | — | `{ ok, error? }` |
+| `ai:chat` | app view → main | `{ reqId, messages }` | `{ ok, error? }` after stream ends |
 | `cards:load` | app view → main | — | `Card[]` (legacy†) |
 | `cards:save` | app view → main | `Card` | `{ ok: true }` (legacy†) |
 | `cards:delete` | app view → main | `{ id }` | `{ ok: true }` (legacy†) |
@@ -96,6 +107,8 @@ Fire-and-forget:
 | `clip:start` | app view → main | — (injects the region-select overlay) |
 | `clip:region` | browser view → main | `{ x, y, width, height }` selected rect |
 | `clip:cancel` | browser view → main | — |
+| `clip:annotate` | browser view → main | clip edit metadata keyed by `file` |
+| `ai:chat-abort` | app view → main | request id |
 | `drag-drop-text-selection` | browser view → main | `{ text, sourceUrl, cursorX, cursorY, highlightId }` |
 | `drag-drop-text-position` | browser view → main | `{ x, y }` (mouse move while holding drag) |
 | `drag-drop-text-end` | browser view → main | `{ x, y }` (mouseup) |
@@ -114,6 +127,10 @@ Broadcasts (main → renderer):
 | `highlight-dropped` | app view | enriched drop `{ highlightId, text, sourceUrl, color, tags, notes, x, y }` | overlay's drop landing inside the window |
 | `clip:captured` | app view | `{ file, w, h, sourceUrl, title }` | successful region capture |
 | `clip:cancelled` | app view | — | Esc / tiny rect / capture failure |
+| `clip:annotated` | app view | clip edit metadata | in-page post-capture edit form |
+| `clip:edit-form` | browser view | `{ file, rect }` | successful browser-region capture |
+| `ai:chat-delta` | app view | `{ reqId, delta }` | streamed OpenAI response text |
+| `window:fullscreen` | app view | `boolean` | initial load and macOS fullscreen changes |
 | `capture:received` | app view | capture payload | Chrome extension `POST /capture` |
 | `highlight:received` | app view | highlight payload | Chrome extension `POST /highlight` |
 | `drag-drop-text-selection` | overlay | drag data, cursor in window coords | relay of the browser-view channel |
@@ -125,6 +142,11 @@ Broadcasts (main → renderer):
 `capture:highlights-response` sender; main does not send or listen on these
 yet (the capture server's `onHighlightDelete` / `onListHighlights` hooks are
 not wired up). See `capture-extension.md`.
+
+Imported PDFs are copied into `userData/pdfs` and exposed only through the
+privileged `octobase-pdf://` protocol. PDF.js runs in the app renderer; main
+owns file import/delete and the parsed-text cache used by AI. OpenAI requests
+run in main so the renderer never receives the stored API key.
 
 ## Sync rules
 
