@@ -9,6 +9,7 @@ is built on. Skim `architecture.md` first; the rest can be read in any order.
 | [`electron-main.md`](electron-main.md) | Main process responsibilities, view bounds, drag flow, clips/PDFs, AI bridge |
 | [`highlighter.md`](highlighter.md) | Injected browser-view bundle: Lit components, Rangy, the widget state machine |
 | [`whiteboard.md`](whiteboard.md) | Workspace canvas: pan/zoom gestures, card editing/resize, mind-map edges, `![[embed]]` nesting |
+| [`markdown-editor.md`](markdown-editor.md) | TipTap/ProseMirror editor architecture, Markdown round trip, save semantics, block dragging, content-loss debugging |
 | [`workspace-kb.md`](workspace-kb.md) | Knowledge-base core: `src/lib` model/store, multi-whiteboard cards, links, tags, search, viewer/PDF workflow |
 | [`capture-extension.md`](capture-extension.md) | In-app article reader, shared Readability/Turndown extractor, capture server, MV3 extension |
 | [`persistence.md`](persistence.md) | Renderer workspace store (localStorage) + main-process JSON/files, schemas, sync rules |
