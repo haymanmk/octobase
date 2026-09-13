@@ -24,6 +24,7 @@ import {
   type PDFDocumentProxy,
 } from "./pdf-doc.ts";
 import { findHits, stepHit, type SearchHit } from "./pdf-search.ts";
+import { anchorFromScroll, scrollTopForAnchor, type PageAnchor } from "./pdf-layout.ts";
 import { embedHostAt, hideDropCaret, showDropCaret } from "../drop-caret.ts";
 import { flattenOutline, type FlatOutlineItem } from "./pdf-outline.ts";
 
@@ -97,6 +98,8 @@ export function PdfReader({
   // The scale belongs to the user once set: the pane fits the page width once
   // per document, and pane resizes never rescale (or lose the reading spot).
   const fittedRef = React.useRef(false);
+  /** Reading spot captured just before a zoom change, restored just after. */
+  const pendingAnchorRef = React.useRef<PageAnchor | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   // Which pages have a live render at which scale.
   const renderedRef = React.useRef(new Map<number, number>());
@@ -188,6 +191,8 @@ export function PdfReader({
     setLoadError(null);
     renderedRef.current.clear();
     fittedRef.current = false;
+    // A spot remembered from the previous document means nothing in this one.
+    pendingAnchorRef.current = null;
     loadPdf(pdfUrl(card.file))
       .then(async (d) => {
         if (gone) return;
@@ -208,6 +213,25 @@ export function PdfReader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card?.file]);
 
+  // Every zoom change carries the reading spot with it. The spot is read here,
+  // while the pages are still at the old scale: zooming out shortens the
+  // document, and the browser clamps scrollTop to the shorter scrollHeight as
+  // the new page sizes land — so a spot read after that has already collapsed
+  // to the end of the document. The layout effect below restores it.
+  const setScaleAnchored = React.useCallback((next: number) => {
+    const el = scrollRef.current;
+    if (el && baseSizes.length > 0) {
+      pendingAnchorRef.current = anchorFromScroll({
+        scrollTop: el.scrollTop,
+        clientHeight: el.clientHeight,
+        baseHeights: baseSizes.map((s) => s.height),
+        scale,
+        gap: PAGE_GAP,
+      });
+    }
+    setScale(next);
+  }, [baseSizes, scale]);
+
   // Fit the widest page to the pane. One-shot: runs once when a document's
   // sizes arrive and again from the toolbar's Fit button — never from a
   // ResizeObserver, so dragging the pane divider keeps scale and position.
@@ -215,8 +239,8 @@ export function PdfReader({
     const el = scrollRef.current;
     if (!el || baseSizes.length === 0) return;
     const maxW = Math.max(...baseSizes.map((s) => s.width));
-    setScale(clampScale((el.clientWidth - FIT_PAD * 2) / maxW));
-  }, [baseSizes]);
+    setScaleAnchored(clampScale((el.clientWidth - FIT_PAD * 2) / maxW));
+  }, [baseSizes, setScaleAnchored]);
 
   React.useEffect(() => {
     if (baseSizes.length === 0 || fittedRef.current) return;
@@ -224,17 +248,21 @@ export function PdfReader({
     fitWidth();
   }, [baseSizes, fitWidth]);
 
-  // Keep the viewport middle anchored across scale changes (zoom, fit) so
-  // zooming doesn't lose the reading spot. Runs before paint.
-  const prevScaleRef = React.useRef<number | null>(null);
+  // Put the remembered reading spot back under the viewport middle, now that
+  // the pages carry their new size. Runs before paint.
   React.useLayoutEffect(() => {
     const el = scrollRef.current;
-    const prev = prevScaleRef.current;
-    prevScaleRef.current = scale;
-    if (!el || prev == null || prev === scale) return;
-    const mid = el.scrollTop + el.clientHeight / 2;
-    el.scrollTop = (mid * scale) / prev - el.clientHeight / 2;
-  }, [scale]);
+    const anchor = pendingAnchorRef.current;
+    pendingAnchorRef.current = null;
+    if (!el || !anchor || baseSizes.length === 0) return;
+    el.scrollTop = scrollTopForAnchor({
+      anchor,
+      clientHeight: el.clientHeight,
+      baseHeights: baseSizes.map((s) => s.height),
+      scale,
+      gap: PAGE_GAP,
+    });
+  }, [scale, baseSizes]);
 
   // ---- page rendering (lazy, scale-aware) -----------------------------------
 
@@ -664,7 +692,7 @@ export function PdfReader({
       dir > 0
         ? Math.floor(scale / ZOOM_STEP + 1e-4) + 1
         : Math.ceil(scale / ZOOM_STEP - 1e-4) - 1;
-    setScale(clampScale(notch * ZOOM_STEP));
+    setScaleAnchored(clampScale(notch * ZOOM_STEP));
   };
 
   const toggleOutlineFold = (index: number) =>
