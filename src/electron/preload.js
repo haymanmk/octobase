@@ -111,6 +111,9 @@ contextBridge.exposeInMainWorld('octobaseCapture', {
   respondHighlights: (reqId, items) => {
     ipcRenderer.send('capture:highlights-response', { reqId, items });
   },
+  // One-time adoption of highlights still sitting in the legacy JSON file.
+  importLegacyHighlights: () => ipcRenderer.invoke('highlights:legacy-import'),
+  legacyImportDone: () => ipcRenderer.send('highlights:legacy-import-done'),
 });
 
 console.log('Preload script loaded');

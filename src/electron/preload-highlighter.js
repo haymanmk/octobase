@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('highlight:updated');
     ipcRenderer.on('highlight:updated', (_event, data) => callback(data));
   },
+  onHighlightAdded: (callback) => {
+    ipcRenderer.removeAllListeners('highlight:added');
+    ipcRenderer.on('highlight:added', (_event, data) => callback(data));
+  },
   onHighlightDeleted: (callback) => {
     ipcRenderer.removeAllListeners('highlight:deleted');
     ipcRenderer.on('highlight:deleted', (_event, data) => callback(data));

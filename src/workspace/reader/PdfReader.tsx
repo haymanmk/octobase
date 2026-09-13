@@ -10,6 +10,7 @@ import { getPdfBridge, pdfUrl } from "../electron-bridge.ts";
 import {
   locateHighlights,
   bandsFor,
+  noteDotBands,
   highlightAtOffset,
   offsetFromPoint,
   type PlacedHighlight,
@@ -112,6 +113,13 @@ export function PdfReader({
   const placedRef = React.useRef(new Map<number, PlacedHighlight[]>());
   const [bandsByPage, setBandsByPage] = React.useState<Map<number, HighlightBand[]>>(new Map());
   const [selToolbar, setSelToolbar] = React.useState<{ x: number; y: number } | null>(null);
+  // The pill offers the default colour alone; the rest open on demand and
+  // fold away when the pill closes. Not on every selToolbar change: the
+  // mouse-up that follows a click on "⋯" re-runs the selection handler and
+  // re-places the pill, which would fold the palette the instant it opened.
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const pillOpen = selToolbar != null;
+  React.useEffect(() => { if (!pillOpen) setPaletteOpen(false); }, [pillOpen]);
   const [pulse, setPulse] = React.useState(false);
   const pendingSel = React.useRef<{ range: Range; page: number } | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
@@ -160,6 +168,12 @@ export function PdfReader({
   );
 
   // Image cards clipped from this PDF that still know where they came from.
+  // Highlights with a note get a dot on their last band.
+  const notedIds = React.useMemo(
+    () => new Set(highlights.filter((h) => noteOfHighlight(h).trim()).map((h) => h.id)),
+    [highlights],
+  );
+
   const clips = React.useMemo(
     () =>
       card
@@ -751,10 +765,16 @@ export function PdfReader({
               <canvas />
               <div className="ws-pdf-text textLayer" />
               <div className="ws-hl-layer" aria-hidden="true">
-                {(bandsByPage.get(n) ?? []).map((b, j) => (
-                  <div key={`${b.cardId}-${j}`} className="ws-hl-band"
-                    style={{ left: b.x, top: b.y, width: b.w, height: b.h, background: PALETTE[b.color].fill }} />
-                ))}
+                {(() => {
+                  const pageBands = bandsByPage.get(n) ?? [];
+                  const dots = noteDotBands(pageBands, (id) => notedIds.has(id));
+                  return pageBands.map((b, j) => (
+                    <div key={`${b.cardId}-${j}`} className="ws-hl-band"
+                      style={{ left: b.x, top: b.y, width: b.w, height: b.h, background: PALETTE[b.color].fill }}>
+                      {dots.get(b.cardId) === j && <span className="ws-hl-note-dot" />}
+                    </div>
+                  ));
+                })()}
                 {flashPage === n && flashBands.map((b, j) => (
                   <div key={`flash-${j}`} className="ws-hl-band ws-hl-flash"
                     style={{ left: b.x, top: b.y, width: b.w, height: b.h }} />
@@ -860,15 +880,19 @@ export function PdfReader({
         <div className={`octo-pill${pulse ? " pulse" : ""}`}
           style={{ position: "fixed", left: selToolbar.x, top: selToolbar.y, zIndex: 60 }}
           onMouseDown={(e) => e.preventDefault()}>
-          {HIGHLIGHT_COLORS.map((c) => (
+          {(paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => (
             <button key={c} className="octo-swatch" title={`Highlight ${c}`}
               style={{ background: PALETTE[c].fill }} onClick={() => makeHighlight(c)} />
           ))}
-          <span className="octo-divider" />
-          <button className="octo-add-note" onClick={() => {
+          {!paletteOpen && (
+            <button className="octo-more" title="More options"
+              onClick={() => setPaletteOpen(true)}>⋯</button>
+          )}
+          {paletteOpen && <span className="octo-divider" />}
+          {paletteOpen && <button className="octo-add-note" onClick={() => {
             setPulse(true);
             setTimeout(() => setPulse(false), 1300);
-          }}>+ note</button>
+          }}>+ note</button>}
         </div>
       )}
 

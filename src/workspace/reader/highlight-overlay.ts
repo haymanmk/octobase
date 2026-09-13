@@ -15,6 +15,27 @@ export interface PlacedHighlight extends OverlayHighlight {
 }
 
 /** A marker band rectangle, relative to the reader body element. */
+/**
+ * The last band of each highlight that carries a note — where the little
+ * "there's a note here" dot goes. Keyed by cardId so callers can look it up
+ * while rendering the band list.
+ */
+export function noteDotBands(
+  bands: HighlightBand[],
+  hasNote: (cardId: string) => boolean,
+): Map<string, number> {
+  const lastIndex = new Map<string, number>();
+  bands.forEach((b, i) => {
+    if (!hasNote(b.cardId)) return;
+    const prev = lastIndex.get(b.cardId);
+    // "Last" by position on the page, not by array order.
+    if (prev == null || bands[prev].y < b.y || (bands[prev].y === b.y && bands[prev].x < b.x)) {
+      lastIndex.set(b.cardId, i);
+    }
+  });
+  return lastIndex;
+}
+
 export interface HighlightBand {
   cardId: string;
   color: HighlightColor;

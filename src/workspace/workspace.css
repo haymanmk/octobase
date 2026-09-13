@@ -2512,3 +2512,18 @@
 @keyframes om-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
 @keyframes om-mouth { 0%, 55%, 100% { transform: scaleY(1); } 70%, 82% { transform: scaleY(1.28); } }
 .ws-brand { display: flex; align-items: center; gap: 10px; }
+
+/* A highlight carrying a note wears a dot at the end of its last band, so a
+   reader can see there's something to open without hovering everything. */
+.ws-hl-note-dot {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ws-text, #212123);
+  opacity: 0.55;
+  mix-blend-mode: normal;
+  pointer-events: none;
+}

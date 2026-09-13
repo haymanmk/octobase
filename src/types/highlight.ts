@@ -1,3 +1,5 @@
+import type { TextAnchor } from "../lib/model/types.ts";
+
 export const HIGHLIGHT_COLORS = [
   "yellow",
   "green",
@@ -23,6 +25,12 @@ export interface Highlight {
   tags: string[];
   notes: string;
   anchor: RangyAnchor;
+  /**
+   * The portable anchor, shared with the capture extension and the workspace
+   * store. Highlights made outside the browser pane have only this one, and
+   * arrive with an empty `anchor.serialized`.
+   */
+  textAnchor?: TextAnchor;
   createdAt: number;
   updatedAt: number;
 }

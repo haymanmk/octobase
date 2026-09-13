@@ -40,6 +40,13 @@ export interface HighlightCard extends BaseCard {
   anchor: TextAnchor;
   /** 1-based page number when the source is a PDF (sourceUrl = pdf:<id>). */
   page?: number;
+  /**
+   * Serialized Rangy range, kept only for highlights made in the live browser
+   * pane: that painter re-applies them by DOM range, which survives repeat
+   * phrases the text anchor alone could confuse. Absent for every other
+   * source (extension, reader panes, PDFs), which anchor by text.
+   */
+  domAnchor?: { serialized: string };
 }
 
 export interface ArticleCard extends BaseCard {

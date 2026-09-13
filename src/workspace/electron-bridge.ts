@@ -15,14 +15,23 @@ export interface HighlightPayload {
   anchor: TextAnchor;
   exact: string;
   note?: string;
+  tags?: string[];
+  /** Set only by the live browser pane, which paints by DOM range. */
+  domAnchor?: { serialized: string };
 }
 
-/** Shape returned to the extension for reverse (app→page) sync. */
+/**
+ * Shape handed back to whoever asks the workspace store for a URL's
+ * highlights — the capture extension and the live browser pane both read it.
+ */
 export interface HighlightSyncItem {
   id: string;
   color: HighlightColor;
   anchor: TextAnchor;
   exact: string;
+  tags: string[];
+  note: string;
+  domAnchor?: { serialized: string };
 }
 
 export interface ExtensionInfo {
@@ -37,6 +46,9 @@ export interface OctobaseCaptureBridge {
   onHighlightRemove: (cb: (d: { id: string }) => void) => void;
   onHighlightsRequest: (cb: (d: { reqId: string; url: string }) => void) => void;
   respondHighlights: (reqId: string, items: HighlightSyncItem[]) => void;
+  /** One-time hand-over of highlights left in the legacy main-process file. */
+  importLegacyHighlights?: () => Promise<HighlightPayload[]>;
+  legacyImportDone?: () => void;
 }
 
 /** Present only inside the Electron renderer (exposed by preload.js). */

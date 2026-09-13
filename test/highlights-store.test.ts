@@ -181,3 +181,34 @@ test("syncHighlightFromCard returns null when no matching highlight exists", asy
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("upsertHighlight keeps the browser pane's DOM anchor beside the text anchor", async () => {
+  const { WorkspaceStore } = await import("../src/lib/store/workspace-store.ts");
+  const { MemoryPersistence } = await import("../src/lib/store/persistence.ts");
+  const store = new WorkspaceStore(new MemoryPersistence());
+  await store.init({ seed: false });
+
+  const anchor = { exact: "a passage", prefix: "", suffix: "", startHint: 0 };
+  // The live browser pane saves both anchors; the extension only the text one.
+  const fromPane = store.upsertHighlight({
+    id: "hl-pane", text: "a passage", sourceUrl: "https://example.com",
+    anchor, color: "yellow", domAnchor: { serialized: "1/2/3:0,1/2/3:9" }, tags: ["x"],
+  });
+  const fromExtension = store.upsertHighlight({
+    id: "hl-ext", text: "another passage", sourceUrl: "https://example.com",
+    anchor: { ...anchor, exact: "another passage" }, color: "green",
+  });
+  assert.deepEqual(fromPane.domAnchor, { serialized: "1/2/3:0,1/2/3:9" });
+  assert.deepEqual(fromPane.tags, ["x"]);
+  assert.equal("domAnchor" in fromExtension, false);
+
+  // Re-saving the same highlight (a recolour from the pane) keeps the anchors.
+  const recoloured = store.upsertHighlight({
+    id: "hl-pane", text: "a passage", sourceUrl: "https://example.com",
+    anchor, color: "pink", domAnchor: { serialized: "1/2/3:0,1/2/3:9" },
+  });
+  assert.equal(recoloured.color, "pink");
+  assert.deepEqual(recoloured.domAnchor, { serialized: "1/2/3:0,1/2/3:9" });
+  assert.deepEqual(recoloured.tags, ["x"]);
+  assert.equal(store.getHighlightsForUrl("https://example.com").length, 2);
+});

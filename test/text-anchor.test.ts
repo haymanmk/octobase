@@ -54,3 +54,13 @@ test("locateAnchor returns null when text is unrelated", () => {
   const anchor = describeAnchor(TEXT, start, start + "brown fox".length);
   assert.equal(locateAnchor("completely different content here", anchor), null);
 });
+
+test("noteDotBands marks the last band of each noted highlight only", async () => {
+  const { noteDotBands } = await import("../src/workspace/reader/highlight-overlay.ts");
+  const band = (cardId: string, x: number, y: number) =>
+    ({ cardId, color: "yellow" as const, x, y, w: 50, h: 12 });
+  // "a" wraps across three lines, "b" has no note, "c" is a single band.
+  const bands = [band("a", 10, 0), band("a", 0, 20), band("b", 0, 40), band("c", 0, 60), band("a", 0, 10)];
+  const dots = noteDotBands(bands, (id) => id !== "b");
+  assert.deepEqual([...dots.entries()].sort(), [["a", 1], ["c", 3]]);
+});

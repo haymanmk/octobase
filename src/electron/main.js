@@ -534,23 +534,109 @@ app.whenReady().then(() => {
     }
   });
 
-  // Highlights persistence (browser view ↔ main)
+  // ── Highlights ─────────────────────────────────────────────────────────
+  // The workspace store (in the app renderer) owns every highlight. Main is a
+  // router: the browser pane and the capture extension both read and write
+  // through here, so a highlight made in one shows up in the other. The
+  // legacy JSON store keeps serving the old whiteboard route and is imported
+  // from once, on first launch after this change.
+  const pendingHighlightReqs = new Map();
+  ipcMain.on('capture:highlights-response', (_event, { reqId, items }) => {
+    const resolve = pendingHighlightReqs.get(reqId);
+    if (!resolve) return;
+    pendingHighlightReqs.delete(reqId);
+    resolve(Array.isArray(items) ? items : []);
+  });
+
+  /** Ask the workspace store which highlights belong to a URL. */
+  function highlightsForUrl(url) {
+    if (!appView || appView.webContents.isDestroyed()) return Promise.resolve([]);
+    const reqId = randomUUID();
+    return new Promise((resolve) => {
+      // Never hang a page load on an unanswered request.
+      const timer = setTimeout(() => {
+        pendingHighlightReqs.delete(reqId);
+        resolve([]);
+      }, 4000);
+      pendingHighlightReqs.set(reqId, (items) => { clearTimeout(timer); resolve(items); });
+      appView.webContents.send('capture:highlights-request', { reqId, url });
+    });
+  }
+
+  /** Workspace record → the shape the browser pane's highlighter reads. */
+  function toPaneHighlight(item, url) {
+    return {
+      id: item.id,
+      text: item.exact ?? item.anchor?.exact ?? '',
+      sourceUrl: url,
+      color: item.color,
+      tags: item.tags ?? [],
+      notes: item.note ?? '',
+      // Pane-made highlights re-apply by DOM range; everything else (extension,
+      // reader panes) arrives with a text anchor only.
+      anchor: item.domAnchor ?? { serialized: '' },
+      textAnchor: item.anchor,
+      createdAt: item.createdAt ?? 0,
+      updatedAt: item.updatedAt ?? 0,
+    };
+  }
+
   ipcMain.handle('highlights:load', async (_event, { url }) => {
-    return await store.loadHighlightsForUrl(url);
+    const items = await highlightsForUrl(url);
+    return items.map((item) => toPaneHighlight(item, url));
   });
 
   ipcMain.handle('highlights:save', async (_event, highlight) => {
-    await store.saveHighlight(highlight);
+    // Into the workspace store, by the same channel the extension uses.
+    appView?.webContents.send('highlight:received', {
+      id: highlight.id,
+      url: highlight.sourceUrl,
+      color: highlight.color,
+      anchor: highlight.textAnchor,
+      exact: highlight.text,
+      note: highlight.notes ?? '',
+      tags: highlight.tags ?? [],
+      domAnchor: highlight.anchor?.serialized ? highlight.anchor : undefined,
+    });
     browserView?.webContents.send('highlight:updated', highlight);
-    const card = await store.syncCardFromHighlight(highlight);
-    if (card) appView?.webContents.send('card:updated', card);
     return { ok: true };
   });
 
   ipcMain.handle('highlights:delete', async (_event, { id }) => {
-    await store.deleteHighlight(id);
+    appView?.webContents.send('capture:highlight-remove', { id });
     browserView?.webContents.send('highlight:deleted', { id });
     return { ok: true };
+  });
+
+  // One-time import: hand the renderer whatever the legacy file still holds,
+  // and only mark it done once the renderer says it took them.
+  const legacyMarker = path.join(app.getPath('userData'), 'highlights-imported.txt');
+  ipcMain.handle('highlights:legacy-import', async () => {
+    try {
+      if (fs.existsSync(legacyMarker)) return [];
+      const all = await store.loadAllHighlights();
+      return all
+        .filter((h) => h && h.sourceUrl && h.text)
+        .map((h) => ({
+          id: h.id,
+          url: h.sourceUrl,
+          color: h.color,
+          // The legacy record has no text anchor; the quote alone still finds
+          // the passage on most pages, and the DOM range covers the rest.
+          anchor: { exact: h.text, prefix: '', suffix: '', startHint: 0 },
+          exact: h.text,
+          note: h.notes ?? '',
+          tags: h.tags ?? [],
+          domAnchor: h.anchor?.serialized ? h.anchor : undefined,
+        }));
+    } catch (err) {
+      console.warn('legacy highlight import failed:', err);
+      return [];
+    }
+  });
+  ipcMain.on('highlights:legacy-import-done', () => {
+    try { fs.writeFileSync(legacyMarker, new Date().toISOString()); }
+    catch (err) { console.warn('could not mark legacy import done:', err); }
   });
 
   ipcMain.handle('tags:list', async () => await store.listTags());
@@ -579,7 +665,25 @@ app.whenReady().then(() => {
     },
     onHighlight: (data) => {
       appView?.webContents.send('highlight:received', data);
-      return { id: null };
+      // Paint it straight away if the browser pane is on that same page.
+      browserView?.webContents.send('highlight:added', {
+        id: data.id,
+        text: data.exact ?? data.anchor?.exact ?? '',
+        sourceUrl: data.url,
+        color: data.color,
+        tags: data.tags ?? [],
+        notes: data.note ?? '',
+        anchor: { serialized: '' },
+        textAnchor: data.anchor,
+      });
+      return { id: data.id ?? null };
+    },
+    // The extension asks for a URL's highlights on page load, and deletes
+    // through the same door the pane does.
+    onListHighlights: (url) => highlightsForUrl(url),
+    onHighlightDelete: (id) => {
+      appView?.webContents.send('capture:highlight-remove', { id });
+      browserView?.webContents.send('highlight:deleted', { id });
     },
   });
   captureServer

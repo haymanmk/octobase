@@ -396,6 +396,9 @@ export class WorkspaceStore {
     color?: HighlightColor;
     note?: string;
     page?: number;
+    /** Live-browser highlights carry a Rangy range alongside the text anchor. */
+    domAnchor?: { serialized: string };
+    tags?: string[];
   }): HighlightCard {
     const text = init.text.trim();
     const title = text || "Highlight";
@@ -413,8 +416,10 @@ export class WorkspaceStore {
           color: init.color ?? prev.color,
           anchor: init.anchor ?? prev.anchor,
           sourceUrl: init.sourceUrl || prev.sourceUrl,
+          tags: init.tags ?? prev.tags,
           deletedAt: null,
           updatedAt: now(),
+          ...(init.domAnchor ? { domAnchor: init.domAnchor } : {}),
         };
         this.data.cards[idx] = updated;
         this.touch();
@@ -428,7 +433,7 @@ export class WorkspaceStore {
       kind: "highlight",
       title,
       body,
-      tags: [],
+      tags: init.tags ?? [],
       color: init.color ?? "yellow",
       createdAt: ts,
       updatedAt: ts,
@@ -436,6 +441,7 @@ export class WorkspaceStore {
       sourceUrl: init.sourceUrl,
       anchor: init.anchor,
       ...(init.page ? { page: init.page } : {}),
+      ...(init.domAnchor ? { domAnchor: init.domAnchor } : {}),
     };
     this.data.cards.push(card);
     this.touch();

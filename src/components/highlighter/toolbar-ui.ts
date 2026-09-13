@@ -33,6 +33,16 @@ export function pillCss(): string {
 }
 .octo-swatch:hover { transform: scale(1.12); }
 .octo-swatch.current { outline: 2px solid #212123; outline-offset: 1px; }
+/* Opens the rest of the palette; the pill starts on the default colour alone. */
+.octo-more {
+  width: ${SWATCH_SIZE}px; height: ${SWATCH_SIZE}px; flex: none;
+  border-radius: 50%; box-sizing: border-box; padding: 0; cursor: pointer;
+  border: 1px solid #e3e3e3; background: #f4f4f5; color: #56565a;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 13px; line-height: 1;
+  transition: transform 0.1s, background 0.1s, color 0.1s;
+}
+.octo-more:hover { transform: scale(1.12); background: #ececee; color: #212123; }
 .octo-divider { width: 1px; height: 20px; background: #e3e3e3; margin: 0 2px; }
 .octo-add-note {
   font-size: 11px; color: #56565a; cursor: pointer; user-select: none;

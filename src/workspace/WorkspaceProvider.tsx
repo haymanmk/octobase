@@ -87,6 +87,9 @@ export function WorkspaceProvider({
         byline: d.byline,
       });
     });
+    // Highlights arrive here from both the capture extension and the live
+    // browser pane (main.js routes the pane's saves through this channel), so
+    // this store is the one place a highlight lives.
     bridge.onHighlight((d) => {
       store.upsertHighlight({
         id: d.id,
@@ -95,18 +98,42 @@ export function WorkspaceProvider({
         anchor: d.anchor,
         color: d.color,
         note: d.note,
+        tags: d.tags,
+        domAnchor: d.domAnchor,
       });
     });
     bridge.onHighlightRemove(({ id }) => store.deleteCard(id));
-    // Reverse sync: hand the page its current highlights for a URL.
+    // Hand a URL's highlights back to whoever asked — the extension on page
+    // load, or the browser pane when it re-applies them.
     bridge.onHighlightsRequest(({ reqId, url }) => {
       const items = store.getHighlightsForUrl(url).map((h) => ({
         id: h.id,
         color: h.color,
         anchor: h.anchor,
         exact: h.anchor.exact,
+        tags: h.tags,
+        note: h.body,
+        ...(h.domAnchor ? { domAnchor: h.domAnchor } : {}),
       }));
       bridge.respondHighlights(reqId, items);
+    });
+    // Highlights saved before the browser pane shared this store still live
+    // in the main process's JSON file; adopt them once, by id.
+    void bridge.importLegacyHighlights?.().then((items) => {
+      if (!items?.length) return;
+      for (const d of items) {
+        store.upsertHighlight({
+          id: d.id,
+          text: d.exact ?? d.anchor.exact,
+          sourceUrl: d.url,
+          anchor: d.anchor,
+          color: d.color,
+          note: d.note,
+          tags: d.tags,
+          domAnchor: d.domAnchor,
+        });
+      }
+      bridge.legacyImportDone?.();
     });
   }, [store]);
 

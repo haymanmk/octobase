@@ -11,6 +11,7 @@ import type { Card, HighlightCard, HighlightColor } from "../../lib/model/types.
 import {
   locateHighlights,
   bandsFor,
+  noteDotBands,
   highlightAtOffset,
   offsetFromPoint,
   type PlacedHighlight,
@@ -80,6 +81,13 @@ export function Reader({
   const [prefs, setPrefs] = React.useState<ReaderPrefs>(loadPrefs);
   const placedRef = React.useRef<PlacedHighlight[]>([]);
   const [selToolbar, setSelToolbar] = React.useState<{ x: number; y: number } | null>(null);
+  // The pill offers the default colour alone; the rest open on demand and
+  // fold away when the pill closes. Not on every selToolbar change: the
+  // mouse-up that follows a click on "⋯" re-runs the selection handler and
+  // re-places the pill, which would fold the palette the instant it opened.
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const pillOpen = selToolbar != null;
+  React.useEffect(() => { if (!pillOpen) setPaletteOpen(false); }, [pillOpen]);
   const [pulse, setPulse] = React.useState(false);
   const pendingRange = React.useRef<Range | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
@@ -98,6 +106,9 @@ export function Reader({
 
   const sourceUrl = card && "sourceUrl" in card ? card.sourceUrl : "";
   const highlights = sourceUrl ? store.getHighlightsForUrl(sourceUrl) : [];
+  // Highlights with a note get a dot on their last band.
+  const notedIds = new Set(highlights.filter((h) => noteOfHighlight(h).trim()).map((h) => h.id));
+  const noteDots = noteDotBands(bands, (id) => notedIds.has(id));
   const editCard = editPop
     ? (store.getCard(editPop.cardId) as HighlightCard | undefined)
     : undefined;
@@ -332,7 +343,9 @@ export function Reader({
                     left: b.x, top: b.y, width: b.w, height: b.h,
                     "--hl-fill": PALETTE[b.color].fill,
                     "--hl-darkfill": PALETTE[b.color].darkFill,
-                  } as React.CSSProperties} />
+                  } as React.CSSProperties}>
+                  {noteDots.get(b.cardId) === i && <span className="ws-hl-note-dot" />}
+                </div>
               ))}
             </div>
           </div>
@@ -343,15 +356,19 @@ export function Reader({
         <div className={`octo-pill${pulse ? " pulse" : ""}`}
           style={{ position: "fixed", left: selToolbar.x, top: selToolbar.y, zIndex: 60 }}
           onMouseDown={(e) => e.preventDefault()}>
-          {HIGHLIGHT_COLORS.map((c) => (
+          {(paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => (
             <button key={c} className="octo-swatch" title={`Highlight ${c}`}
               style={{ background: PALETTE[c].fill }} onClick={() => makeHighlight(c)} />
           ))}
-          <span className="octo-divider" />
-          <button className="octo-add-note" onClick={() => {
+          {!paletteOpen && (
+            <button className="octo-more" title="More options"
+              onClick={() => setPaletteOpen(true)}>⋯</button>
+          )}
+          {paletteOpen && <span className="octo-divider" />}
+          {paletteOpen && <button className="octo-add-note" onClick={() => {
             setPulse(true);
             setTimeout(() => setPulse(false), 1300);
-          }}>+ note</button>
+          }}>+ note</button>}
         </div>
       )}
 

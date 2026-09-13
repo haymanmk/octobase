@@ -10,8 +10,11 @@ import 'rangy/lib/rangy-highlighter';
 import 'rangy/lib/rangy-serializer';
 import rangy from 'rangy';
 import { HIGHLIGHT_COLORS, type HighlightColor, type Highlight } from '../../types/highlight';
+import type { TextAnchor } from '../../lib/model/types';
 import { applyContrastGuard, classNameFor, PALETTE } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
+import { describeAnchorFromRange } from '../../lib/anchor/text-anchor';
+import { paintAnchors } from '../../lib/anchor/highlight-dom';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
 import './undo-toast';
@@ -28,6 +31,7 @@ declare global {
       deleteHighlight: (id: string) => Promise<{ ok: true }>;
       listTags: () => Promise<string[]>;
       onHighlightUpdated: (callback: (h: Highlight) => void) => void;
+      onHighlightAdded?: (callback: (h: Highlight) => void) => void;
       onHighlightDeleted: (callback: (data: { id: string }) => void) => void;
       onClipEditForm?: (callback: (d: {
         file: string;
@@ -476,10 +480,15 @@ async function applyHighlightFromSelection(color: HighlightColor): Promise<strin
   sel.removeAllRanges();
 
   const now = Date.now();
+  // Two anchors: the Rangy range re-applies exactly here, the text anchor
+  // travels — it is what the workspace store, the reader panes and the
+  // capture extension all read.
+  const textAnchor = describeAnchorFromRange(document.body, range) ?? undefined;
   await window.electronAPI?.saveHighlight({
     id, text, sourceUrl: window.location.href, color,
     tags: [], notes: '',
     anchor: { serialized },
+    textAnchor,
     createdAt: now, updatedAt: now,
   });
   return id;
@@ -547,6 +556,8 @@ export class HighlighterWidget extends LitElement {
   visible: boolean = false;
   mode: 'pill' | 'expanded' = 'pill';
   private pulseColors = false;
+  /** The pill shows the default colour alone until this opens the palette. */
+  private paletteOpen = false;
   private currentId: string | null = null;
   private currentColor: HighlightColor | null = null;
   private currentTags: string[] = [];
@@ -569,11 +580,15 @@ export class HighlighterWidget extends LitElement {
   show() {
     this.visible = true;
     this.mode = 'pill';
+    // Deliberately not folding the palette here: every mouse-up re-runs the
+    // selection handler and calls show() again, which would close the palette
+    // the moment "⋯" opened it. It folds on hide/reset instead.
     this.requestUpdate();
   }
 
   hide() {
     this.visible = false;
+    this.paletteOpen = false;
     this.requestUpdate();
   }
 
@@ -583,6 +598,7 @@ export class HighlighterWidget extends LitElement {
     this.currentTags = [];
     this.currentNotes = '';
     this.mode = 'pill';
+    this.paletteOpen = false;
     this.requestUpdate();
   }
 
@@ -660,12 +676,17 @@ export class HighlighterWidget extends LitElement {
       <div class="octo-pill ${this.pulseColors ? 'pulse' : ''}"
            @pointerdown=${(e: PointerEvent) => { e.stopPropagation(); }}
            @mousedown=${(e: MouseEvent) => { e.stopPropagation(); }}>
-        ${HIGHLIGHT_COLORS.map((c) => html`
+        ${(this.paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => html`
           <button class="octo-swatch" style="background:${PALETTE[c].fill}" title=${c}
                   @click=${() => this.onSwatch(c)}></button>
         `)}
-        <div class="octo-divider"></div>
-        <button class="octo-add-note" @click=${this.onAddNote}>+ note</button>
+        ${this.paletteOpen ? html`
+          <div class="octo-divider"></div>
+          <button class="octo-add-note" @click=${this.onAddNote}>+ note</button>
+        ` : html`
+          <button class="octo-more" title="More options"
+                  @click=${() => { this.paletteOpen = true; this.requestUpdate(); }}>⋯</button>
+        `}
       </div>
     `;
   }
@@ -767,21 +788,50 @@ window.electronAPI?.onHighlightUpdated?.((h) => {
   }
 });
 
+// Highlights that carry no Rangy range — made by the extension, a reader
+// pane, or another device — are painted with the CSS Custom Highlight API,
+// the same way the extension paints on a live page.
+const HL_PREFIX = 'octo-hl-';
+let anchoredRecords: Array<{ id: string; color: HighlightColor; anchor: TextAnchor }> = [];
+let highlightStylesInjected = false;
+
+function injectHighlightStyles() {
+  if (highlightStylesInjected) return;
+  highlightStylesInjected = true;
+  const style = document.createElement('style');
+  // A full-height band keeps dark ink readable whatever the page theme does.
+  style.textContent = HIGHLIGHT_COLORS.map(
+    (c) => `::highlight(${HL_PREFIX}${c}){background-color:${PALETTE[c].fill};color:#22252b;}`,
+  ).join('');
+  (document.head ?? document.documentElement).appendChild(style);
+}
+
+function repaintAnchored() {
+  if (anchoredRecords.length === 0) return;
+  injectHighlightStyles();
+  paintAnchors(document.body, anchoredRecords, HL_PREFIX);
+}
+
+/** Add one text-anchored highlight to the painted set (no duplicates). */
+function addAnchored(id: string, color: HighlightColor, anchor: TextAnchor) {
+  anchoredRecords = anchoredRecords.filter((r) => r.id !== id).concat({ id, color, anchor });
+  repaintAnchored();
+}
+
 // Re-apply persisted highlights for this URL once the page is settled.
 async function reapplyOnLoad() {
   const url = window.location.href;
   const records = (await window.electronAPI?.loadHighlights(url)) ?? [];
   console.log(`[octobase-highlighter] reapplyOnLoad: ${records.length} records for ${url}`);
+  anchoredRecords = [];
   for (const r of records) {
-    console.log(`[octobase-highlighter] re-applying ${r.id}`, {
-      text: r.text,
-      serialized: r.anchor.serialized,
-    });
+    // No DOM range (or one this page can't resolve): paint from the text.
+    if (!r.anchor?.serialized || !rangy.canDeserializeRange(r.anchor.serialized, document.body)) {
+      if (r.textAnchor) anchoredRecords.push({ id: r.id, color: r.color, anchor: r.textAnchor });
+      else console.warn('[octobase-highlighter] highlight has no usable anchor', r.id);
+      continue;
+    }
     try {
-      if (!rangy.canDeserializeRange(r.anchor.serialized, document.body)) {
-        console.warn('[octobase-highlighter] cannot deserialize range', r.id, r.anchor.serialized);
-        continue;
-      }
       const range = rangy.deserializeRange(r.anchor.serialized, document.body);
       const sel = rangy.getSelection();
       sel.removeAllRanges();
@@ -801,8 +851,10 @@ async function reapplyOnLoad() {
       }
     } catch (err) {
       console.warn('[octobase-highlighter] failed to re-apply highlight', r.id, err);
+      if (r.textAnchor) anchoredRecords.push({ id: r.id, color: r.color, anchor: r.textAnchor });
     }
   }
+  repaintAnchored();
 }
 
 // Run after the page is fully loaded (incl. resources) plus a short settle
@@ -816,3 +868,10 @@ if (document.readyState === 'complete') {
 } else {
   window.addEventListener('load', () => { scheduleReapply(); });
 }
+
+// A highlight made elsewhere — the capture extension on this same page —
+// lands here; paint it without waiting for a reload.
+window.electronAPI?.onHighlightAdded?.((h) => {
+  if (h.sourceUrl !== window.location.href || !h.textAnchor) return;
+  addAnchored(h.id, h.color, h.textAnchor);
+});

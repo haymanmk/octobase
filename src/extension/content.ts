@@ -191,9 +191,15 @@ function showSelToolbar(range: Range) {
   ensureToolbarStyles(shadow);
   const bar = document.createElement("div");
   bar.className = "octo-pill";
-  for (const color of HIGHLIGHT_COLORS) {
-    bar.appendChild(colorDot(color, () => void saveHighlight(color)));
-  }
+  // Default colour alone; "⋯" opens the rest in place.
+  const fill = (open: boolean) => {
+    bar.replaceChildren();
+    for (const color of open ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)) {
+      bar.appendChild(colorDot(color, () => void saveHighlight(color)));
+    }
+    if (!open) bar.appendChild(moreDot(() => fill(true)));
+  };
+  fill(false);
   shadow.appendChild(bar);
   document.documentElement.appendChild(host);
   selToolbar = host;
@@ -203,6 +209,16 @@ function showSelToolbar(range: Range) {
 function closePopover() {
   popover?.remove();
   popover = null;
+}
+/** The "⋯" button that unfolds the rest of the palette. */
+function moreDot(onClick: () => void): HTMLElement {
+  const btn = document.createElement("button");
+  btn.title = "More colours";
+  btn.className = "octo-more";
+  btn.textContent = "⋯";
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+  return btn;
 }
 function colorDot(color: HighlightColor, onClick: () => void): HTMLElement {
   const dot = document.createElement("button");
@@ -306,7 +322,10 @@ function highlightAtPoint(x: number, y: number): SavedHighlight | null {
 }
 
 function registerListeners() {
-  document.addEventListener("mouseup", () => {
+  document.addEventListener("mouseup", (e) => {
+    // A click inside the pill (a colour, or "⋯") must leave it alone —
+    // rebuilding it here would fold the palette open by "⋯" straight away.
+    if (selToolbar && e.composedPath().includes(selToolbar)) return;
     setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
