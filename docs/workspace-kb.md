@@ -1,5 +1,9 @@
 # Workspace / knowledge-base core
 
+For the in-app TipTap/ProseMirror editing lifecycle, Markdown serialization,
+block-drag transaction design, and a content-loss investigation playbook, see
+[`markdown-editor.md`](markdown-editor.md).
+
 The knowledge base added in 2026-06 (specs:
 `docs/superpowers/specs/2026-06-22-kb-core-design.md`). This is the Heptabase-
 style core: multiple whiteboards of cards (notes / highlights / articles /
