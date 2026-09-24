@@ -8,7 +8,7 @@ import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts"
 import { NOTE_BADGE_SVG } from "../../components/highlighter/note-badge.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
-import type { Card, HighlightCard, HighlightColor } from "../../lib/model/types.ts";
+import { highlightAnchor, type Card, type HighlightCard, type HighlightColor } from "../../lib/model/types.ts";
 import {
   locateHighlights,
   bandsFor,
@@ -53,7 +53,7 @@ function hostOf(url: string): string {
 
 /** A highlight card's body is its note (legacy bodies carried the quote too). */
 function noteOfHighlight(card: HighlightCard): string {
-  const quote = `> ${card.anchor.exact}`;
+  const quote = `> ${highlightAnchor(card).exact}`;
   if (card.body.startsWith(quote)) return card.body.slice(quote.length).trimStart();
   return card.body;
 }
@@ -138,7 +138,7 @@ export function Reader({
     if (!el) return;
     placedRef.current = locateHighlights(
       el,
-      highlights.map((h) => ({ cardId: h.id, color: h.color, anchor: h.anchor })),
+      highlights.map((h) => ({ cardId: h.id, color: h.color, anchor: highlightAnchor(h) })),
     );
     setBands(bandsFor(el, placedRef.current));
     if (focusHighlight && focusHighlight.at !== focusDoneRef.current) {
@@ -197,7 +197,7 @@ export function Reader({
       draggedRef.current = true;
       setSelToolbar(null);
       window.getSelection()?.removeAllRanges();
-      setDragGhost({ cardId: h.id, text: h.anchor.exact, color: h.color, x: start.x, y: start.y });
+      setDragGhost({ cardId: h.id, text: highlightAnchor(h).exact, color: h.color, x: start.x, y: start.y });
       const onMove = (me: PointerEvent) => {
         setDragGhost((g) => (g ? { ...g, x: me.clientX, y: me.clientY } : g));
         // Hovering a board card previews the embed insertion point.
@@ -289,7 +289,7 @@ export function Reader({
     if (!editCard) return;
     store.upsertHighlight({
       id: editCard.id,
-      text: editCard.anchor.exact,
+      text: highlightAnchor(editCard).exact,
       sourceUrl: editCard.sourceUrl,
       anchor: editCard.anchor,
       color: patch.color ?? editCard.color,

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { highlightAnchor } from "../lib/model/types.ts";
 import { BrandMark } from "./BrandMark.tsx";
 import { WorkspaceStore } from "../lib/store/workspace-store.ts";
 import { LocalStoragePersistence } from "../lib/store/persistence.ts";
@@ -111,7 +112,7 @@ export function WorkspaceProvider({
     bridge.onHighlight((d) => {
       store.upsertHighlight({
         id: d.id,
-        text: d.exact ?? d.anchor.exact,
+        text: d.exact ?? d.anchor?.exact ?? "",
         sourceUrl: d.url,
         anchor: d.anchor,
         color: d.color,
@@ -127,8 +128,8 @@ export function WorkspaceProvider({
       const items = store.getHighlightsForUrl(url).map((h) => ({
         id: h.id,
         color: h.color,
-        anchor: h.anchor,
-        exact: h.anchor.exact,
+        anchor: highlightAnchor(h),
+        exact: highlightAnchor(h).exact,
         tags: h.tags,
         note: h.body,
         ...(h.domAnchor ? { domAnchor: h.domAnchor } : {}),
@@ -144,7 +145,7 @@ export function WorkspaceProvider({
       for (const d of items) {
         store.upsertHighlight({
           id: d.id,
-          text: d.exact ?? d.anchor.exact,
+          text: d.exact ?? d.anchor?.exact ?? "",
           sourceUrl: d.url,
           anchor: d.anchor,
           color: d.color,

@@ -49,6 +49,15 @@ export interface HighlightCard extends BaseCard {
   domAnchor?: { serialized: string };
 }
 
+/**
+ * A highlight's text anchor, synthesized from the quoted text when a card
+ * predates anchors. The title carries the full highlighted text, which is
+ * enough to re-locate the passage on most pages.
+ */
+export function highlightAnchor(card: Pick<HighlightCard, "anchor" | "title">): TextAnchor {
+  return card.anchor ?? { exact: card.title, prefix: "", suffix: "", startHint: 0 };
+}
+
 export interface ArticleCard extends BaseCard {
   kind: "article";
   sourceUrl: string;

@@ -6,7 +6,7 @@ import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts"
 import { NOTE_BADGE_SVG } from "../../components/highlighter/note-badge.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
-import { pdfSourceUrl, type HighlightCard, type HighlightColor, type ImageCard, type PdfCard } from "../../lib/model/types.ts";
+import { highlightAnchor, pdfSourceUrl, type HighlightCard, type HighlightColor, type ImageCard, type PdfCard } from "../../lib/model/types.ts";
 import { getPdfBridge, pdfUrl } from "../electron-bridge.ts";
 import {
   locateHighlights,
@@ -359,7 +359,7 @@ export function PdfReader({
       if (pageHls.length === 0) continue;
       const placed = locateHighlights(
         textEl,
-        pageHls.map((h) => ({ cardId: h.id, color: h.color, anchor: h.anchor })),
+        pageHls.map((h) => ({ cardId: h.id, color: h.color, anchor: highlightAnchor(h) })),
       );
       placedRef.current.set(n, placed);
       next.set(n, bandsFor(host, placed));
@@ -529,7 +529,7 @@ export function PdfReader({
     const hit = highlightAtPoint(e.clientX, e.clientY);
     if (hit) {
       const h = store.getCard(hit.cardId) as HighlightCard | undefined;
-      if (h) startHoldDrag(h.id, { text: h.anchor.exact, color: h.color }, start);
+      if (h) startHoldDrag(h.id, { text: highlightAnchor(h).exact, color: h.color }, start);
       return;
     }
     const clip = clipAtPoint(e.clientX, e.clientY);
@@ -633,7 +633,7 @@ export function PdfReader({
       // upsert's update branch spreads the previous card, so `page` survives.
       store.upsertHighlight({
         id: editCard.id,
-        text: editCard.anchor.exact,
+        text: highlightAnchor(editCard).exact,
         sourceUrl: editCard.sourceUrl,
         anchor: editCard.anchor,
         color: patch.color ?? editCard.color,
