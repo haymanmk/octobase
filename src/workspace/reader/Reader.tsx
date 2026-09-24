@@ -5,6 +5,7 @@ import { MarkdownView } from "../MarkdownView.tsx";
 import { embedHostAt, hideDropCaret, showDropCaret } from "../drop-caret.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
+import { NOTE_BADGE_SVG } from "../../components/highlighter/note-badge.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
 import type { Card, HighlightCard, HighlightColor } from "../../lib/model/types.ts";
@@ -17,6 +18,7 @@ import {
   type PlacedHighlight,
   type HighlightBand,
 } from "./highlight-overlay.ts";
+import { rangesIntersect } from "../../lib/anchor/highlight-dom.ts";
 
 interface ReaderPrefs {
   family: "serif" | "sans";
@@ -88,7 +90,6 @@ export function Reader({
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const pillOpen = selToolbar != null;
   React.useEffect(() => { if (!pillOpen) setPaletteOpen(false); }, [pillOpen]);
-  const [pulse, setPulse] = React.useState(false);
   const pendingRange = React.useRef<Range | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
   const [dragGhost, setDragGhost] = React.useState<{ cardId: string; text: string; color: HighlightColor; x: number; y: number } | null>(null);
@@ -102,11 +103,13 @@ export function Reader({
   const [reflowTick, setReflowTick] = React.useState(0);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
+  // A mouse-up that opened the editor from a selection; its click must not reopen it.
+  const editedFromSelectionRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
 
   const sourceUrl = card && "sourceUrl" in card ? card.sourceUrl : "";
   const highlights = sourceUrl ? store.getHighlightsForUrl(sourceUrl) : [];
-  // Highlights with a note get a dot on their last band.
+  // Highlights with a note get a badge on their first band.
   const notedIds = new Set(highlights.filter((h) => noteOfHighlight(h).trim()).map((h) => h.id));
   const noteDots = noteDotBands(bands, (id) => notedIds.has(id));
   const editCard = editPop
@@ -235,6 +238,7 @@ export function Reader({
 
   const onBodyClick = (e: React.MouseEvent) => {
     if (draggedRef.current) return; // this click ended a drag
+    if (editedFromSelectionRef.current) return; // the mouse-up already opened the editor
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return; // selecting, not clicking a highlight
     const hit = highlightAtPoint(e.clientX, e.clientY);
@@ -253,13 +257,23 @@ export function Reader({
       setSelToolbar(null);
       return;
     }
-    pendingRange.current = range.cloneRange();
     const rect = range.getBoundingClientRect();
+    // No highlights inside highlights: selecting within one edits it.
+    const existing = placedRef.current.find((p) => rangesIntersect(range, p.range));
+    if (existing) {
+      sel.removeAllRanges();
+      setSelToolbar(null);
+      editedFromSelectionRef.current = true;
+      setTimeout(() => { editedFromSelectionRef.current = false; }, 0); // the click lands first
+      setEditPop({ cardId: existing.cardId, x: rect.left, y: rect.bottom + 10 });
+      return;
+    }
+    pendingRange.current = range.cloneRange();
     // Below the selection, left-aligned — same placement as the live widget.
     setSelToolbar({ x: rect.left, y: rect.bottom + 10 });
   };
 
-  const makeHighlight = (color: HighlightColor) => {
+  const makeHighlight = (color: HighlightColor, addNote = false) => {
     const el = bodyRef.current;
     const range = pendingRange.current;
     if (!el || !range) return;
@@ -267,9 +281,8 @@ export function Reader({
     setSelToolbar(null);
     window.getSelection()?.removeAllRanges();
     if (!anchor || !anchor.exact.trim()) return;
-    // No edit popover here — highlighting stays one gesture; clicking the
-    // highlight opens the tags/note editor when wanted.
-    store.createHighlightCard({ text: anchor.exact, sourceUrl: sourceUrl || card.id, anchor, color });
+    const created = store.createHighlightCard({ text: anchor.exact, sourceUrl: sourceUrl || card.id, anchor, color });
+    if (addNote && selToolbar) setEditPop({ cardId: created.id, x: selToolbar.x, y: selToolbar.y });
   };
 
   const updateHighlight = (patch: { color?: HighlightColor; note?: string }) => {
@@ -344,7 +357,10 @@ export function Reader({
                     "--hl-fill": PALETTE[b.color].fill,
                     "--hl-darkfill": PALETTE[b.color].darkFill,
                   } as React.CSSProperties}>
-                  {noteDots.get(b.cardId) === i && <span className="ws-hl-note-dot" />}
+                  {noteDots.get(b.cardId) === i && (
+                    <span className="ws-hl-note-badge" title="Has a note"
+                      dangerouslySetInnerHTML={{ __html: NOTE_BADGE_SVG }} />
+                  )}
                 </div>
               ))}
             </div>
@@ -353,7 +369,7 @@ export function Reader({
       </div>
 
       {selToolbar && (
-        <div className={`octo-pill${pulse ? " pulse" : ""}`}
+        <div className="octo-pill"
           style={{ position: "fixed", left: selToolbar.x, top: selToolbar.y, zIndex: 60 }}
           onMouseDown={(e) => e.preventDefault()}>
           {(paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => (
@@ -365,10 +381,7 @@ export function Reader({
               onClick={() => setPaletteOpen(true)}>⋯</button>
           )}
           {paletteOpen && <span className="octo-divider" />}
-          {paletteOpen && <button className="octo-add-note" onClick={() => {
-            setPulse(true);
-            setTimeout(() => setPulse(false), 1300);
-          }}>+ note</button>}
+          {paletteOpen && <button className="octo-add-note" onClick={() => makeHighlight("yellow", true)}>+ note</button>}
         </div>
       )}
 

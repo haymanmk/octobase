@@ -13,10 +13,17 @@ async function refresh() {
   portInput.value = String(settings.port);
   tokenInput.value = settings.token;
 
-  const health = (await chrome.runtime.sendMessage({ type: "health" })) as { ok: boolean };
-  if (health?.ok) {
+  const health = (await chrome.runtime.sendMessage({ type: "health" })) as { ok: boolean; paired: boolean };
+  if (health?.ok && health.paired) {
     led.className = "led on";
     statusText.textContent = "Connected to octobase";
+    captureBtn.disabled = false;
+  } else if (health?.ok) {
+    // The app answered but won't accept this token — captures would only queue.
+    led.className = "led off";
+    statusText.textContent = settings.token
+      ? "App found, but it rejected the token — re-pair"
+      : "App found — paste the pairing token";
     captureBtn.disabled = false;
   } else {
     led.className = "led off";

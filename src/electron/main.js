@@ -540,27 +540,35 @@ app.whenReady().then(() => {
   // through here, so a highlight made in one shows up in the other. The
   // legacy JSON store keeps serving the old whiteboard route and is imported
   // from once, on first launch after this change.
-  const pendingHighlightReqs = new Map();
-  ipcMain.on('capture:highlights-response', (_event, { reqId, items }) => {
-    const resolve = pendingHighlightReqs.get(reqId);
+  const pendingStoreReqs = new Map();
+  const settleStoreReq = (reqId, items) => {
+    const resolve = pendingStoreReqs.get(reqId);
     if (!resolve) return;
-    pendingHighlightReqs.delete(reqId);
+    pendingStoreReqs.delete(reqId);
     resolve(Array.isArray(items) ? items : []);
-  });
+  };
+  ipcMain.on('capture:highlights-response', (_e, { reqId, items }) => settleStoreReq(reqId, items));
+  ipcMain.on('capture:tags-response', (_e, { reqId, items }) => settleStoreReq(reqId, items));
+
+  /** Ask the workspace store a question; [] if it can't answer in time. */
+  function askWorkspace(channel, payload, requireResponse = false) {
+    if (!appView || appView.webContents.isDestroyed()) return requireResponse ? Promise.reject(new Error("workspace unavailable")) : Promise.resolve([]);
+    const reqId = randomUUID();
+    return new Promise((resolve, reject) => {
+      // Never hang a page load on an unanswered request.
+      const timer = setTimeout(() => {
+        pendingStoreReqs.delete(reqId);
+        if (requireResponse) reject(new Error("workspace response timed out"));
+        else resolve([]);
+      }, 4000);
+      pendingStoreReqs.set(reqId, (items) => { clearTimeout(timer); resolve(items); });
+      appView.webContents.send(channel, { reqId, ...payload });
+    });
+  }
 
   /** Ask the workspace store which highlights belong to a URL. */
   function highlightsForUrl(url) {
-    if (!appView || appView.webContents.isDestroyed()) return Promise.resolve([]);
-    const reqId = randomUUID();
-    return new Promise((resolve) => {
-      // Never hang a page load on an unanswered request.
-      const timer = setTimeout(() => {
-        pendingHighlightReqs.delete(reqId);
-        resolve([]);
-      }, 4000);
-      pendingHighlightReqs.set(reqId, (items) => { clearTimeout(timer); resolve(items); });
-      appView.webContents.send('capture:highlights-request', { reqId, url });
-    });
+    return askWorkspace('capture:highlights-request', { url }, true);
   }
 
   /** Workspace record → the shape the browser pane's highlighter reads. */
@@ -581,6 +589,16 @@ app.whenReady().then(() => {
     };
   }
 
+  ipcMain.on('capture:highlight-changes', (event, { upserts, deleted }) => {
+    if (event.sender !== appView?.webContents) return;
+    for (const id of deleted) browserView?.webContents.send('highlight:deleted', { id });
+    for (const item of upserts) {
+      const highlight = toPaneHighlight(item, item.url);
+      browserView?.webContents.send('highlight:updated', highlight);
+      browserView?.webContents.send('highlight:added', highlight);
+    }
+  });
+
   ipcMain.handle('highlights:load', async (_event, { url }) => {
     const items = await highlightsForUrl(url);
     return items.map((item) => toPaneHighlight(item, url));
@@ -592,7 +610,7 @@ app.whenReady().then(() => {
       id: highlight.id,
       url: highlight.sourceUrl,
       color: highlight.color,
-      anchor: highlight.textAnchor,
+      anchor: highlight.textAnchor ?? { exact: highlight.text, prefix: "", suffix: "", startHint: 0 },
       exact: highlight.text,
       note: highlight.notes ?? '',
       tags: highlight.tags ?? [],
@@ -639,7 +657,9 @@ app.whenReady().then(() => {
     catch (err) { console.warn('could not mark legacy import done:', err); }
   });
 
-  ipcMain.handle('tags:list', async () => await store.listTags());
+  // Tag suggestions come from the workspace store, the same place the
+  // highlights themselves live; the legacy file no longer feeds them.
+  ipcMain.handle('tags:list', async () => await askWorkspace('capture:tags-request', {}));
 
   // Capture extension: localhost server forwards captures/highlights to the
   // knowledge-base renderer (app view), which adds them as inbox cards.

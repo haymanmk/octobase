@@ -14,7 +14,7 @@ import type { TextAnchor } from '../../lib/model/types';
 import { applyContrastGuard, classNameFor, PALETTE } from './colors';
 import { getHighlightDragPayload, stampHighlightGroup } from './highlight-id';
 import { describeAnchorFromRange } from '../../lib/anchor/text-anchor';
-import { paintAnchors } from '../../lib/anchor/highlight-dom';
+import { createAnchoredOverlay, type OverlayHighlight } from './anchored-overlay';
 import { injectGlobalStyles } from './widget-styles';
 import './edit-form';
 import './undo-toast';
@@ -79,68 +79,7 @@ window.addEventListener('mouseup', () => {
 }, true);
 
 
-// === Hover-revealed menu button ===
-// One reusable button shared across all highlight fragments. Repositioned
-// each time the cursor enters a fragment, hidden after a short grace
-// timeout so the cursor can travel onto the button without flicker.
-let menuButton: HTMLButtonElement | null = null;
-let menuButtonHideTimer: number | null = null;
-let menuButtonTargetId: string | null = null;
-
-function ensureMenuButton(): HTMLButtonElement {
-  if (menuButton) return menuButton;
-  const btn = document.createElement('button');
-  btn.className = 'octo-hl-menubtn';
-  btn.textContent = '⋯';
-  btn.style.position = 'absolute';
-  btn.style.display = 'none';
-  btn.style.zIndex = '9998';
-  btn.style.width = '22px';
-  btn.style.height = '22px';
-  btn.style.borderRadius = '50%';
-  btn.style.border = '1px solid #ddd';
-  btn.style.background = 'white';
-  btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)';
-  btn.style.fontSize = '11px';
-  btn.style.color = '#666';
-  btn.style.cursor = 'pointer';
-  btn.style.padding = '0';
-  btn.style.lineHeight = '1';
-  // Stop pointerdown so it doesn't trigger the hold-to-drag on the highlight.
-  btn.addEventListener('pointerdown', (e) => e.stopPropagation());
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (menuButtonTargetId) openEditPanel(menuButtonTargetId, btn.getBoundingClientRect());
-  });
-  // Keep the button visible while the cursor is over it.
-  btn.addEventListener('mouseenter', () => {
-    if (menuButtonHideTimer) { clearTimeout(menuButtonHideTimer); menuButtonHideTimer = null; }
-  });
-  btn.addEventListener('mouseleave', scheduleMenuButtonHide);
-  document.body.appendChild(btn);
-  menuButton = btn;
-  return btn;
-}
-
-function showMenuButton(target: HTMLElement) {
-  const btn = ensureMenuButton();
-  if (menuButtonHideTimer) { clearTimeout(menuButtonHideTimer); menuButtonHideTimer = null; }
-  const rect = target.getBoundingClientRect();
-  btn.style.top = `${rect.top + window.scrollY - 6}px`;
-  btn.style.left = `${rect.right + window.scrollX - 12}px`;
-  btn.style.display = 'inline-block';
-  menuButtonTargetId = target.dataset.octobaseHighlightId ?? null;
-}
-
-function scheduleMenuButtonHide() {
-  if (menuButtonHideTimer) clearTimeout(menuButtonHideTimer);
-  menuButtonHideTimer = window.setTimeout(() => {
-    if (menuButton) menuButton.style.display = 'none';
-    menuButtonTargetId = null;
-  }, 250);
-}
-
-// === Edit panel (opened from the menu button on a saved highlight) ===
+// === Edit panel (opened by clicking a saved highlight) ===
 let editPanelEl: HTMLElement | null = null;
 let editPanelTargetId: string | null = null;
 let editPanelLocal: { color: HighlightColor | null; tags: string[]; notes: string } | null = null;
@@ -321,6 +260,9 @@ async function deleteHighlightWithUndo(id: string): Promise<void> {
     while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
     el.remove();
   }
+  anchoredRecords = anchoredRecords.filter((r) => r.id !== id);
+  notedFragmentIds.delete(id);
+  repaintAnchored();
   await window.electronAPI?.deleteHighlight(id);
 
   // Toast with Undo.
@@ -359,17 +301,42 @@ async function deleteHighlightWithUndo(id: string): Promise<void> {
 document.addEventListener('mousedown', (e) => {
   if (!editPanelEl) return;
   if (editPanelEl.contains(e.target as Node)) return;
-  if (menuButton && menuButton.contains(e.target as Node)) return;
   closeEditPanel();
 }, true);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && editPanelEl) closeEditPanel();
 });
 
+/**
+ * Carry a highlight out of the page and onto the whiteboard: hand the text to
+ * the host, then relay the pointer until it is dropped. Shared by the two
+ * kinds of painted highlight — Rangy fragments and anchored ranges.
+ */
+function launchHighlightDrag(text: string, highlightId: string, startX: number, startY: number,
+                             refocus?: () => void) {
+  if (text.length === 0) return;
+  window.electronAPI?.sendDragText({ text, sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId });
+  window.postMessage({
+    type: 'drag-drop-text-selection',
+    data: { text, sourceUrl: window.location.href, cursorX: startX, cursorY: startY, highlightId },
+  }, '*');
+  // Let the overlay own the cursor while the ghost is in flight.
+  document.body.style.pointerEvents = 'none';
+  const onDragMove = (e: MouseEvent) => window.electronAPI?.sendDragPosition({ x: e.clientX, y: e.clientY });
+  const onDragEnd = (e: MouseEvent) => {
+    window.electronAPI?.sendDragEnd({ x: e.clientX, y: e.clientY });
+    document.body.style.pointerEvents = '';
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', onDragEnd);
+    refocus?.();
+  };
+  window.addEventListener('mousemove', onDragMove);
+  window.addEventListener('mouseup', onDragEnd);
+  requestAnimationFrame(() => { isDraggingHighlight = false; });
+}
+
 // Attaches hold-to-drag behavior to a single highlight fragment element.
 function attachFragmentBehavior(htmlEl: HTMLElement) {
-  htmlEl.addEventListener('mouseenter', () => showMenuButton(htmlEl));
-  htmlEl.addEventListener('mouseleave', scheduleMenuButtonHide);
   htmlEl.addEventListener('pointerdown', (downEvent) => {
     if (downEvent.button !== 0) return; // Only left click
 
@@ -463,6 +430,10 @@ async function applyHighlightFromSelection(color: HighlightColor): Promise<strin
   const range = sel.getRangeAt(0);
   const text = sel.toString();
   if (!text.trim()) return null;
+  // Capture the native selection before Rangy splits/wraps its text nodes.
+  const nativeRange = window.getSelection()?.getRangeAt(0);
+  const textAnchor = nativeRange ? describeAnchorFromRange(document.body, nativeRange) : null;
+  if (!textAnchor) return null;
   const serialized = rangy.serializeRange(range, true, document.body);
   const id = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -483,7 +454,6 @@ async function applyHighlightFromSelection(color: HighlightColor): Promise<strin
   // Two anchors: the Rangy range re-applies exactly here, the text anchor
   // travels — it is what the workspace store, the reader panes and the
   // capture extension all read.
-  const textAnchor = describeAnchorFromRange(document.body, range) ?? undefined;
   await window.electronAPI?.saveHighlight({
     id, text, sourceUrl: window.location.href, color,
     tags: [], notes: '',
@@ -496,7 +466,15 @@ async function applyHighlightFromSelection(color: HighlightColor): Promise<strin
 
 async function changeHighlightColor(id: string, color: HighlightColor): Promise<void> {
   const fragments = Array.from(document.querySelectorAll(`[data-octobase-highlight-id="${id}"]`)) as HTMLElement[];
-  if (fragments.length === 0) return;
+  if (fragments.length === 0) {
+    // Painted as a range, not elements: repaint it in the new colour.
+    const item = anchoredRecords.find((r) => r.id === id);
+    if (!item) return;
+    addAnchored({ ...item, color });
+    const stored = await loadHighlightById(id);
+    if (stored) await window.electronAPI?.saveHighlight({ ...stored, color, updatedAt: Date.now() });
+    return;
+  }
   for (const el of fragments) {
     for (const c of HIGHLIGHT_COLORS) el.classList.remove(classNameFor(c));
     el.classList.add(classNameFor(color));
@@ -621,11 +599,9 @@ export class HighlighterWidget extends LitElement {
     }
   }
 
-  private onAddNote() {
-    if (this.currentId) { this.mode = 'expanded'; this.requestUpdate(); return; }
-    this.pulseColors = true;
-    this.requestUpdate();
-    setTimeout(() => { this.pulseColors = false; this.requestUpdate(); }, 1300);
+  private async onAddNote() {
+    if (!this.currentId) await this.onSwatch('yellow');
+    if (this.currentId) { this.mode = 'expanded'; this.requestUpdate(); }
   }
 
   private async onTagsChanged(e: CustomEvent) {
@@ -651,9 +627,12 @@ export class HighlighterWidget extends LitElement {
 
   private async persist() {
     if (!this.currentId || !this.currentColor) return;
-    const record = await loadHighlightById(this.currentId);
+    // Done/outside click may reset the widget while the record is loading.
+    const id = this.currentId;
+    const patch = { color: this.currentColor, tags: [...this.currentTags], notes: this.currentNotes };
+    const record = await loadHighlightById(id);
     if (!record) return;
-    const updated = { ...record, color: this.currentColor, tags: this.currentTags, notes: this.currentNotes, updatedAt: Date.now() };
+    const updated = { ...record, ...patch, updatedAt: Date.now() };
     await window.electronAPI?.saveHighlight(updated);
   }
 
@@ -675,7 +654,7 @@ export class HighlighterWidget extends LitElement {
     return html`
       <div class="octo-pill ${this.pulseColors ? 'pulse' : ''}"
            @pointerdown=${(e: PointerEvent) => { e.stopPropagation(); }}
-           @mousedown=${(e: MouseEvent) => { e.stopPropagation(); }}>
+           @mousedown=${(e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); }}>
         ${(this.paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => html`
           <button class="octo-swatch" style="background:${PALETTE[c].fill}" title=${c}
                   @click=${() => this.onSwatch(c)}></button>
@@ -695,6 +674,8 @@ export class HighlighterWidget extends LitElement {
 // Function to handle text selection
 const handleTextSelection = async (event: MouseEvent) => {
   if (isDraggingHighlight) return;
+  // Read the composed path before awaiting: it crosses both shadow roots.
+  if (hostElement && event.composedPath().includes(hostElement)) return;
   if (event.button !== 0 && event.type !== 'mousedown') return;
 
   // Delay to ensure selection is registered
@@ -714,9 +695,17 @@ const handleTextSelection = async (event: MouseEvent) => {
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
 
-    // Update widget position
+    // No highlights inside highlights: selecting within one edits it.
+    const existing = highlightIntersecting(range);
+    if (existing) {
+      selection.removeAllRanges();
+      highlighterWidget.hide();
+      suppressClickThisTask();
+      void openEditPanel(existing.id, existing.rect);
+      return;
+    }
+
     highlighterWidget.updateWidgetPosition(rect);
-    // Set widget visibility
     highlighterWidget.show();
   }
   else {
@@ -773,7 +762,14 @@ window.electronAPI?.onHighlightUpdated?.((h) => {
   const fragments = Array.from(
     document.querySelectorAll(`[data-octobase-highlight-id="${h.id}"]`),
   ) as HTMLElement[];
-  if (fragments.length === 0) return;
+  if (fragments.length === 0) {
+    // Range-painted: refresh colour and note dot from the broadcast record.
+    if (anchoredRecords.some((r) => r.id === h.id) && h.textAnchor) addAnchored(toOverlayItem(h));
+    return;
+  }
+  // Element-painted: the note dot follows the record's note.
+  if (h.notes?.trim()) notedFragmentIds.add(h.id); else notedFragmentIds.delete(h.id);
+  overlay.reposition();
   for (const el of fragments) {
     let needsClassSwap = true;
     for (const c of HIGHLIGHT_COLORS) {
@@ -791,31 +787,49 @@ window.electronAPI?.onHighlightUpdated?.((h) => {
 // Highlights that carry no Rangy range — made by the extension, a reader
 // pane, or another device — are painted with the CSS Custom Highlight API,
 // the same way the extension paints on a live page.
-const HL_PREFIX = 'octo-hl-';
-let anchoredRecords: Array<{ id: string; color: HighlightColor; anchor: TextAnchor }> = [];
-let highlightStylesInjected = false;
-
-function injectHighlightStyles() {
-  if (highlightStylesInjected) return;
-  highlightStylesInjected = true;
-  const style = document.createElement('style');
-  // A full-height band keeps dark ink readable whatever the page theme does.
-  style.textContent = HIGHLIGHT_COLORS.map(
-    (c) => `::highlight(${HL_PREFIX}${c}){background-color:${PALETTE[c].fill};color:#22252b;}`,
-  ).join('');
-  (document.head ?? document.documentElement).appendChild(style);
-}
+let anchoredRecords: OverlayHighlight[] = [];
+/**
+ * Highlights the page holds as text ranges rather than elements. The overlay
+ * paints them as marker bands, hit-tests them back, and badges the ones
+ * carrying a note — the Rangy-painted ones report their own rects through
+ * `extraBadgeRects` so both kinds get the same marker.
+ */
+const overlay = createAnchoredOverlay({
+  root: document.body,
+  extraBadgeRects: () => {
+    const byId = new Map<string, DOMRect[]>();
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-octobase-highlight-id]'))) {
+      const id = el.dataset.octobaseHighlightId;
+      if (!id || !notedFragmentIds.has(id)) continue;
+      const list = byId.get(id) ?? [];
+      list.push(...Array.from(el.getClientRects()));
+      byId.set(id, list);
+    }
+    return [...byId].map(([id, rects]) => ({ id, rects }));
+  },
+});
+/** Ids of Rangy-painted highlights that carry a note. */
+const notedFragmentIds = new Set<string>();
 
 function repaintAnchored() {
-  if (anchoredRecords.length === 0) return;
-  injectHighlightStyles();
-  paintAnchors(document.body, anchoredRecords, HL_PREFIX);
+  overlay.set(anchoredRecords);
 }
 
 /** Add one text-anchored highlight to the painted set (no duplicates). */
-function addAnchored(id: string, color: HighlightColor, anchor: TextAnchor) {
-  anchoredRecords = anchoredRecords.filter((r) => r.id !== id).concat({ id, color, anchor });
+function addAnchored(item: OverlayHighlight) {
+  anchoredRecords = anchoredRecords.filter((r) => r.id !== item.id).concat(item);
   repaintAnchored();
+}
+
+/** A stored highlight as the overlay wants it. */
+function toOverlayItem(r: Highlight): OverlayHighlight {
+  return {
+    id: r.id,
+    color: r.color,
+    anchor: r.textAnchor as TextAnchor,
+    note: r.notes ?? '',
+    text: r.text ?? '',
+  };
 }
 
 // Re-apply persisted highlights for this URL once the page is settled.
@@ -824,10 +838,12 @@ async function reapplyOnLoad() {
   const records = (await window.electronAPI?.loadHighlights(url)) ?? [];
   console.log(`[octobase-highlighter] reapplyOnLoad: ${records.length} records for ${url}`);
   anchoredRecords = [];
+  notedFragmentIds.clear();
   for (const r of records) {
+    if (r.notes?.trim()) notedFragmentIds.add(r.id);
     // No DOM range (or one this page can't resolve): paint from the text.
     if (!r.anchor?.serialized || !rangy.canDeserializeRange(r.anchor.serialized, document.body)) {
-      if (r.textAnchor) anchoredRecords.push({ id: r.id, color: r.color, anchor: r.textAnchor });
+      if (r.textAnchor) anchoredRecords.push(toOverlayItem(r));
       else console.warn('[octobase-highlighter] highlight has no usable anchor', r.id);
       continue;
     }
@@ -851,11 +867,87 @@ async function reapplyOnLoad() {
       }
     } catch (err) {
       console.warn('[octobase-highlighter] failed to re-apply highlight', r.id, err);
-      if (r.textAnchor) anchoredRecords.push({ id: r.id, color: r.color, anchor: r.textAnchor });
+      if (r.textAnchor) anchoredRecords.push(toOverlayItem(r));
     }
   }
   repaintAnchored();
 }
+
+// ── Click to edit ───────────────────────────────────────────────────────────
+// A plain click on a saved highlight — element- or band-painted — opens its
+// edit panel. Links inside a highlight stay links, and a drag-selection is
+// left to the selection handler, which treats selecting inside a highlight
+// as editing that highlight rather than nesting a new one.
+
+/** Last fragment of an element-painted highlight, for anchoring the panel. */
+function lastFragmentRect(id: string): DOMRect | null {
+  const els = document.querySelectorAll<HTMLElement>(`[data-octobase-highlight-id="${CSS.escape(id)}"]`);
+  const last = els[els.length - 1];
+  return last ? last.getBoundingClientRect() : null;
+}
+
+/** The saved highlight a selection overlaps, whichever way it was painted. */
+function highlightIntersecting(range: Range): { id: string; rect: DOMRect } | null {
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-octobase-highlight-id]'))) {
+    const id = el.dataset.octobaseHighlightId;
+    if (id && range.intersectsNode(el)) return { id, rect: lastFragmentRect(id) ?? el.getBoundingClientRect() };
+  }
+  const hit = overlay.intersecting(range);
+  const rect = hit ? overlay.rectFor(hit.id) : null;
+  return hit && rect ? { id: hit.id, rect } : null;
+}
+
+/** Set when a mouse-up already opened the panel, so its click doesn't repeat it. */
+let suppressNextClick = false;
+function suppressClickThisTask() {
+  suppressNextClick = true;
+  // The click, if any, is dispatched before timers run.
+  setTimeout(() => { suppressNextClick = false; }, 0);
+}
+
+document.addEventListener('click', (e) => {
+  if (suppressNextClick || isDraggingHighlight) return;
+  const path = e.composedPath();
+  if (hostElement && path.includes(hostElement)) return;
+  if (editPanelEl && path.includes(editPanelEl)) return;
+  if (path.some((n) => n instanceof HTMLAnchorElement && n.href)) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) return;
+  const fragment = (e.target as HTMLElement | null)?.closest?.('[data-octobase-highlight-id]') as HTMLElement | null;
+  const id = fragment?.dataset.octobaseHighlightId ?? overlay.at(e.clientX, e.clientY)?.id;
+  if (!id) return;
+  const rect = fragment ? lastFragmentRect(id) : overlay.rectFor(id);
+  if (rect) void openEditPanel(id, rect);
+});
+
+document.addEventListener('pointerdown', (downEvent) => {
+  if (downEvent.button !== 0) return;
+  if ((downEvent.target as HTMLElement | null)?.closest?.('[data-octobase-highlight-id]')) return;
+  const hit = overlay.at(downEvent.clientX, downEvent.clientY);
+  if (!hit || !hit.text) return;
+
+  const startX = downEvent.clientX;
+  const startY = downEvent.clientY;
+
+  const cleanup = () => {
+    clearTimeout(holdTimer);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+  const onMove = (moveEvent: PointerEvent) => {
+    // Moving means the user is selecting text, not dragging the highlight.
+    if (Math.abs(moveEvent.clientX - startX) > 5 || Math.abs(moveEvent.clientY - startY) > 5) cleanup();
+  };
+  const onUp = () => cleanup();
+  const holdTimer = setTimeout(() => {
+    cleanup();
+    isDraggingHighlight = true;
+    launchHighlightDrag(hit.text, hit.id, startX, startY);
+  }, 250);
+
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+});
 
 // Run after the page is fully loaded (incl. resources) plus a short settle
 // delay so JS-driven content has a chance to render before we resolve the
@@ -869,9 +961,29 @@ if (document.readyState === 'complete') {
   window.addEventListener('load', () => { scheduleReapply(); });
 }
 
+// A highlight deleted elsewhere — the extension, or the app — leaves the
+// page: unwrap its fragments if it was element-painted, drop it from the
+// overlay if it was band-painted. The pane's own deletes echo through here
+// too, by which time there is nothing left to remove.
+window.electronAPI?.onHighlightDeleted?.(({ id }) => {
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>(`[data-octobase-highlight-id="${CSS.escape(id)}"]`))) {
+    while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
+    el.remove();
+  }
+  notedFragmentIds.delete(id);
+  if (anchoredRecords.some((r) => r.id === id)) {
+    anchoredRecords = anchoredRecords.filter((r) => r.id !== id);
+    repaintAnchored();
+  } else {
+    overlay.reposition();
+  }
+  if (editPanelTargetId === id) closeEditPanel();
+});
+
 // A highlight made elsewhere — the capture extension on this same page —
 // lands here; paint it without waiting for a reload.
 window.electronAPI?.onHighlightAdded?.((h) => {
-  if (h.sourceUrl !== window.location.href || !h.textAnchor) return;
-  addAnchored(h.id, h.color, h.textAnchor);
+  if (h.sourceUrl.split('#')[0] !== window.location.href.split('#')[0] || !h.textAnchor) return;
+  if (document.querySelector(`[data-octobase-highlight-id="${CSS.escape(h.id)}"]`)) return;
+  addAnchored(toOverlayItem(h));
 });

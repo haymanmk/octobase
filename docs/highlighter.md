@@ -52,8 +52,8 @@ then:
 `HIGHLIGHT_COLORS` (yellow / green / pink / blue / purple / orange) lives
 in `src/types/highlight.ts`. For each, `makeApplier(color)` creates a
 `rangy.createClassApplier(classNameFor(color), { onElementCreate })` where
-the `onElementCreate` callback attaches the fragment behaviour (drag,
-hover-menu).
+the `onElementCreate` callback attaches the fragment behaviour
+(hold-to-drag; a plain click opens the edit panel).
 
 The class name format is `octo-hl-<color>`. The CSS rule is a
 single linear-gradient stripe centred vertically:
@@ -134,15 +134,18 @@ immediately hide the pill before `+ note` is reachable.
 
 A separate flow handles editing an *existing* highlight:
 
-1. `attachFragmentBehavior` adds `mouseenter` / `mouseleave` listeners to
-   every produced fragment. Enter → `showMenuButton(fragment)`. Leave →
-   `scheduleMenuButtonHide(250 ms)`.
-2. `showMenuButton` repositions a single reusable `<button class="octo-hl-menubtn">`
-   anchored to the fragment's top-right.
-3. Clicking the button runs `openEditPanel(highlightId, rect)`. The panel
-   is an `<octo-edit-form>` created via `document.createElement`,
-   populated from the persisted record + the current tag suggestion list,
-   and positioned absolutely next to the menu button.
+1. A plain `click` on a saved highlight opens its editor — whether the
+   highlight is a Rangy fragment or one of the band-painted ranges the
+   `anchored-overlay.ts` layer hit-tests via `offsetFromPoint`. There is no
+   hover affordance. A click that lands on a link inside a highlight is left
+   to the link; a click that ends a drag or a text selection is ignored.
+2. Selecting text *inside* an existing highlight also opens that highlight's
+   editor (`highlightIntersecting`) rather than offering a new one —
+   highlights don't nest.
+3. `openEditPanel(highlightId, rect)` creates an `<octo-edit-form>` via
+   `document.createElement`, populated from the persisted record + the
+   current tag suggestion list, and positioned below the highlight's last
+   fragment.
 4. Edits flow through dedicated handlers per event (`color-changed`,
    `tags-changed`, `notes-changed`). Each handler updates the local
    in-panel state and re-saves through `highlights:save`. A snapshot is

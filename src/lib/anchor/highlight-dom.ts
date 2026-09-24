@@ -35,14 +35,6 @@ export function locateAnchorRange(
   return { range, start: loc.start, end: loc.end };
 }
 
-export function supportsCustomHighlight(): boolean {
-  return (
-    typeof CSS !== "undefined" &&
-    !!(CSS as unknown as { highlights?: unknown }).highlights &&
-    typeof (globalThis as { Highlight?: unknown }).Highlight !== "undefined"
-  );
-}
-
 interface AnchoredHighlight {
   color: HighlightColor;
   anchor: TextAnchor;
@@ -53,46 +45,36 @@ export interface Placement {
   index: number;
   start: number;
   end: number;
+  /**
+   * The resolved range, so callers can measure exactly what was located
+   * instead of resolving the anchor a second time and risking a different
+   * match.
+   */
+  range: Range;
 }
 
 /**
- * Paint a set of anchored highlights over a live DOM subtree using the CSS
- * Custom Highlight API (no DOM mutation, multi-node ranges just work). One
- * registry per color, namespaced by `prefix`. Returns the resolved placements
- * so callers can hit-test clicks back to a highlight.
+ * Resolve a set of anchored highlights against a live DOM subtree. Painting
+ * is left to the caller: the reader panes and the anchored overlay both draw
+ * geometry bands from the returned ranges, which — unlike the CSS Custom
+ * Highlight API — can cover part of a line and carry a marker.
  */
-export function paintAnchors(
-  root: HTMLElement,
-  highlights: AnchoredHighlight[],
-  prefix: string,
-): Placement[] {
+export function locateAnchors(root: HTMLElement, highlights: AnchoredHighlight[]): Placement[] {
   const placements: Placement[] = [];
-  if (!supportsCustomHighlight()) return placements;
-  const highlightsApi = (CSS as unknown as { highlights: Map<string, unknown> }).highlights;
-  const HighlightCtor = (globalThis as unknown as {
-    Highlight: new (...ranges: Range[]) => unknown;
-  }).Highlight;
-
-  const rangesByColor = new Map<HighlightColor, Range[]>();
   highlights.forEach((hl, index) => {
     const located = locateAnchorRange(root, hl.anchor);
     if (!located) return;
-    placements.push({ index, start: located.start, end: located.end });
-    const list = rangesByColor.get(hl.color) ?? [];
-    list.push(located.range);
-    rangesByColor.set(hl.color, list);
+    placements.push({ index, start: located.start, end: located.end, range: located.range });
   });
-
-  for (const key of [...highlightsApi.keys()]) {
-    if (key.startsWith(prefix)) highlightsApi.delete(key);
-  }
-  for (const [color, ranges] of rangesByColor) {
-    highlightsApi.set(`${prefix}${color}`, new HighlightCtor(...ranges));
-  }
   return placements;
 }
 
-/** Map a viewport point to a global text offset within `root` (browser only). */
+/** Whether two live ranges share any content. */
+export function rangesIntersect(a: Range, b: Range): boolean {
+  return a.compareBoundaryPoints(Range.END_TO_START, b) < 0 &&
+         a.compareBoundaryPoints(Range.START_TO_END, b) > 0;
+}
+
 export function offsetFromPoint(
   root: HTMLElement,
   clientX: number,

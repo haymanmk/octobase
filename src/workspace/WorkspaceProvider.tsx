@@ -64,6 +64,24 @@ export function WorkspaceProvider({
     };
   }, [store]);
 
+  // Publish actual highlight changes, including edits made in reader/card editors.
+  React.useEffect(() => {
+    const bridge = getCaptureBridge();
+    if (!ready || !bridge?.publishHighlightChanges) return;
+    const snapshot = () => new Map(store.getCards().filter((c) => c.kind === "highlight").filter((c) => !!c.anchor).map((c) => [c.id, c]));
+    let previous = snapshot();
+    return store.subscribe(() => {
+      const next = snapshot();
+      const upserts = [...next.values()].filter((c) => c !== previous.get(c.id)).map((c) => ({
+        id: c.id, url: c.sourceUrl, color: c.color, anchor: c.anchor,
+        exact: c.anchor.exact, note: c.body, tags: c.tags, domAnchor: c.domAnchor,
+      }));
+      const deleted = [...previous.keys()].filter((id) => !next.has(id));
+      previous = next;
+      if (upserts.length || deleted.length) bridge.publishHighlightChanges?.({ upserts, deleted });
+    });
+  }, [store, ready]);
+
   // In Electron, captures/highlights from the Chrome extension arrive over IPC
   // and land in the inbox.
   React.useEffect(() => {
@@ -117,6 +135,8 @@ export function WorkspaceProvider({
       }));
       bridge.respondHighlights(reqId, items);
     });
+    // Tag suggestions for the browser pane's note form.
+    bridge.onTagsRequest?.(({ reqId }) => bridge.respondTags?.(reqId, store.getAllTags()));
     // Highlights saved before the browser pane shared this store still live
     // in the main process's JSON file; adopt them once, by id.
     void bridge.importLegacyHighlights?.().then((items) => {

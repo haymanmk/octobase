@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld('octobaseCapture', {
     ipcRenderer.removeAllListeners('capture:highlight-remove');
     ipcRenderer.on('capture:highlight-remove', (_event, data) => callback(data));
   },
+  publishHighlightChanges: (changes) => ipcRenderer.send('capture:highlight-changes', changes),
   // Reverse sync: main asks for highlights on a URL; renderer answers.
   onHighlightsRequest: (callback) => {
     ipcRenderer.removeAllListeners('capture:highlights-request');
@@ -110,6 +111,13 @@ contextBridge.exposeInMainWorld('octobaseCapture', {
   },
   respondHighlights: (reqId, items) => {
     ipcRenderer.send('capture:highlights-response', { reqId, items });
+  },
+  onTagsRequest: (callback) => {
+    ipcRenderer.removeAllListeners('capture:tags-request');
+    ipcRenderer.on('capture:tags-request', (_event, data) => callback(data));
+  },
+  respondTags: (reqId, items) => {
+    ipcRenderer.send('capture:tags-response', { reqId, items });
   },
   // One-time adoption of highlights still sitting in the legacy JSON file.
   importLegacyHighlights: () => ipcRenderer.invoke('highlights:legacy-import'),

@@ -22,9 +22,12 @@ either way.
   (`bandsFor`: one per line box, spanning the middle 50% of the line — the
   same stroke the live-browser highlighter paints, so inline-code chips stay
   legible). `Reader.tsx` paints them as absolutely-positioned divs and
-  re-measures on reflow; the CSS Custom Highlight API can't draw the
-  partial-height stroke, so the reader no longer uses it (the extension still
-  does). Clicks hit-test back to the card via `offsetFromPoint` /
+  re-measures on reflow. The CSS Custom Highlight API can't draw the
+  partial-height stroke, so nothing uses it any more: on live pages (the
+  browser pane and the extension) the shared
+  `src/components/highlighter/anchored-overlay.ts` paints the same bands from
+  `locateAnchors` in a fixed layer, plus a note badge on highlights that carry
+  a note. Clicks hit-test back to the card via `offsetFromPoint` /
   `highlightAtOffset` (caret-from-point).
 - Selecting text shows the shared toolbar pill (`toolbar-ui.ts` — same styles
   as the injected widget and the extension; see `highlighter.md`); picking a
@@ -42,7 +45,7 @@ Loopback HTTP server (default `127.0.0.1:7373`) the extension posts to.
 
 | Method | Path | Auth | Body / Query |
 |---|---|---|---|
-| GET | `/health` | none | — |
+| GET | `/health` | optional | — ; answers `paired: true` only when the token header matches, so the popup can tell "reachable" from "connected" |
 | POST | `/capture` | `X-Octobase-Token` | `{ url, title, markdown, byline?, siteName? }` |
 | POST | `/highlight` | `X-Octobase-Token` | `{ id, url, color, exact, anchor, note? }` — upsert by `id` |
 | POST | `/highlight/delete` | `X-Octobase-Token` | `{ id }` |
@@ -61,12 +64,14 @@ MV3. Reuses `src/lib` anchoring + extractor verbatim.
   shadow-DOM host) → `describeAnchorFromRange` → POST `/highlight` (via the
   worker). Each highlight carries a stable `id`, is cached in
   `chrome.storage.local` keyed by URL, and **re-painted on every page load**
-  via the shared `paintAnchors` (CSS Custom Highlight API) over
-  `locateAnchorRange` (the same anchor→DOM-range logic the reader uses), so
+  via the shared `anchored-overlay.ts` (marker bands + note badges over
+  `locateAnchors`, the same anchor→DOM-range logic the reader uses), so
   highlights survive refreshes.
   **Click an existing highlight** to open an edit popover: recolor, add a note,
   or delete — each updates the cache, re-paints, and syncs to the app card
-  (same `id`). "Capture article" runs the shared extractor.
+  (same `id`). Selecting text inside an existing highlight opens that popover
+  too (highlights don't nest); a click on a link inside a highlight follows
+  the link. "Capture article" runs the shared extractor.
 
   **Two-way sync:** edits/deletes on the page upsert/delete the matching app
   card by `id`. On page load the content script also pulls the app's current
@@ -75,9 +80,13 @@ MV3. Reuses `src/lib` anchoring + extractor verbatim.
   local highlights are never wiped), and app-only highlights are added. Falls
   back to the local cache when the app is unreachable.
 - `background.ts` — the only network talker: adds the token, posts, and queues
-  failed sends in `chrome.storage` to retry (alarm + on next `/health` ok).
+  failed sends in `chrome.storage` to retry (alarm + on the next `/health`
+  that reports `paired`). The health check sends the token so a wrong one is
+  detected up front instead of as a queue of 401s.
   Badge shows queued count. Context-menu entries mirror the popup.
-- `popup.ts/html` — connection status, "Capture this article", pairing settings.
+- `popup.ts/html` — connection status ("Connected" only when `/health` says
+  `paired`; a reachable app with a rejected token says so), "Capture this
+  article", pairing settings.
 
 ### Build & load
 
@@ -100,7 +109,10 @@ Notes:
 - The pairing **token is persisted** by the app (`<userData>/capture-token.txt`),
   so it stays valid across restarts — pair once.
 
-## What's verified vs. what needs a desktop run
+See [the September toolbar verification](highlight-toolbar-verification.md) for the latest
+interaction fixes, live refresh behavior, and completed Electron/Chrome checks.
+
+## Earlier verification baseline
 
 - **Verified (CI-able):** the extractor (4 tests, linkedom), the capture server
   (9 HTTP tests), the server→store contract (`capture-integration.test.ts`), the

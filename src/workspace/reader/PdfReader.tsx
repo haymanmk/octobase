@@ -3,6 +3,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeftRight, ListTree, Mi
 import { useWorkspace } from "../store-context.ts";
 import { PALETTE } from "../../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../../components/highlighter/toolbar-ui.ts";
+import { NOTE_BADGE_SVG } from "../../components/highlighter/note-badge.ts";
 import { HIGHLIGHT_COLORS } from "../../types/highlight.ts";
 import { describeAnchorFromRange } from "../../lib/anchor/text-anchor.ts";
 import { pdfSourceUrl, type HighlightCard, type HighlightColor, type ImageCard, type PdfCard } from "../../lib/model/types.ts";
@@ -16,6 +17,7 @@ import {
   type PlacedHighlight,
   type HighlightBand,
 } from "./highlight-overlay.ts";
+import { rangesIntersect } from "../../lib/anchor/highlight-dom.ts";
 import {
   destToPageIndex,
   loadPdf,
@@ -120,7 +122,6 @@ export function PdfReader({
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const pillOpen = selToolbar != null;
   React.useEffect(() => { if (!pillOpen) setPaletteOpen(false); }, [pillOpen]);
-  const [pulse, setPulse] = React.useState(false);
   const pendingSel = React.useRef<{ range: Range; page: number } | null>(null);
   const [editPop, setEditPop] = React.useState<{ cardId: string; x: number; y: number } | null>(null);
   const [dragGhost, setDragGhost] = React.useState<{ text: string; color: HighlightColor; x: number; y: number } | null>(null);
@@ -138,6 +139,8 @@ export function PdfReader({
   }, [cardId]);
   const hold = React.useRef<null | { cardId: string; sx: number; sy: number; timer: ReturnType<typeof setTimeout> }>(null);
   const draggedRef = React.useRef(false);
+  // A mouse-up that opened the editor from a selection; its click must not reopen it.
+  const editedFromSelectionRef = React.useRef(false);
   const focusDoneRef = React.useRef(0);
   const clipFocusDoneRef = React.useRef(0);
   const [clipPing, setClipPing] = React.useState<{ id: string; at: number } | null>(null);
@@ -567,6 +570,7 @@ export function PdfReader({
 
   const onClick = (e: React.MouseEvent) => {
     if (clipMode || draggedRef.current) return;
+    if (editedFromSelectionRef.current) return; // the mouse-up already opened the editor
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
     const hit = highlightAtPoint(e.clientX, e.clientY);
@@ -588,12 +592,23 @@ export function PdfReader({
     const pageEl = (container instanceof Element ? container : container.parentElement)
       ?.closest(".ws-pdf-page") as HTMLElement | null;
     if (!pageEl) { setSelToolbar(null); return; }
-    pendingSel.current = { range: range.cloneRange(), page: Number(pageEl.dataset.page) };
     const rect = range.getBoundingClientRect();
+    // No highlights inside highlights: selecting within one edits it.
+    const page = Number(pageEl.dataset.page);
+    const existing = (placedRef.current.get(page) ?? []).find((p) => rangesIntersect(range, p.range));
+    if (existing) {
+      sel.removeAllRanges();
+      setSelToolbar(null);
+      editedFromSelectionRef.current = true;
+      setTimeout(() => { editedFromSelectionRef.current = false; }, 0); // the click lands first
+      setEditPop({ cardId: existing.cardId, x: rect.left, y: rect.bottom + 10 });
+      return;
+    }
+    pendingSel.current = { range: range.cloneRange(), page };
     setSelToolbar({ x: rect.left, y: rect.bottom + 10 });
   };
 
-  const makeHighlight = (color: HighlightColor) => {
+  const makeHighlight = (color: HighlightColor, addNote = false) => {
     const pending = pendingSel.current;
     setSelToolbar(null);
     window.getSelection()?.removeAllRanges();
@@ -602,15 +617,14 @@ export function PdfReader({
     if (!textEl) return;
     const anchor = describeAnchorFromRange(textEl, pending.range);
     if (!anchor || !anchor.exact.trim()) return;
-    // No edit popover here — highlighting stays one gesture; clicking the
-    // highlight opens the tags/note editor when wanted.
-    store.createHighlightCard({
+    const created = store.createHighlightCard({
       text: anchor.exact,
       sourceUrl: pdfSourceUrl(card.id),
       anchor,
       color,
       page: pending.page,
     });
+    if (addNote && selToolbar) setEditPop({ cardId: created.id, x: selToolbar.x, y: selToolbar.y });
   };
 
   const updateEditCard = (patch: { color?: HighlightColor; note?: string }) => {
@@ -771,7 +785,10 @@ export function PdfReader({
                   return pageBands.map((b, j) => (
                     <div key={`${b.cardId}-${j}`} className="ws-hl-band"
                       style={{ left: b.x, top: b.y, width: b.w, height: b.h, background: PALETTE[b.color].fill }}>
-                      {dots.get(b.cardId) === j && <span className="ws-hl-note-dot" />}
+                      {dots.get(b.cardId) === j && (
+                        <span className="ws-hl-note-badge" title="Has a note"
+                          dangerouslySetInnerHTML={{ __html: NOTE_BADGE_SVG }} />
+                      )}
                     </div>
                   ));
                 })()}
@@ -877,7 +894,7 @@ export function PdfReader({
       )}
 
       {selToolbar && (
-        <div className={`octo-pill${pulse ? " pulse" : ""}`}
+        <div className="octo-pill"
           style={{ position: "fixed", left: selToolbar.x, top: selToolbar.y, zIndex: 60 }}
           onMouseDown={(e) => e.preventDefault()}>
           {(paletteOpen ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)).map((c) => (
@@ -889,10 +906,7 @@ export function PdfReader({
               onClick={() => setPaletteOpen(true)}>⋯</button>
           )}
           {paletteOpen && <span className="octo-divider" />}
-          {paletteOpen && <button className="octo-add-note" onClick={() => {
-            setPulse(true);
-            setTimeout(() => setPulse(false), 1300);
-          }}>+ note</button>}
+          {paletteOpen && <button className="octo-add-note" onClick={() => makeHighlight("yellow", true)}>+ note</button>}
         </div>
       )}
 

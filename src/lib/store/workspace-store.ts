@@ -535,7 +535,7 @@ export class WorkspaceStore {
   /** Live highlight cards whose source matches the given URL. */
   getHighlightsForUrl(sourceUrl: string): HighlightCard[] {
     return this.getCards().filter(
-      (c): c is HighlightCard => c.kind === "highlight" && c.sourceUrl === sourceUrl,
+      (c): c is HighlightCard => c.kind === "highlight" && c.sourceUrl.split("#")[0] === sourceUrl.split("#")[0],
     );
   }
 

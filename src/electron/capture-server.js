@@ -74,8 +74,11 @@ export function createCaptureServer(options = {}) {
     const url = new URL(req.url, `http://${host}`);
 
     // Unauthenticated health/handshake so the extension can detect the app.
+    // `paired` tells it whether the token it holds is the right one, so a
+    // reachable app with a stale token doesn't read as "connected".
     if (url.pathname === "/health" && req.method === "GET") {
-      send(res, 200, { ok: true, app: "octobase", version: 1 });
+      const paired = req.headers["x-octobase-token"] === token;
+      send(res, 200, { ok: true, app: "octobase", version: 1, paired });
       return;
     }
 

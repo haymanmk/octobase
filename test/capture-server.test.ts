@@ -37,6 +37,17 @@ test("health needs no token", async () => {
   });
 });
 
+test("health says whether the token pairs", async () => {
+  await withServer({}, async ({ base }) => {
+    const anon = await (await fetch(`${base}/health`)).json();
+    assert.equal(anon.paired, false);
+    const wrong = await (await fetch(`${base}/health`, { headers: { "X-Octobase-Token": "nope" } })).json();
+    assert.equal(wrong.paired, false);
+    const right = await (await fetch(`${base}/health`, { headers: { "X-Octobase-Token": "test-token" } })).json();
+    assert.equal(right.paired, true);
+  });
+});
+
 test("capture without token is rejected", async () => {
   await withServer({}, async ({ base }) => {
     const res = await fetch(`${base}/capture`, {

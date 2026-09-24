@@ -41,11 +41,14 @@ export interface ExtensionInfo {
 
 export interface OctobaseCaptureBridge {
   getInfo: () => Promise<ExtensionInfo>;
+  publishHighlightChanges?: (changes: { upserts: HighlightPayload[]; deleted: string[] }) => void;
   onCapture: (cb: (d: CapturePayload) => void) => void;
   onHighlight: (cb: (d: HighlightPayload) => void) => void;
   onHighlightRemove: (cb: (d: { id: string }) => void) => void;
   onHighlightsRequest: (cb: (d: { reqId: string; url: string }) => void) => void;
   respondHighlights: (reqId: string, items: HighlightSyncItem[]) => void;
+  onTagsRequest?: (cb: (d: { reqId: string }) => void) => void;
+  respondTags?: (reqId: string, items: string[]) => void;
   /** One-time hand-over of highlights left in the legacy main-process file. */
   importLegacyHighlights?: () => Promise<HighlightPayload[]>;
   legacyImportDone?: () => void;

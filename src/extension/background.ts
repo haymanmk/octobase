@@ -10,6 +10,13 @@ import {
 } from "./config.ts";
 
 const QUEUE_KEY = "queue";
+// Queue flushes and sends must not overwrite each other's storage snapshots.
+let operations: Promise<unknown> = Promise.resolve();
+function serialize<T>(operation: () => Promise<T>): Promise<T> {
+  const result = operations.then(operation);
+  operations = result.catch(() => {});
+  return result;
+}
 
 type SendPath = "/capture" | "/highlight" | "/highlight/delete";
 
@@ -40,6 +47,11 @@ async function post(path: string, body: unknown): Promise<SendResult> {
 }
 
 async function send(path: SendPath, body: unknown): Promise<SendResult> {
+  await flushQueue();
+  if ((await getQueue()).length) {
+    await enqueue(path, body);
+    return { ok: false, queued: true, error: "waiting for earlier changes to sync" };
+  }
   try {
     const result = await post(path, body);
     if (!result.ok && result.status !== 401 && result.status !== 400) {
@@ -64,14 +76,16 @@ async function enqueue(path: SendPath, body: unknown): Promise<void> {
 async function flushQueue(): Promise<void> {
   const q = await getQueue();
   if (q.length === 0) return;
-  const remaining: QueuedItem[] = [];
-  for (const item of q) {
+  let remaining: QueuedItem[] = [];
+  for (let i = 0; i < q.length; i++) {
     try {
-      const r = await post(item.path, item.body);
-      if (!r.ok && r.status !== 400) remaining.push(item);
+      const r = await post(q[i].path, q[i].body);
+      if (r.ok || r.status === 400) continue;
     } catch {
-      remaining.push(item);
+      // Stop at the first failure: a later delete must never pass an older upsert.
     }
+    remaining = q.slice(i);
+    break;
   }
   await setQueue(remaining);
   updateBadge(remaining.length);
@@ -85,13 +99,18 @@ function updateBadge(count: number): void {
 chrome.runtime.onMessage.addListener((msg: BgMessage, _sender, reply) => {
   (async () => {
     if (msg.type === "send") {
-      reply(await send(msg.path, msg.body));
+      reply(await serialize(() => send(msg.path, msg.body)));
     } else if (msg.type === "health") {
       try {
         const settings = await getSettings();
-        const res = await fetch(`${baseUrl(settings)}/health`);
-        reply({ ok: res.ok });
-        if (res.ok) void flushQueue();
+        const res = await fetch(`${baseUrl(settings)}/health`, {
+          headers: settings.token ? { "X-Octobase-Token": settings.token } : {},
+        });
+        const body = res.ok ? await res.json().catch(() => ({})) : {};
+        // Reachable is not paired: with a wrong token every send would 401.
+        const paired = res.ok && body.paired === true;
+        reply({ ok: res.ok, paired });
+        if (paired) void serialize(flushQueue);
       } catch {
         reply({ ok: false });
       }
@@ -99,6 +118,12 @@ chrome.runtime.onMessage.addListener((msg: BgMessage, _sender, reply) => {
       reply({ size: (await getQueue()).length });
     } else if (msg.type === "listHighlights") {
       try {
+        // Never let reverse sync resurrect a queued delete or erase an offline note.
+        const pending = await serialize(async () => {
+          await flushQueue();
+          return (await getQueue()).length > 0;
+        });
+        if (pending) { reply({ ok: false, highlights: [] }); return; }
         const settings = await getSettings();
         const res = await fetch(
           `${baseUrl(settings)}/highlights?url=${encodeURIComponent(msg.url)}`,
@@ -141,4 +166,4 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 // Periodically retry the queue.
 chrome.alarms.create("flush", { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === "flush") void flushQueue(); });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === "flush") void serialize(flushQueue); });

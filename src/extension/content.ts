@@ -3,30 +3,37 @@
 // locally (so they re-render on reload) and synced to the app by a shared id.
 
 import { describeAnchorFromRange } from "../lib/anchor/text-anchor.ts";
-import { paintAnchors, offsetFromPoint, type Placement } from "../lib/anchor/highlight-dom.ts";
+import { createAnchoredOverlay } from "../components/highlighter/anchored-overlay.ts";
 import { extractArticle } from "../lib/extract/extract-article.ts";
 import { HIGHLIGHT_COLORS } from "../types/highlight.ts";
 import { PALETTE } from "../components/highlighter/colors.ts";
 import { ensureToolbarStyles } from "../components/highlighter/toolbar-ui.ts";
 import type { HighlightColor } from "../types/highlight.ts";
-import type { TextAnchor } from "../lib/model/types.ts";
 
-interface SavedHighlight {
-  id: string;
-  color: HighlightColor;
-  anchor: TextAnchor;
-  exact: string;
-  note?: string;
-}
+import { reconcileHighlights, type SavedHighlight } from "./highlight-sync.ts";
 
-const HL_PREFIX = "octo-hl-";
 const SYNCED_KEY = "octo:synced";
+
+// Serialize refreshes and local writes so a late fetch cannot replace a new edit.
+let pendingWork: Promise<unknown> = Promise.resolve();
+function enqueue(work: () => Promise<unknown>) {
+  pendingWork = pendingWork.then(work).catch((error) => console.warn("octobase highlight operation failed", error));
+  return pendingWork;
+}
 
 let selToolbar: HTMLElement | null = null;
 let popover: HTMLElement | null = null;
 let lastRange: Range | null = null;
+/** Set when a mouse-up already opened the popover, so its click doesn't repeat it. */
+let suppressNextClick = false;
+function suppressClickThisTask() {
+  suppressNextClick = true;
+  // The click, if any, is dispatched before timers run.
+  setTimeout(() => { suppressNextClick = false; }, 0);
+}
 let currentSaved: SavedHighlight[] = [];
-let placements: Placement[] = [];
+/** Paints the saved highlights, dots the noted ones, and hit-tests clicks. */
+const overlay = createAnchoredOverlay({ root: document.body });
 
 function uid(): string {
   return "hl_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -72,22 +79,11 @@ async function markSynced(id: string, synced: boolean): Promise<void> {
 }
 
 // ── painting ───────────────────────────────────────────────────────────────
-let stylesInjected = false;
-function injectHighlightStyles() {
-  if (stylesInjected) return;
-  stylesInjected = true;
-  const style = document.createElement("style");
-  // ::highlight paints a full-height band, so dark ink stays readable on it
-  // regardless of the page theme (white page text would vanish otherwise).
-  style.textContent = HIGHLIGHT_COLORS.map(
-    (c) => `::highlight(octo-hl-${c}){background-color:${PALETTE[c].fill};color:#22252b;}`,
-  ).join("");
-  (document.head ?? document.documentElement).appendChild(style);
-}
 async function renderSaved(): Promise<void> {
   currentSaved = await loadSaved();
-  injectHighlightStyles();
-  placements = paintAnchors(document.body, currentSaved, HL_PREFIX);
+  overlay.set(currentSaved.map((h) => ({
+    id: h.id, color: h.color, anchor: h.anchor, note: h.note ?? "", text: h.exact,
+  })));
 }
 
 // ── sync to app ──────────────────────────────────────────────────────────────
@@ -108,10 +104,11 @@ function sendUpsert(item: SavedHighlight) {
 }
 
 // ── create / edit / delete ───────────────────────────────────────────────────
-async function saveHighlight(color: HighlightColor) {
+async function saveHighlight(color: HighlightColor, addNote = false) {
   const range = lastRange;
   removeSelToolbar();
   if (!range) return;
+  const rect = range.getBoundingClientRect();
   const anchor = describeAnchorFromRange(document.body, range);
   if (!anchor || !anchor.exact.trim()) return;
   window.getSelection()?.removeAllRanges();
@@ -120,6 +117,7 @@ async function saveHighlight(color: HighlightColor) {
   list.push(item);
   await saveAll(list);
   await renderSaved();
+  if (addNote) showEditPopover(item, rect.left, rect.bottom);
   const result = await sendUpsert(item);
   if (result?.ok && !result?.queued) await markSynced(item.id, true);
   flash(result?.queued ? "Highlight queued (app offline)" : result?.ok ? "Highlighted ✓" : "Highlight failed");
@@ -154,22 +152,10 @@ async function reconcileFromApp(): Promise<void> {
     appItems = null;
   }
   if (appItems) {
-    const appById = new Map(appItems.map((a) => [a.id, a]));
     const local = await loadSaved();
     const synced = await getSynced();
-    const out: SavedHighlight[] = [];
-    for (const h of local) {
-      const a = appById.get(h.id);
-      if (a) out.push({ ...h, color: a.color, anchor: a.anchor, exact: a.exact ?? a.anchor.exact });
-      else if (!synced.has(h.id)) out.push(h); // local-only, not yet synced → keep
-      // else: was synced and the app no longer has it → deleted in app → drop
-    }
-    for (const a of appItems) {
-      if (!local.some((h) => h.id === a.id)) {
-        out.push({ id: a.id, color: a.color, anchor: a.anchor, exact: a.exact ?? a.anchor.exact });
-        await markSynced(a.id, true);
-      }
-    }
+    const out = reconcileHighlights(local, appItems, synced);
+    for (const item of appItems) await markSynced(item.id, true);
     await saveAll(out);
   }
   await renderSaved();
@@ -195,9 +181,19 @@ function showSelToolbar(range: Range) {
   const fill = (open: boolean) => {
     bar.replaceChildren();
     for (const color of open ? HIGHLIGHT_COLORS : HIGHLIGHT_COLORS.slice(0, 1)) {
-      bar.appendChild(colorDot(color, () => void saveHighlight(color)));
+      bar.appendChild(colorDot(color, () => void enqueue(() => saveHighlight(color))));
     }
     if (!open) bar.appendChild(moreDot(() => fill(true)));
+    else {
+      const divider = document.createElement("span");
+      divider.className = "octo-divider";
+      const note = document.createElement("button");
+      note.className = "octo-add-note";
+      note.textContent = "+ note";
+      note.addEventListener("mousedown", (e) => e.preventDefault());
+      note.addEventListener("click", (e) => { e.stopPropagation(); void enqueue(() => saveHighlight("yellow", true)); });
+      bar.append(divider, note);
+    }
   };
   fill(false);
   shadow.appendChild(bar);
@@ -241,7 +237,7 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   const dots = document.createElement("div");
   dots.className = "octo-pop-row";
   for (const color of HIGHLIGHT_COLORS) {
-    const d = colorDot(color, () => { void updateHighlight(h.id, { color }); closePopover(); });
+    const d = colorDot(color, () => { void enqueue(() => updateHighlight(h.id, { color })); closePopover(); });
     if (color === h.color) d.classList.add("current");
     dots.appendChild(d);
   }
@@ -258,7 +254,7 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   });
   const commitNote = () => {
     const v = note.value.trim();
-    if (v !== (h.note ?? "")) void updateHighlight(h.id, { note: v });
+    if (v !== (h.note ?? "")) void enqueue(() => updateHighlight(h.id, { note: v }));
     closePopover();
   };
   box.appendChild(note);
@@ -268,7 +264,7 @@ function showEditPopover(h: SavedHighlight, x: number, y: number) {
   const del = document.createElement("button");
   del.textContent = "Delete";
   del.className = "octo-pop-delete";
-  del.addEventListener("click", () => void deleteHighlight(h.id));
+  del.addEventListener("click", () => void enqueue(() => deleteHighlight(h.id)));
   const save = document.createElement("button");
   save.textContent = "Save note";
   save.className = "octo-pop-primary";
@@ -314,11 +310,8 @@ function flash(text: string) {
 }
 
 function highlightAtPoint(x: number, y: number): SavedHighlight | null {
-  const off = offsetFromPoint(document.body, x, y);
-  if (off == null) return null;
-  let hit: Placement | null = null;
-  for (const p of placements) if (off >= p.start && off < p.end) hit = p;
-  return hit ? currentSaved[hit.index] ?? null : null;
+  const hit = overlay.at(x, y);
+  return hit ? currentSaved.find((h) => h.id === hit.id) ?? null : null;
 }
 
 function registerListeners() {
@@ -332,14 +325,28 @@ function registerListeners() {
         removeSelToolbar();
         return;
       }
-      lastRange = sel.getRangeAt(0).cloneRange();
+      const range = sel.getRangeAt(0);
+      // No highlights inside highlights: selecting within one edits it.
+      const existing = overlay.intersecting(range);
+      if (existing) {
+        const saved = currentSaved.find((h) => h.id === existing.id);
+        sel.removeAllRanges();
+        removeSelToolbar();
+        suppressClickThisTask();
+        if (saved) showEditPopover(saved, e.clientX, e.clientY);
+        return;
+      }
+      lastRange = range.cloneRange();
       showSelToolbar(lastRange);
     }, 0);
   });
 
   // Click an existing highlight to edit it.
   document.addEventListener("click", (e) => {
-    if (popover && e.composedPath().includes(popover)) return;
+    if (suppressNextClick) return;
+    const path = e.composedPath();
+    if (popover && path.includes(popover)) return;
+    if (path.some((n) => n instanceof HTMLAnchorElement && n.href)) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
     const h = highlightAtPoint(e.clientX, e.clientY);
@@ -355,7 +362,7 @@ function registerListeners() {
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
         lastRange = sel.getRangeAt(0).cloneRange();
-        void saveHighlight("yellow");
+        void enqueue(() => saveHighlight("yellow"));
       }
     }
   });
@@ -366,6 +373,12 @@ const loadFlag = window as unknown as { __octobaseContentLoaded?: boolean };
 if (!loadFlag.__octobaseContentLoaded) {
   loadFlag.__octobaseContentLoaded = true;
   registerListeners();
-  void reconcileFromApp();
-  setTimeout(() => { void renderSaved(); }, 1200);
+  void enqueue(reconcileFromApp);
+  const refresh = () => {
+    if (document.visibilityState === "visible" && !popover && !selToolbar) void enqueue(reconcileFromApp);
+  };
+  window.addEventListener("focus", refresh);
+  document.addEventListener("visibilitychange", refresh);
+  setInterval(refresh, 5000);
+  setTimeout(() => { void enqueue(renderSaved); }, 1200);
 }
