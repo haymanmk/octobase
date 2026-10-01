@@ -26,8 +26,11 @@ either way.
   partial-height stroke, so nothing uses it any more: on live pages (the
   browser pane and the extension) the shared
   `src/components/highlighter/anchored-overlay.ts` paints the same bands from
-  `locateAnchors` in a fixed layer, plus a note badge on highlights that carry
-  a note. Clicks hit-test back to the card via `offsetFromPoint` /
+  `locateAnchors`, plus a note badge on highlights that carry a note. The
+  bands live in fixed layers that are direct children of `<body>` and carry
+  the blend mode themselves (multiply on light text backgrounds, screen on
+  dark): a blend set only on a band inside a z-indexed layer never reaches
+  the page and paints as an opaque strip over the text. Clicks hit-test back to the card via `offsetFromPoint` /
   `highlightAtOffset` (caret-from-point).
 - Selecting text shows the shared toolbar pill (`toolbar-ui.ts` — same styles
   as the injected widget and the extension; see `highlighter.md`); picking a

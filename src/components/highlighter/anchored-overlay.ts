@@ -6,8 +6,9 @@
  * resolves them, draws each as marker bands — the same half-height stroke the
  * reader panes use, which can't be had from the CSS Custom Highlight API —
  * hit-tests a point or a selection back to a highlight, and docks a note
- * badge on the ones carrying one. Bands and badges live in one fixed layer
- * that follows scroll and resize.
+ * badge on the ones carrying one. Bands and badges live in fixed layers that
+ * follow scroll and resize: one layer per blend mode for the bands, and an
+ * unblended one above them for the badges.
  *
  * The pure parts (`hitPlacement`, `badgeAnchorPoint`, `bandRectsFor`) are
  * separated from the DOM work so they can be reasoned about — and tested —
@@ -77,6 +78,24 @@ export function bandRectsFor(rects: DOMRect[] | ArrayLike<DOMRect>): BandRect[] 
 
 const LAYER_ID = "octobase-highlight-overlay";
 
+/**
+ * A band has to blend with the page's own pixels — multiply on a light page,
+ * screen with the deep fill on a dark one — or it sits over the glyphs as an
+ * opaque strip. `mix-blend-mode` only reaches the backdrop inside the
+ * element's own stacking context, and a fixed layer with a z-index is one:
+ * bands blended inside it see an empty layer, not the text. So the blend goes
+ * on the layer itself, which is a direct child of <body> and therefore
+ * composites against the page. One layer per mode, since a page can mix
+ * light prose with dark code blocks.
+ */
+type Blend = "multiply" | "screen";
+const BLENDS: Blend[] = ["multiply", "screen"];
+const BAND_LAYER_ID: Record<Blend, string> = {
+  multiply: `${LAYER_ID}-multiply`,
+  screen: `${LAYER_ID}-screen`,
+};
+const LAYER_BASE = "position:fixed;inset:0;pointer-events:none;";
+
 /** Light text means a dark page: use the deep fill and lighten instead. */
 function onDarkPage(range: Range): boolean {
   const node = range.startContainer;
@@ -100,36 +119,71 @@ export function createAnchoredOverlay(opts: {
   let items: OverlayHighlight[] = [];
   let placements: Placement[] = [];
   let layer: HTMLElement | null = null;
+  const bandLayers: Partial<Record<Blend, HTMLElement>> = {};
   let placementPending = false;
 
+  /** The unblended layer the note badges sit in, above the bands. */
   function ensureLayer(): HTMLElement {
     if (layer && layer.isConnected) return layer;
     layer = doc.getElementById(LAYER_ID);
     if (!layer) {
       layer = doc.createElement("div");
       layer.id = LAYER_ID;
-      layer.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483646;";
+      layer.style.cssText = `${LAYER_BASE}z-index:2147483646;`;
       (doc.body ?? root).appendChild(layer);
     }
     return layer;
   }
 
+  /** The band layer for one blend mode, if it is on the page. */
+  function existingBandLayer(blend: Blend): HTMLElement | null {
+    const known = bandLayers[blend];
+    if (known && known.isConnected) return known;
+    return doc.getElementById(BAND_LAYER_ID[blend]);
+  }
+
+  /** The band layer for one blend mode, created on first use. */
+  function bandLayer(blend: Blend): HTMLElement {
+    let el = existingBandLayer(blend);
+    if (!el) {
+      el = doc.createElement("div");
+      el.id = BAND_LAYER_ID[blend];
+      el.style.cssText = `${LAYER_BASE}z-index:2147483645;mix-blend-mode:${blend};`;
+      (doc.body ?? root).appendChild(el);
+    }
+    bandLayers[blend] = el;
+    return el;
+  }
+
   /** Redraw every band from the current geometry. */
-  function paintBands(host: HTMLElement) {
-    for (const old of Array.from(host.querySelectorAll("[data-band]"))) old.remove();
+  function paintBands() {
+    for (const blend of BLENDS) existingBandLayer(blend)?.replaceChildren();
     for (const placement of placements) {
       const item = items[placement.index];
       if (!item) continue;
       const dark = onDarkPage(placement.range);
       const fill = dark ? PALETTE[item.color].darkFill : PALETTE[item.color].fill;
+      const blend: Blend = dark ? "screen" : "multiply";
+      const host = bandLayer(blend);
       for (const b of bandRectsFor(placement.range.getClientRects())) {
         const band = doc.createElement("div");
         band.dataset.band = item.id;
+        // The band's own blend only acts within its layer: where two
+        // highlights overlap, the strokes build up like real marker ink.
         band.style.cssText =
           `position:absolute;left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;` +
-          `background:${fill};mix-blend-mode:${dark ? "screen" : "multiply"};` +
+          `background:${fill};mix-blend-mode:${blend};` +
           "border-radius:1px;pointer-events:none;";
         host.appendChild(band);
+      }
+    }
+    // A full-viewport blended layer is not free to composite; keep one only
+    // while it has something to draw.
+    for (const blend of BLENDS) {
+      const el = existingBandLayer(blend);
+      if (el && !el.firstChild) {
+        el.remove();
+        delete bandLayers[blend];
       }
     }
   }
@@ -176,9 +230,8 @@ export function createAnchoredOverlay(opts: {
 
   /** Lay everything out against the current geometry. */
   function placeAll() {
-    const host = ensureLayer();
-    paintBands(host);
-    placeBadges(host);
+    paintBands();
+    placeBadges(ensureLayer());
   }
 
   /**
@@ -254,6 +307,10 @@ export function createAnchoredOverlay(opts: {
       removeEventListener("resize", onViewportChange);
       layer?.remove();
       layer = null;
+      for (const blend of BLENDS) {
+        existingBandLayer(blend)?.remove();
+        delete bandLayers[blend];
+      }
     },
   };
 }
