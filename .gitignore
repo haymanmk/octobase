@@ -27,5 +27,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local Claude Code settings (per-machine permissions)
-.claude/settings.local.json
+# Local Claude Code settings (per-machine permissions and launch config)
+.claude/
+
+# Obsidian vault state for docs/ (per-machine pane layout and plugin toggles)
+docs/.obsidian/
