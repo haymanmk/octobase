@@ -8,7 +8,8 @@ Persistent state now lives in two layers:
 2. **Main-process JSON files** under the Electron `userData` directory
    (`~/.config/octobase/` on Linux, `~/Library/Application Support/octobase/`
    on macOS; the directory name follows package.json `name`) —
-   page highlights for the in-app browser pane, plus a legacy card file.
+   page highlights for the in-app browser pane, imported media, AI settings,
+   plus a legacy card file.
 
 > The app was renamed `octobase-react-ui` → `octobase`, which moves that
 > directory. A machine that had run the old build starts against an empty
@@ -21,6 +22,11 @@ On disk (`userData`):
 - `whiteboard.json` — legacy `Card[]` (pre-workspace whiteboard; see below)
 - `clips/*.png` — region clips of the browser pane, served to the renderer
   via the `octobase-clip://c/<file>` protocol
+- `pdfs/*.pdf` — imported PDFs, served through `octobase-pdf://`
+- `pdf-text/*.pdf.md` — renderer-extracted whole-document markdown cached for
+  in-app AI context; deleted with the matching imported PDF
+- `ai.json` — selected model and the API key encrypted by Electron
+  `safeStorage` (the renderer never reads the key)
 - `capture-token.txt` — Chrome-extension pairing token
 - `octobase.log` — diagnostics, not a store
 
@@ -29,7 +35,8 @@ Renderer `localStorage` (app view):
 - `octobase.workspace.v1` — `WorkspaceData` (the whole knowledge base)
 - `octobase.viewer.layout` — `ViewerLayout` (viewer pane + reader tabs)
 - `octobase.library.open`, `octobase.sidebar.closed`,
-  `octobase.reader.prefs` — small UI preferences
+  `octobase.toc.open`, `octobase.reader.prefs`, `octobase.theme` — small UI
+  preferences
 
 ## The workspace document
 
@@ -39,7 +46,7 @@ Types in `src/lib/model/types.ts`:
 ```ts
 interface WorkspaceData {
   version: 1;
-  cards: Card[];          // note | highlight | article | image
+  cards: Card[];          // note | highlight | article | image | pdf
   whiteboards: Whiteboard[];
   placements: Placement[];
   edges: Edge[];
@@ -50,7 +57,9 @@ interface WorkspaceData {
 interface HighlightCard { kind: "highlight"; sourceUrl; anchor: TextAnchor }
 interface ArticleCard   { kind: "article"; sourceUrl; siteName?; byline? }
 interface ImageCard     { kind: "image"; sourceUrl;
-                          image: { file; w; h } }   // file inside userData/clips
+                          image: { file; w; h };
+                          clip?: { page; x; y; w; h } }
+interface PdfCard       { kind: "pdf"; file; pages; cover? }
 
 interface Placement { id; whiteboardId; cardId; x; y; w; h; z }
 interface Edge      { id; whiteboardId; fromCardId; toCardId;
@@ -60,6 +69,12 @@ interface Edge      { id; whiteboardId; fromCardId; toCardId;
 `TextAnchor` is the durable text-quote anchor
 (`{ exact, prefix, suffix, startHint }`) — not the rangy serialization the
 page highlighter uses.
+
+`PdfCard.file` names a file under `userData/pdfs`; `cover`, when present,
+names its first-page PNG under `userData/clips`. PDF highlights use the stable
+pseudo-URL `pdf:<card id>` and may carry a 1-based page number. PDF clips are
+ordinary image cards with an optional page-space `clip` rectangle so “Read”
+can return to the source region.
 
 Storage is pluggable through `PersistenceBackend`
 (`load(): Promise<WorkspaceData | null>` / `save(data)`). Today the app uses
@@ -199,6 +214,10 @@ rules are:
   does not currently pass `onHighlightDelete` / `onListHighlights` to the
   capture server (dropped in the renderer-owned-pane refactor). See
   `capture-extension.md`.
+- **PDF deletion removes the imported file and cached extracted text.** The
+  workspace card itself is still removed through the renderer store. Its
+  generated cover and any independent clip cards remain in `clips/`; there is
+  no general media garbage collector.
 - **Delete is one-sided everywhere.** `highlights:delete` broadcasts
   `highlight:deleted` to the browser view only; workspace `deleteCard`
   soft-deletes the card and drops its placements/edges without touching

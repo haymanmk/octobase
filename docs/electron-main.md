@@ -9,8 +9,8 @@ window.
 
 ## Boot sequence
 
-1. `protocol.registerSchemesAsPrivileged` registers `octobase-clip://`
-   (must happen before `app.whenReady`).
+1. `protocol.registerSchemesAsPrivileged` registers `octobase-clip://` and
+   the fetch-capable `octobase-pdf://` (must happen before `app.whenReady`).
 2. `app.whenReady()` — open the diagnostics log
    (`userData/octobase.log`), hook `child-process-gone`, then
    `createMainWindow()`.
@@ -27,8 +27,9 @@ window.
    `highlights.json` and `whiteboard.json` for the lifetime of the app.
 6. `ipcMain.handle` / `ipcMain.on` handlers are registered after the store
    exists. The capture-server pairing token is loaded from (or written to)
-   `userData/capture-token.txt` and the loopback capture server starts —
-   see `capture-extension.md`.
+   `userData/capture-token.txt` and the loopback capture server starts.
+   Privileged clip/PDF protocols, PDF storage, and the AI bridge are also
+   registered after ready — see below and `capture-extension.md`.
 
 ## Window chrome — no native title bar
 
@@ -157,6 +158,33 @@ renderer over the privileged `octobase-clip://c/<file>` protocol
 (`protocol.handle` → `net.fetch` of the file URL). Any failure or an
 Esc/tiny rect ends in `clip:cancelled`.
 
+After a successful browser clip, main also sends `clip:edit-form` back to the
+page. The highlighter-style one-shot form returns color/tags/note metadata over
+`clip:annotate`; main relays it to the shell as `clip:annotated`. PDF clipping
+does not use `capturePage`: the renderer crops its already-rendered page canvas
+and invokes `clip:save`, which persists the PNG into the same clips directory.
+
+## PDF files and parsed-text cache
+
+`pdf:open` uses Electron's native file picker; `pdf:import` accepts the
+sandbox-safe absolute path resolved by `webUtils.getPathForFile` for a dropped
+file. Both copy the source to `userData/pdfs/<uuid>.pdf`. The renderer loads it
+through `octobase-pdf://`, uses PDF.js for rendering/page count/text layers,
+and stores only the generated filename on the workspace card.
+
+For AI context, the renderer extracts whole-document markdown once and uses
+`pdftext:save` / `pdftext:load` to cache it under `userData/pdf-text`.
+`pdf:delete` removes both the imported PDF and that cache entry.
+
+## In-app AI
+
+The OpenAI key and selected model live in `userData/ai.json`. Main encrypts and
+decrypts the key with Electron `safeStorage`; only status, configuration
+results, and streamed answer deltas cross the preload boundary. `ai:chat`
+performs the request in main, sends text chunks as `ai:chat-delta`, and resolves
+when streaming ends. `ai:chat-abort` cancels the request by its renderer-minted
+request id. Chat history is session-only in `ChatDrawer.tsx`.
+
 ## IPC handlers
 
 Persistence handlers thinly wrap the store and broadcast on writes. See
@@ -180,14 +208,18 @@ ipcMain.handle('cards:delete',      ({ id })  => store.deleteCard(id)
                                                  + broadcast card:deleted);
 
 ipcMain.handle('extension:info',    ()        => ({ port, token }));  // capture pairing
+ipcMain.handle('pdf:*',             ...);                             // import/delete
+ipcMain.handle('pdftext:*',         ...);                             // AI text cache
+ipcMain.handle('clip:save',         ...);                             // renderer PDF crop
+ipcMain.handle('ai:*',              ...);                             // settings/test/chat
 ```
 
 Both syncs return `null` when nothing of substance changed so the matching
 broadcast is skipped — that prevents broadcast loops.
 
 The `ipcMain.on` side covers the pane docking (`pane:set-bounds`,
-`pane:set-visible`), browser chrome (`browser:*`), clipping (`clip:*`), and
-the drag channels — all listed in `architecture.md`.
+`pane:set-visible`), browser chrome (`browser:*`), clipping (`clip:*`), AI
+abort, and the drag channels — all listed in `architecture.md`.
 
 ## Preload scripts
 
@@ -199,7 +231,9 @@ see highlight-persistence APIs.
   `onCardUpdated`, `onCardDeleted`, `onHighlightDropped`, pane docking
   (`paneSetBounds`, `paneSetVisible`), browser chrome (`browserNavigate`,
   `browserBack`, `browserForward`, `browserReload`, `onBrowserState`),
-  clipping (`clipStart`, `onClipCaptured`, `onClipCancelled`). Also exposes
+  clipping (including annotation and renderer-crop save), PDF import/delete
+  and parsed-text cache, AI settings/chat/abort/streaming, and fullscreen
+  state. Also exposes
   the `octobaseCapture` bridge (`getInfo`, `onCapture`, `onHighlight`, plus
   reverse-sync hooks main does not send yet) — see `capture-extension.md`.
 - `preload-highlighter.js` — browser view — drag IPC senders, clip

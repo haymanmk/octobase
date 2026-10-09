@@ -76,12 +76,13 @@ MV3. Reuses `src/lib` anchoring + extractor verbatim.
   too (highlights don't nest); a click on a link inside a highlight follows
   the link. "Capture article" runs the shared extractor.
 
-  **Two-way sync:** edits/deletes on the page upsert/delete the matching app
-  card by `id`. On page load the content script also pulls the app's current
-  highlights (`GET /highlights?url`) and reconciles: app values win for known
-  ids, app-side deletes are honored (tracked via a synced-id set so unsynced
-  local highlights are never wiped), and app-only highlights are added. Falls
-  back to the local cache when the app is unreachable.
+  **Current sync direction:** edits on the page POST and upsert the matching
+  app card by `id`. The extension also implements delete and page-load reverse
+  sync (`POST /highlight/delete`, `GET /highlights?url`) with reconciliation
+  and local-cache fallback, but the desktop app currently starts the capture
+  server without `onHighlightDelete` / `onListHighlights`. Those two endpoints
+  therefore acknowledge deletes / return an empty list without changing or
+  reading the workspace. The matching preload bridge is present but unwired.
 - `background.ts` — the only network talker: adds the token, posts, and queues
   failed sends in `chrome.storage` to retry (alarm + on the next `/health`
   that reports `paired`). The health check sends the token so a wrong one is
@@ -125,3 +126,6 @@ interaction fixes, live refresh behavior, and completed Electron/Chrome checks.
   extension running inside real Chrome (content script, service-worker fetch,
   popup). These can't be exercised headlessly here; load-unpacked + `npm run dev`
   to try the full loop.
+- **Known integration gap:** desktop → extension highlight reconciliation and
+  extension-initiated deletion need the capture-server reverse-sync hooks wired
+  through main before they work end to end.
